@@ -38,8 +38,8 @@ export function Navbar() {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-        <Link href="/" aria-label="VoidNod Home" className="flex items-center gap-3 group">
-          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/10 group-hover:border-primary/50 group-hover:glow-primary transition-all duration-300">
+        <Link href="/" aria-label="VoidNod Home" className="flex items-center gap-2 group">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/10 group-hover:border-primary/50 group-hover:glow-primary transition-all duration-300 shrink-0">
             <Image 
               src="/branding/logo.png" 
               alt="VoidNod Logo" 
@@ -47,7 +47,14 @@ export function Navbar() {
               className="object-cover group-hover:scale-110 group-hover:brightness-110 transition-all duration-300" 
             />
           </div>
-          <span className="font-bold tracking-widest text-lg uppercase group-hover:text-foreground/90 transition-colors duration-300">VOIDNOD</span>
+          <div className="relative h-5 sm:h-6 w-32 sm:w-[160px] ml-1 group-hover:brightness-125 group-hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.5)] transition-all duration-300 shrink-0">
+            <Image 
+              src="/branding/wordmark.png" 
+              alt="VOIDNOD" 
+              fill 
+              className="object-contain object-left" 
+            />
+          </div>
         </Link>
 
         {/* Desktop Nav */}
