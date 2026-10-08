@@ -1,8 +1,10 @@
 "use client";
-import { skillsData } from "@/data/skills";
+import { skillsData, SkillCategory } from "@/data/profile";
 import { motion } from "framer-motion";
 
 export function SkillsSection() {
+  const categories = Object.keys(skillsData) as SkillCategory[];
+
   return (
     <section id="skills" className="py-24 relative scroll-mt-20">
       <div className="mb-12">
@@ -11,23 +13,21 @@ export function SkillsSection() {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {skillsData.map((category, idx) => (
+        {categories.map((category, idx) => (
           <motion.div
-            key={category.category}
+            key={category}
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: idx * 0.1 }}
             className="glass-panel rounded-lg p-6 flex flex-col"
           >
-            <h3 className="font-semibold text-lg mb-4 text-primary">{category.category}</h3>
+            <h3 className="font-semibold text-lg mb-4 text-primary">{category}</h3>
             <div className="flex flex-col gap-3">
-              {category.skills.map((skill) => (
-                <div key={skill.name} className="flex justify-between items-center group">
+              {skillsData[category].map((skill) => (
+                <div key={skill.name} className="flex items-center group">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary/50 mr-3 group-hover:bg-primary transition-colors" />
                   <span className="text-foreground group-hover:text-primary transition-colors">{skill.name}</span>
-                  <span className="text-xs px-2 py-1 rounded bg-secondary/50 text-muted-foreground border border-white/5 group-hover:border-primary/30 transition-colors">
-                    {skill.level}
-                  </span>
                 </div>
               ))}
             </div>

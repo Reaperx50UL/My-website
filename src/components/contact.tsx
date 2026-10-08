@@ -2,8 +2,8 @@
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Send, MapPin, Mail } from "lucide-react";
-import { portfolioData } from "@/data/portfolio";
+import { Send, MapPin, Mail, Server, Phone } from "lucide-react";
+import { profileData } from "@/data/profile";
 
 const contactSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -20,11 +20,11 @@ export function ContactSection() {
   });
 
   const onSubmit = async (data: ContactFormValues) => {
-    // In a real app, send to API endpoint
-    console.log("Form submitted:", data);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Frontend UI only - ready for backend integration
+    console.log("Form submitted locally:", data);
+    await new Promise(resolve => setTimeout(resolve, 800));
     reset();
-    alert("Message ready to be connected to a backend!");
+    alert("This is a frontend UI demo. Backend integration required to actually send emails.");
   };
 
   return (
@@ -45,20 +45,40 @@ export function ContactSection() {
             </div>
             <div>
               <h3 className="font-semibold text-lg mb-1">Email</h3>
-              <a href={`mailto:${portfolioData.personalInfo.email}`} className="text-muted-foreground hover:text-primary transition-colors text-sm">
-                {portfolioData.personalInfo.email}
-              </a>
+              {profileData.contact.email !== "YOUR_EMAIL_HERE" ? (
+                <a href={`mailto:${profileData.contact.email}`} className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                  {profileData.contact.email}
+                </a>
+              ) : (
+                <span className="text-muted-foreground text-sm italic">Email not provided</span>
+              )}
+            </div>
+          </div>
+
+          <div className="glass-panel p-6 rounded-lg flex items-start gap-4 hover:border-primary/30 transition-colors group">
+            <div className="p-3 bg-primary/10 text-primary rounded-md group-hover:scale-110 transition-transform">
+              <Phone size={24} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-1">Phone</h3>
+              {profileData.contact.phone && profileData.contact.phone !== "YOUR_PHONE_NUMBER_HERE" ? (
+                <a href={`tel:${profileData.contact.phone}`} className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                  {profileData.contact.phone}
+                </a>
+              ) : (
+                <span className="text-muted-foreground text-sm italic">Phone not provided</span>
+              )}
             </div>
           </div>
           
-          <div className="glass-panel p-6 rounded-lg flex items-start gap-4 hover:border-primary/30 transition-colors group">
-            <div className="p-3 bg-primary/10 text-primary rounded-md group-hover:scale-110 transition-transform">
-              <MapPin size={24} />
+          <div className="glass-panel p-6 rounded-lg flex items-start gap-4 border-dashed border-primary/20">
+            <div className="p-3 bg-primary/5 text-primary/50 rounded-md">
+              <Server size={24} />
             </div>
             <div>
-              <h3 className="font-semibold text-lg mb-1">Location</h3>
+              <h3 className="font-semibold text-lg mb-1 text-foreground/70">System Status</h3>
               <p className="text-muted-foreground text-sm">
-                {portfolioData.personalInfo.location}
+                Frontend UI Active.<br/>Backend connection pending.
               </p>
             </div>
           </div>

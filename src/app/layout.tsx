@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Apan Datta | Technology Professional",
     description: "Portfolio and experimental Web Lab platform.",
-    url: "https://example.com",
+    url: "https://YOUR_DOMAIN_HERE",
     siteName: "Apan Datta Portfolio",
     locale: "en_US",
     type: "website",

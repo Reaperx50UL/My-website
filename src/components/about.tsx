@@ -1,9 +1,11 @@
 "use client";
-import { portfolioData } from "@/data/portfolio";
+import { profileData } from "@/data/profile";
 import { motion } from "framer-motion";
 import { Cpu, Code2, ShieldAlert } from "lucide-react";
 
 export function AboutSection() {
+  const icons = [Cpu, Code2, ShieldAlert];
+
   return (
     <section id="about" className="py-24 relative scroll-mt-20">
       <div className="mb-12">
@@ -20,7 +22,7 @@ export function AboutSection() {
           className="prose prose-invert max-w-none"
         >
           <p className="text-lg text-muted-foreground leading-relaxed">
-            {portfolioData.personalInfo.fullBio}
+            {profileData.fullBio}
           </p>
         </motion.div>
 
@@ -31,41 +33,22 @@ export function AboutSection() {
           transition={{ duration: 0.5 }}
           className="grid gap-4"
         >
-          <div className="glass-panel p-6 rounded-lg group hover:border-primary/50 transition-colors">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="p-3 rounded-md bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                <Cpu size={24} />
+          {profileData.aboutCards.map((card, idx) => {
+            const IconComponent = icons[idx % icons.length];
+            return (
+              <div key={idx} className="glass-panel p-6 rounded-lg group hover:border-primary/50 transition-colors">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="p-3 rounded-md bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                    <IconComponent size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">{card.title}</h3>
+                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-lg">Electronics Engineering</h3>
-                <p className="text-sm text-muted-foreground">Current Education</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel p-6 rounded-lg group hover:border-primary/50 transition-colors">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="p-3 rounded-md bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                <Code2 size={24} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg">Technology & Software</h3>
-                <p className="text-sm text-muted-foreground">Primary Focus</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="glass-panel p-6 rounded-lg group hover:border-primary/50 transition-colors">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="p-3 rounded-md bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                <ShieldAlert size={24} />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg">Cybersecurity • Web • Electronics</h3>
-                <p className="text-sm text-muted-foreground">Core Interests</p>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </motion.div>
       </div>
     </section>

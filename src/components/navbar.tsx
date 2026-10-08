@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Menu, X, Terminal } from "lucide-react";
+import { profileData } from "@/data/profile";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -20,9 +21,11 @@ export function Navbar() {
     { name: "Home", href: "/" },
     { name: "About", href: "/#about" },
     { name: "Skills", href: "/#skills" },
+    { name: "Education", href: "/#education" },
+    { name: "Experience", href: "/#experience" },
     { name: "Projects", href: "/#projects" },
     { name: "Web Lab", href: "/web-lab" },
-    { name: "Resume", href: "/resume.pdf" },
+    { name: "Resume", href: profileData.resumePath },
     { name: "Contact", href: "/#contact" },
   ];
 
@@ -36,29 +39,31 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2 group">
           <Terminal className="text-primary w-6 h-6 group-hover:glow-primary transition-all" />
-          <span className="font-bold tracking-wider text-lg">APAN DATTA</span>
+          <span className="font-bold tracking-wider text-lg uppercase">{profileData.name}</span>
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden lg:flex items-center gap-6">
           {navLinks.map((link) => (
             <Link
               key={link.name}
               href={link.href}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
             >
               {link.name}
             </Link>
           ))}
-          <div className="flex items-center gap-2 text-xs border border-primary/20 bg-primary/5 px-3 py-1.5 rounded-full text-primary">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-            Available
-          </div>
+          {profileData.status && (
+            <div className="flex items-center gap-2 text-xs border border-primary/20 bg-primary/5 px-3 py-1.5 rounded-full text-primary">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+              {profileData.status}
+            </div>
+          )}
         </nav>
 
         {/* Mobile Toggle */}
         <button
-          className="md:hidden text-foreground p-2"
+          className="lg:hidden text-foreground p-2"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           aria-label="Toggle menu"
         >
@@ -68,12 +73,12 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden absolute top-full left-0 w-full bg-background/95 backdrop-blur-xl border-b border-white/10 shadow-xl flex flex-col py-4 px-4 space-y-4">
+        <div className="lg:hidden absolute top-full left-0 w-full bg-background/95 backdrop-blur-xl border-b border-white/10 shadow-xl flex flex-col py-4 px-4 space-y-4 max-h-[80vh] overflow-y-auto">
           {navLinks.map((link) => (
             <Link
               key={link.name}
               href={link.href}
-              className="text-lg text-foreground hover:text-primary transition-colors"
+              className="text-lg font-medium text-foreground hover:text-primary transition-colors py-2 border-b border-white/5 last:border-0"
               onClick={() => setMobileMenuOpen(false)}
             >
               {link.name}

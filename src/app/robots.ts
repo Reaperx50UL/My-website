@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/admin/'],
     },
-    sitemap: 'https://example.com/sitemap.xml', // Replace with real URL
+    sitemap: 'https://YOUR_DOMAIN_HERE/sitemap.xml', // Replace with real URL
   };
 }

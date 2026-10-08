@@ -1,8 +1,8 @@
 import { MetadataRoute } from 'next';
-import { webLabData } from '@/data/projects';
+import { webLabData } from '@/data/profile';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://example.com'; // Replace with real URL
+  const baseUrl = 'https://YOUR_DOMAIN_HERE'; // Replace with real URL
 
   const webLabRoutes = webLabData.map((project) => ({
     url: `${baseUrl}/web-lab/${project.slug}`,
