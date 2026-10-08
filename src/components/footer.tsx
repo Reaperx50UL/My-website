@@ -7,9 +7,9 @@ export function Footer() {
     <footer className="border-t border-white/5 bg-background/50 backdrop-blur-sm mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex flex-col items-center md:items-start">
-          <span className="font-bold tracking-widest text-xl mb-2 uppercase">{profileData.name}</span>
+          <span className="font-bold tracking-widest text-xl mb-2 uppercase">VOIDNOD</span>
           <p className="text-muted-foreground text-sm text-center md:text-left max-w-sm">
-            Building. Learning. Exploring technology.
+            Built by {profileData.name}.
           </p>
         </div>
         
@@ -50,7 +50,7 @@ export function Footer() {
         </div>
       </div>
       <div className="border-t border-white/5 py-6 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} {profileData.name}. All rights reserved.
+        &copy; {new Date().getFullYear()} VOIDNOD. All rights reserved.
       </div>
     </footer>
   );

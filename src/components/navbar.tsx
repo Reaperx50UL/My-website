@@ -1,8 +1,9 @@
 "use client"
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { Menu, X, Terminal } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { profileData } from "@/data/profile";
 
 export function Navbar() {
@@ -37,9 +38,16 @@ export function Navbar() {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-        <Link href="/" className="flex items-center gap-2 group">
-          <Terminal className="text-primary w-6 h-6 group-hover:glow-primary transition-all" />
-          <span className="font-bold tracking-wider text-lg uppercase">{profileData.name}</span>
+        <Link href="/" aria-label="VoidNod Home" className="flex items-center gap-3 group">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/10 group-hover:border-primary/50 group-hover:glow-primary transition-all duration-300">
+            <Image 
+              src="/branding/logo.png" 
+              alt="VoidNod Logo" 
+              fill 
+              className="object-cover group-hover:scale-110 group-hover:brightness-110 transition-all duration-300" 
+            />
+          </div>
+          <span className="font-bold tracking-widest text-lg uppercase group-hover:text-foreground/90 transition-colors duration-300">VOIDNOD</span>
         </Link>
 
         {/* Desktop Nav */}

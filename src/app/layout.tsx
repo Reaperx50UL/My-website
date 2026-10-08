@@ -4,13 +4,13 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 
 export const metadata: Metadata = {
-  title: "Apan Datta | Portfolio & Web Lab",
-  description: "Electronics Engineering Student, Developer, and Cybersecurity Enthusiast. Explore my projects and Web Lab.",
+  title: "VOIDNOD | Apan Datta",
+  description: "Personal portfolio and Web Lab of Apan Datta.",
   openGraph: {
-    title: "Apan Datta | Technology Professional",
-    description: "Portfolio and experimental Web Lab platform.",
+    title: "VOIDNOD — Apan Datta's Portfolio & Web Lab",
+    description: "Personal portfolio and Web Lab of Apan Datta.",
     url: "https://YOUR_DOMAIN_HERE",
-    siteName: "Apan Datta Portfolio",
+    siteName: "VoidNod",
     locale: "en_US",
     type: "website",
   },
