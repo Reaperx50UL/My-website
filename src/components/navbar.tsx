@@ -1,10 +1,10 @@
 "use client"
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Menu, X } from "lucide-react";
 import { profileData } from "@/data/profile";
+import { VoidNodLogo } from "@/components/voidnod-logo";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -38,22 +38,9 @@ export function Navbar() {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-        <Link href="/" aria-label="VoidNod Home" className="flex items-center gap-2 group">
-          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/10 group-hover:border-primary/50 group-hover:glow-primary transition-all duration-300 shrink-0">
-            <Image 
-              src="/branding/logo.png" 
-              alt="VoidNod Logo" 
-              fill 
-              className="object-cover group-hover:scale-110 group-hover:brightness-110 transition-all duration-300" 
-            />
-          </div>
-          <div className="relative h-5 sm:h-6 w-32 sm:w-[160px] ml-1 group-hover:brightness-125 group-hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.5)] transition-all duration-300 shrink-0">
-            <Image 
-              src="/branding/wordmark.png" 
-              alt="VOIDNOD" 
-              fill 
-              className="object-contain object-left" 
-            />
+        <Link href="/" aria-label="VoidNod Home" className="flex items-center group">
+          <div className="relative group-hover:brightness-110 group-hover:drop-shadow-[0_0_8px_rgba(14,165,233,0.4)] transition-all duration-300">
+            <VoidNodLogo />
           </div>
         </Link>
 

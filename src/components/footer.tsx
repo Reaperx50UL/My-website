@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { Github, Linkedin, Twitter, Mail, Phone } from "lucide-react";
 import { profileData } from "@/data/profile";
+import { VoidNodLogo } from "@/components/voidnod-logo";
 
 export function Footer() {
   return (
     <footer className="border-t border-white/5 bg-background/50 backdrop-blur-sm mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex flex-col items-center md:items-start">
-          <div className="relative h-6 w-[160px] mb-4">
-            <img src="/branding/wordmark.png" alt="VOIDNOD" className="object-contain object-left w-full h-full" />
+          <div className="mb-4">
+            <VoidNodLogo />
           </div>
           <p className="text-muted-foreground text-sm text-center md:text-left max-w-sm">
             Built by {profileData.name}.
