@@ -15,7 +15,14 @@ export function HistorySection() {
             <h2 className="text-3xl font-bold tracking-tight">Education</h2>
           </div>
           
-          <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-primary/20 before:to-transparent">
+          <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-transparent before:via-primary/20 before:to-transparent">
+            {/* Animated Light Trail */}
+            <motion.div 
+              className="absolute top-0 bottom-0 ml-5 -translate-x-px md:mx-auto md:translate-x-0 w-[2px] bg-gradient-to-b from-transparent via-cyan-400 to-transparent z-0 opacity-50"
+              initial={{ top: "0%", bottom: "100%" }}
+              animate={{ top: "100%", bottom: "0%" }}
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+            />
             {educationData.length > 0 ? (
               educationData.map((item, idx) => (
                 <motion.div 
@@ -55,7 +62,14 @@ export function HistorySection() {
             <h2 className="text-3xl font-bold tracking-tight">Experience</h2>
           </div>
           
-          <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-primary/20 before:to-transparent">
+          <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-[1px] before:bg-gradient-to-b before:from-transparent before:via-primary/20 before:to-transparent">
+            {/* Animated Light Trail */}
+            <motion.div 
+              className="absolute top-0 bottom-0 ml-5 -translate-x-px md:mx-auto md:translate-x-0 w-[2px] bg-gradient-to-b from-transparent via-cyan-400 to-transparent z-0 opacity-50"
+              initial={{ top: "0%", bottom: "100%" }}
+              animate={{ top: "100%", bottom: "0%" }}
+              transition={{ duration: 4, repeat: Infinity, ease: "linear", delay: 1 }}
+            />
             {experienceData.length > 0 ? (
               experienceData.map((item, idx) => (
                 <motion.div 

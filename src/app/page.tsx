@@ -5,10 +5,14 @@ import { HistorySection } from "@/components/history";
 import { ProjectsSection } from "@/components/projects";
 import { ContactSection } from "@/components/contact";
 
+import { CosmicBackground } from "@/components/cosmic-background";
+
 export default function Home() {
   return (
-    <div className="flex flex-col gap-8 md:gap-16">
-      <HeroSection />
+    <>
+      <CosmicBackground />
+      <div className="flex flex-col gap-8 md:gap-16">
+        <HeroSection />
       <div className="border-t border-white/5 w-full max-w-5xl mx-auto" />
       <AboutSection />
       <div className="border-t border-white/5 w-full max-w-5xl mx-auto" />
@@ -19,6 +23,7 @@ export default function Home() {
       <ProjectsSection />
       <div className="border-t border-white/5 w-full max-w-5xl mx-auto" />
       <ContactSection />
-    </div>
+      </div>
+    </>
   );
 }

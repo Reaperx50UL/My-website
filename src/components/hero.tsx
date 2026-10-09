@@ -3,12 +3,10 @@ import { profileData } from "@/data/profile";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ChevronRight, Download, Mail } from "lucide-react";
-import { CosmicBackground } from "@/components/cosmic-background";
 
 export function HeroSection() {
   return (
     <section className="relative min-h-[90vh] flex flex-col justify-center pt-20">
-      <CosmicBackground />
       
       <motion.div
         initial={{ opacity: 0, y: 20 }}
