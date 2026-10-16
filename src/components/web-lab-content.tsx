@@ -189,7 +189,7 @@ export function WebLabContent() {
               </div>
               <div className="text-sm font-bold text-violet-400 mb-2 tracking-widest">02 &mdash; EXPLORE</div>
               <h3 className="text-xl font-bold mb-4">Experiment</h3>
-              <p className="text-muted-foreground">Experiment with interfaces, tools, and emerging technologies to discover what's possible.</p>
+              <p className="text-muted-foreground">Experiment with interfaces, tools, and emerging technologies to discover what&apos;s possible.</p>
             </div>
 
             <div className="relative z-10 flex flex-col items-center text-center p-8 glass-panel rounded-2xl border border-white/5">
@@ -209,7 +209,7 @@ export function WebLabContent() {
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-8">HAVE AN IDEA WORTH EXPLORING?</h2>
           <p className="text-xl text-muted-foreground mb-12">
-            I'm always interested in learning, building and experimenting with technology.
+            I&apos;m always interested in learning, building and experimenting with technology.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link 
