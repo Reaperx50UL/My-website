@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   Calculator,
   Gamepad2,
+  Compass,
   Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -112,13 +113,19 @@ export function WebLabContent() {
                             <Gamepad2 className="w-8 h-8" />
                           </div>
                         </div>
+                      ) : project.slug === "aether-glider" ? (
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-110 group-hover:border-amber-400/60 transition-all duration-500 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                            <Compass className="w-8 h-8" />
+                          </div>
+                        </div>
                       ) : (
                         <Terminal className="w-16 h-16 text-muted-foreground/20 group-hover:scale-110 transition-transform duration-500 group-hover:text-primary/30" />
                       )}
                       
                       <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent opacity-80 pointer-events-none"></div>
 
-                      {(project.slug === "scientific-calculator" || project.slug === "flappy-bird") && (
+                      {(project.slug === "scientific-calculator" || project.slug === "flappy-bird" || project.slug === "aether-glider") && (
                         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-950/70 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-md backdrop-blur-md">
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                           <span>INTERACTIVE</span>
@@ -160,6 +167,8 @@ export function WebLabContent() {
                             ? "Launch Calculator" 
                             : project.slug === "flappy-bird" 
                             ? "Play Flappy Bird" 
+                            : project.slug === "aether-glider"
+                            ? "Launch Flight" 
                             : "View Experiment"}
                           <ArrowRight size={16} className="group-hover/link:translate-x-1 text-cyan-400 transition-transform" />
                         </Link>

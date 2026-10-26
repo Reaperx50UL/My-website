@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { ScientificCalculator } from "@/components/experiments/scientific-calculator";
 import { FlappyBird } from "@/components/experiments/flappy-bird";
+import { AetherGlider, AetherGliderGame } from "@/components/experiments/aether-glider";
 
 export function generateStaticParams() {
   return webLabData.map((project) => ({
@@ -18,6 +19,24 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
 
   if (!project) {
     notFound();
+  }
+
+  // Dedicated Full-Screen Experience for Aether Glider
+  if (project.slug === "aether-glider") {
+    return (
+      <div className="fixed inset-0 z-[100] w-screen h-screen overflow-hidden bg-[#0F1326] select-none">
+        {/* Subtle, elegant back to Web Lab link that smoothly reveals on hover at top-left edge */}
+        <Link
+          href="/web-lab"
+          className="fixed top-3 left-3 z-[110] flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-amber-600/30 hover:border-amber-400 text-amber-300/70 hover:text-amber-100 text-xs font-mono tracking-wider transition-all shadow-lg backdrop-blur-md opacity-0 hover:opacity-100 focus-visible:opacity-100"
+          title="Return to VOIDNOD Web Lab"
+        >
+          <ArrowLeft size={14} />
+          <span>WEB LAB</span>
+        </Link>
+        <AetherGliderGame className="w-full h-full" />
+      </div>
+    );
   }
 
   const isInteractiveApp = project.slug === "scientific-calculator" || project.slug === "flappy-bird";
@@ -93,6 +112,16 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
             Live Arcade Canvas
           </div>
           <FlappyBird />
+        </div>
+      )}
+
+      {project.slug === "aether-glider" && (
+        <div className="mb-16">
+          <div className="text-xs font-mono text-amber-400/80 mb-3 uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            Live Clockwork Flight Simulation
+          </div>
+          <AetherGlider />
         </div>
       )}
       

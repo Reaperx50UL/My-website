@@ -215,5 +215,28 @@ export const webLabData: WebLabProject[] = [
     date: "2026-10",
     tags: ["Game", "Canvas", "Physics", "Arcade"],
     featured: true
+  },
+  {
+    slug: "aether-glider",
+    title: "Aether Glider: Clockwork Sky Trials",
+    category: "Web Apps",
+    shortDescription: "A polished brass-and-sky arcade flight game featuring clockwork aviators, signature sky realms, dynamic hazards, and procedural audio.",
+    fullDescription: "A clockwork fantasy arcade flight simulator where players pilot steam-and-aether gliders through perilous celestial realms. Features distinct aviators with signature abilities (Aether Shield, Gale Dash, Solar Pulse, Time Dilation), treacherous sky realms with unique traps, configurable flight mechanics, procedural Web Audio synthesizers, and medal-based achievements.",
+    problem: "Standard web flight games frequently lack mechanical depth, rich world-building, responsive tactile feedback, and accessible physics tuning for different player skill levels.",
+    solution: "Engineered an illustrated 60fps clockwork flight engine using HTML5 Canvas, deterministic physics simulation, procedural synth audio, multi-aviator abilities, and custom tuning presets.",
+    features: [
+      "Clockwork flight physics with responsive flap and gliding mechanics",
+      "4 Aviators with unique active abilities (Aether Shield, Gale Dash, Solar Pulse, Time Dilation)",
+      "5 Sky Realms with dynamic hazards (Piston Gears, Crosswind Vortex, Magma Geysers, Falling Icicles, Pulse Lasers)",
+      "3 Difficulty presets: Gentle Breeze, Standard, and Overclocked",
+      "Procedural Web Audio soundtrack and sound effects with mute support",
+      "Medal tier rewards and local best-run persistence",
+      "Full keyboard shortcuts and responsive mobile touch controls"
+    ],
+    technologies: ["HTML5 Canvas", "React", "TypeScript", "Tailwind CSS", "Web Audio API"],
+    status: "Completed",
+    date: "2026-10",
+    tags: ["Game", "Canvas", "Physics", "Arcade", "Audio"],
+    featured: true
   }
 ];
