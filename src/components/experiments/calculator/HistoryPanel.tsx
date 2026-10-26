@@ -18,6 +18,7 @@ interface HistoryPanelProps {
   onInsertResult: (result: string) => void;
   onDeleteItem: (id: string) => void;
   onClearHistory: () => void;
+  className?: string;
 }
 
 export const HistoryPanel: React.FC<HistoryPanelProps> = ({
@@ -26,6 +27,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
   onInsertResult,
   onDeleteItem,
   onClearHistory,
+  className = '',
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -42,7 +44,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
   return (
     <section
       aria-label="Calculation History"
-      className="flex flex-col bg-[#0F1624] border border-slate-800/90 rounded-xl overflow-hidden"
+      className={`flex flex-col bg-[#0F1624] border border-slate-800/90 rounded-xl overflow-hidden ${className}`}
     >
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-800/90 bg-[#0B101B] flex items-center justify-between gap-2">
