@@ -4,7 +4,18 @@ import { useState } from "react";
 import { webLabData } from "@/data/profile";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { ArrowRight, Beaker, Terminal, Code, Cpu, Network, ArrowUpRight } from "lucide-react";
+import { 
+  ArrowRight, 
+  Beaker, 
+  Terminal, 
+  Code, 
+  Cpu, 
+  Network, 
+  ArrowUpRight,
+  Calculator,
+  Gamepad2,
+  Sparkles
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const categories = ["All", "Websites", "Web Apps", "Experiments", "Tools", "Other"];
@@ -83,22 +94,47 @@ export function WebLabContent() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.4 }}
-                    className="glass-panel rounded-2xl overflow-hidden group hover:border-primary/50 transition-all border border-white/5 flex flex-col hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(14,165,233,0.2)]"
+                    className="glass-panel rounded-2xl overflow-hidden group hover:border-cyan-500/50 transition-all border border-white/5 flex flex-col hover:-translate-y-1 hover:shadow-[0_10px_40px_-10px_rgba(6,182,212,0.25)]"
                   >
-                    <div className="h-48 bg-secondary/30 relative border-b border-white/5 flex items-center justify-center overflow-hidden">
-                      <Terminal className="w-16 h-16 text-muted-foreground/20 group-hover:scale-110 transition-transform duration-500 group-hover:text-primary/30" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent opacity-80"></div>
+                    <div className="h-48 bg-gradient-to-b from-slate-900/60 to-slate-950/80 relative border-b border-white/5 flex items-center justify-center overflow-hidden">
+                      {/* Background grid accent */}
+                      <div className="absolute inset-0 bg-[radial-gradient(#06b6d4_1px,transparent_1px)] [background-size:16px_16px] opacity-15" />
+                      
+                      {project.slug === "scientific-calculator" ? (
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400/60 transition-all duration-500 shadow-[0_0_30px_rgba(6,182,212,0.2)]">
+                            <Calculator className="w-8 h-8" />
+                          </div>
+                        </div>
+                      ) : project.slug === "flappy-bird" ? (
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-violet-400 group-hover:scale-110 group-hover:border-violet-400/60 transition-all duration-500 shadow-[0_0_30px_rgba(139,92,246,0.2)]">
+                            <Gamepad2 className="w-8 h-8" />
+                          </div>
+                        </div>
+                      ) : (
+                        <Terminal className="w-16 h-16 text-muted-foreground/20 group-hover:scale-110 transition-transform duration-500 group-hover:text-primary/30" />
+                      )}
+                      
+                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent opacity-80 pointer-events-none"></div>
+
+                      {(project.slug === "scientific-calculator" || project.slug === "flappy-bird") && (
+                        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-950/70 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-md backdrop-blur-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                          <span>INTERACTIVE</span>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="p-8 flex flex-col flex-1 relative bg-gradient-to-b from-transparent to-background/50">
                       <div className="flex justify-between items-start mb-4">
-                        <h3 className="font-bold text-2xl group-hover:text-primary transition-colors">{project.title}</h3>
+                        <h3 className="font-bold text-2xl group-hover:text-cyan-400 transition-colors">{project.title}</h3>
                       </div>
                       
                       <div className="flex items-center gap-2 mb-6">
-                        <span className="text-xs px-2 py-1 bg-secondary text-muted-foreground rounded text-center tracking-wide">{project.category}</span>
+                        <span className="text-xs px-2.5 py-1 bg-secondary text-muted-foreground rounded text-center tracking-wide font-mono">{project.category}</span>
                         <span className={cn(
-                          "text-xs px-2 py-1 rounded text-center tracking-wide border border-transparent",
+                          "text-xs px-2.5 py-1 rounded text-center tracking-wide border border-transparent font-mono",
                           project.status === "Completed" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
                           project.status === "Development" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
                           "bg-secondary/50 text-muted-foreground"
@@ -107,21 +143,25 @@ export function WebLabContent() {
                         </span>
                       </div>
                       
-                      <p className="text-muted-foreground mb-8 flex-1 leading-relaxed">{project.shortDescription}</p>
+                      <p className="text-muted-foreground mb-8 flex-1 leading-relaxed text-sm md:text-base">{project.shortDescription}</p>
                       
                       <div className="flex flex-wrap gap-2 mb-8">
                         {project.technologies.slice(0, 4).map(tech => (
-                          <span key={tech} className="text-xs bg-primary/5 text-primary/80 px-2 py-1 rounded border border-primary/10">{tech}</span>
+                          <span key={tech} className="text-xs font-mono bg-cyan-500/5 text-cyan-400/90 px-2.5 py-1 rounded border border-cyan-500/15">{tech}</span>
                         ))}
                       </div>
 
                       <div className="mt-auto pt-6 border-t border-white/5">
                         <Link 
                           href={`/web-lab/${project.slug}`}
-                          className="inline-flex items-center gap-2 text-foreground font-medium group/link hover:text-primary transition-colors"
+                          className="inline-flex items-center gap-2 text-foreground font-medium group/link hover:text-cyan-400 transition-colors"
                         >
-                          View Experiment
-                          <ArrowRight size={16} className="group-hover/link:translate-x-1 transition-transform" />
+                          {project.slug === "scientific-calculator" 
+                            ? "Launch Calculator" 
+                            : project.slug === "flappy-bird" 
+                            ? "Play Flappy Bird" 
+                            : "View Experiment"}
+                          <ArrowRight size={16} className="group-hover/link:translate-x-1 text-cyan-400 transition-transform" />
                         </Link>
                       </div>
                     </div>
@@ -183,7 +223,7 @@ export function WebLabContent() {
               <p className="text-muted-foreground">Develop websites and digital experiences using modern frameworks and robust architecture.</p>
             </div>
 
-            <div className="relative z-10 flex flex-col items-center text-center p-8 glass-panel rounded-2xl border border-white/5">
+            <div className="relative z-10 flex flex-col items-center text-center p-8 glass-panel rounded-2xl border border-violet-500/20">
               <div className="w-24 h-24 rounded-full bg-background flex items-center justify-center border border-violet-500/20 mb-8 shadow-[0_0_30px_rgba(139,92,246,0.15)]">
                 <Cpu className="w-10 h-10 text-violet-400" />
               </div>
@@ -192,7 +232,7 @@ export function WebLabContent() {
               <p className="text-muted-foreground">Experiment with interfaces, tools, and emerging technologies to discover what&apos;s possible.</p>
             </div>
 
-            <div className="relative z-10 flex flex-col items-center text-center p-8 glass-panel rounded-2xl border border-white/5">
+            <div className="relative z-10 flex flex-col items-center text-center p-8 glass-panel rounded-2xl border border-emerald-500/20">
               <div className="w-24 h-24 rounded-full bg-background flex items-center justify-center border border-emerald-500/20 mb-8 shadow-[0_0_30px_rgba(16,185,129,0.15)]">
                 <Network className="w-10 h-10 text-emerald-400" />
               </div>

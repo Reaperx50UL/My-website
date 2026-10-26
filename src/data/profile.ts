@@ -169,19 +169,51 @@ export interface WebLabProject {
 }
 
 export const webLabData: WebLabProject[] = [
-  // Example placeholder Web Lab project. Replace with real experiments.
-  /*
   {
-    slug: "modern-ecommerce",
-    title: "Modern E-Commerce Experiment",
-    category: "Web Apps",
-    shortDescription: "A frontend e-commerce storefront experiment.",
-    technologies: ["React", "Next.js", "Tailwind CSS"],
-    status: "Development",
-    date: "2024-03",
-    githubUrl: "YOUR_GITHUB_URL_HERE",
-    liveUrl: "YOUR_LIVE_URL_HERE",
+    slug: "scientific-calculator",
+    title: "Quantum Scientific Calculator",
+    category: "Tools",
+    shortDescription: "A high-precision scientific calculator with trigonometry, logarithms, power functions, and keyboard input support.",
+    fullDescription: "A modern, futuristic web application designed for fast and accurate scientific calculations. Features standard arithmetic, advanced algebraic functions, trigonometric calculations (radians/degrees), exponential/logarithmic operations, memory storage, and full keyboard navigation in an interactive glassmorphic interface.",
+    problem: "Most online scientific calculators are either cluttered with outdated UI designs or lack keyboard shortcuts and smooth visual feedback on mobile and desktop.",
+    solution: "Engineered a streamlined, responsive scientific computation engine with an intuitive LCD expression parser, immediate syntax validation, and a cyberpunk terminal aesthetic that fits the VOIDNOD laboratory.",
+    features: [
+      "Standard and scientific arithmetic operations",
+      "Trigonometric functions (sin, cos, tan, asin, acos, atan)",
+      "Degree and Radian angle mode toggling",
+      "Logarithmic (log10, ln) and exponential (e^x, 10^x) functions",
+      "Power, square root, cube root, and factorial calculations",
+      "Full desktop keyboard shortcut support and mobile touch controls",
+      "Real-time expression history and answer memory recall",
+      "Precision rounding and zero-division error handling"
+    ],
+    technologies: ["React", "TypeScript", "Tailwind CSS", "Lucide Icons"],
+    status: "Completed",
+    date: "2026-10",
+    tags: ["Calculator", "Math", "Tool", "Web App"],
+    featured: true
+  },
+  {
+    slug: "flappy-bird",
+    title: "Cosmic Flappy Bird",
+    category: "Experiments",
+    shortDescription: "A retro arcade gravity-runner rebuilt in an interactive HTML5 canvas with neon particle physics and cosmic barriers.",
+    fullDescription: "A high-performance 60fps arcade web game inspired by the classic Flappy Bird. Players pilot a futuristic quantum probe through shifting cosmic energy pillars and void rifts. Features responsive canvas physics, smooth velocity curves, trail particle systems, high-score persistence, and touch/keyboard controls.",
+    problem: "Classic web arcade games often suffer from input latency, jerky frame rates on high-refresh monitors, and lack of visual polish on modern dark-mode screens.",
+    solution: "Developed an optimized HTML5 Canvas game loop utilizing delta-time physics, dynamic difficulty pacing, particle trail emitters, and local storage state persistence.",
+    features: [
+      "Smooth 60 FPS HTML5 Canvas physics engine",
+      "Responsive flight mechanics (Spacebar, Click, or Tap to flap)",
+      "Dynamic procedural cosmic barrier generation",
+      "Glowing particle trail and engine exhaust physics",
+      "Local storage high score tracking and session bests",
+      "Instant restart and pause capability",
+      "Mobile-friendly touch screen controls"
+    ],
+    technologies: ["HTML5 Canvas", "React", "TypeScript", "Tailwind CSS"],
+    status: "Completed",
+    date: "2026-10",
+    tags: ["Game", "Canvas", "Physics", "Arcade"],
     featured: true
   }
-  */
 ];

@@ -1,9 +1,11 @@
 import { webLabData } from "@/data/profile";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Github, Calendar, Activity, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, ExternalLink, Github, Calendar, Activity, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { ScientificCalculator } from "@/components/experiments/scientific-calculator";
+import { FlappyBird } from "@/components/experiments/flappy-bird";
 
 export function generateStaticParams() {
   return webLabData.map((project) => ({
@@ -18,44 +20,75 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
     notFound();
   }
 
+  const isInteractiveApp = project.slug === "scientific-calculator" || project.slug === "flappy-bird";
+
   return (
-    <div className="py-24 max-w-4xl mx-auto">
+    <div className="py-24 max-w-4xl mx-auto px-4 sm:px-6">
       <Link 
         href="/web-lab" 
-        className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-12"
+        className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-8 text-sm"
       >
         <ArrowLeft size={16} />
         Back to Web Lab
       </Link>
 
-      <div className="mb-12">
+      <div className="mb-10">
         <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <span className="text-xs px-2 py-1 bg-secondary text-muted-foreground rounded-md uppercase tracking-wider">{project.category}</span>
+          <span className="text-xs px-2.5 py-1 bg-secondary text-cyan-300 border border-cyan-500/20 rounded-md uppercase tracking-wider font-mono">
+            {project.category}
+          </span>
           <span className={cn(
-            "text-xs px-2 py-1 rounded-md uppercase tracking-wider flex items-center gap-1",
-            project.status === "Completed" ? "bg-green-500/10 text-green-500" :
-            project.status === "Development" ? "bg-yellow-500/10 text-yellow-500" :
+            "text-xs px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1 font-mono",
+            project.status === "Completed" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+            project.status === "Development" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
             "bg-secondary/50 text-muted-foreground"
           )}>
             <Activity size={12} />
             {project.status}
           </span>
+          {isInteractiveApp && (
+            <span className="text-xs px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1 font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+              <Sparkles size={12} className="text-cyan-400" />
+              Live Interactive
+            </span>
+          )}
           {project.date && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto">
+            <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto font-mono">
               <Calendar size={12} />
               {project.date}
             </span>
           )}
         </div>
         
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">{project.title}</h1>
+        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-white">{project.title}</h1>
         
-        <p className="text-xl text-muted-foreground leading-relaxed">
+        <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
           {project.fullDescription || project.shortDescription}
         </p>
       </div>
+
+      {/* Live Interactive Application Embed */}
+      {project.slug === "scientific-calculator" && (
+        <div className="mb-16">
+          <div className="text-xs font-mono text-cyan-400/70 mb-3 uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            Live Application Terminal
+          </div>
+          <ScientificCalculator />
+        </div>
+      )}
+
+      {project.slug === "flappy-bird" && (
+        <div className="mb-16">
+          <div className="text-xs font-mono text-cyan-400/70 mb-3 uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            Live Arcade Canvas
+          </div>
+          <FlappyBird />
+        </div>
+      )}
       
-      {project.image && (
+      {project.image && !isInteractiveApp && (
         <div className="w-full h-[400px] relative rounded-xl overflow-hidden mb-12 border border-white/5">
           <Image src={project.image} alt={project.title} fill className="object-cover" />
         </div>
@@ -110,7 +143,7 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
             <ul className="grid md:grid-cols-2 gap-4">
               {project.features.map((feature, idx) => (
                 <li key={idx} className="flex items-start gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-2 shrink-0" />
                   <span className="text-muted-foreground">{feature}</span>
                 </li>
               ))}
@@ -123,8 +156,8 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
             <h2 className="text-2xl font-bold mb-6">Technology Stack</h2>
             <div className="flex flex-wrap gap-3">
               {project.technologies.map(tech => (
-                <div key={tech} className="px-4 py-2 rounded-lg glass-panel border border-white/5 flex items-center justify-center">
-                  <span className="text-foreground font-medium">{tech}</span>
+                <div key={tech} className="px-4 py-2 rounded-lg glass-panel border border-white/5 flex items-center justify-center font-mono text-sm text-cyan-200">
+                  <span>{tech}</span>
                 </div>
               ))}
             </div>
