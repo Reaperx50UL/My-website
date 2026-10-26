@@ -21,6 +21,7 @@ import {
   type DefiniteIntegralResult,
 } from './utils/calculusEngine';
 import type { AngleMode } from './utils/mathEngine';
+import { CalculatorLoadingIndicator } from './CalculatorLoadingIndicator';
 
 export type CalculusTab = 'differentiate' | 'indefinite' | 'definite';
 
@@ -84,6 +85,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
   );
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isCalculating, setIsCalculating] = useState<boolean>(false);
 
   const handleCopy = async (text: string, key: string) => {
     try {
@@ -108,26 +110,33 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
     const targetExpr = exprOverride ?? expression;
     const targetVar = varOverride ?? variable;
 
-    if (targetTab === 'differentiate') {
-      const res = differentiateExpression(
-        targetExpr,
-        targetVar,
-        evalAtOverride !== undefined ? evalAtOverride : evalPoint,
-        orderOverride ?? diffOrder
-      );
-      setDiffResult(res);
-    } else if (targetTab === 'indefinite') {
-      const res = integrateIndefinite(targetExpr, targetVar);
-      setIndefResult(res);
-    } else {
-      const res = integrateDefinite(
-        targetExpr,
-        targetVar,
-        lowerOverride ?? lowerBound,
-        upperOverride ?? upperBound
-      );
-      setDefResult(res);
-    }
+    setIsCalculating(true);
+    setTimeout(() => {
+      try {
+        if (targetTab === 'differentiate') {
+          const res = differentiateExpression(
+            targetExpr,
+            targetVar,
+            evalAtOverride !== undefined ? evalAtOverride : evalPoint,
+            orderOverride ?? diffOrder
+          );
+          setDiffResult(res);
+        } else if (targetTab === 'indefinite') {
+          const res = integrateIndefinite(targetExpr, targetVar);
+          setIndefResult(res);
+        } else {
+          const res = integrateDefinite(
+            targetExpr,
+            targetVar,
+            lowerOverride ?? lowerBound,
+            upperOverride ?? upperBound
+          );
+          setDefResult(res);
+        }
+      } finally {
+        setIsCalculating(false);
+      }
+    }, 10);
   };
 
   // Re-run when switching tabs so the currently displayed expression is evaluated immediately
@@ -464,8 +473,18 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
         {/* Results Output Card */}
         <div
           aria-live="polite"
-          className="mt-3 p-3.5 bg-[#070A12] border border-slate-800 rounded-lg space-y-2.5"
+          className="mt-3 p-3.5 bg-[#070A12] border border-slate-800 rounded-lg space-y-2.5 relative"
         >
+          {isCalculating && (
+            <div className="pb-1">
+              <CalculatorLoadingIndicator
+                stage="Computing calculus"
+                variant="inline"
+                delayMs={150}
+              />
+            </div>
+          )}
+
           {/* DIFFERENTIATION RESULT */}
           {activeTab === 'differentiate' && diffResult && (
             <>

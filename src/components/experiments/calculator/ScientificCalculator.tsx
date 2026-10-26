@@ -18,9 +18,19 @@ import {
   formatNumber,
   type AngleMode,
 } from './utils/mathEngine';
-import { CalculusPanel } from './CalculusPanel';
-import { GraphPlotter } from './GraphPlotter';
+import { Suspense } from 'react';
 import { HistoryPanel, type CalculationHistoryItem } from './HistoryPanel';
+import { CalculatorLoadingIndicator } from './CalculatorLoadingIndicator';
+import { CalculatorErrorBoundary } from './CalculatorErrorBoundary';
+import { CalculusPanelSkeleton, GraphPlotterSkeleton } from './ToolSkeletons';
+
+const LazyCalculusPanel = React.lazy(() =>
+  import('./CalculusPanel').then((mod) => ({ default: mod.CalculusPanel }))
+);
+
+const LazyGraphPlotter = React.lazy(() =>
+  import('./GraphPlotter').then((mod) => ({ default: mod.GraphPlotter }))
+);
 
 const HISTORY_STORAGE_KEY = 'voidnod_scientific_calc_history_v1';
 const MEMORY_STORAGE_KEY = 'voidnod_scientific_calc_memory_v1';
@@ -100,11 +110,34 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
   // Graph expression state
   const [graphExpression, setGraphExpression] = useState<string>('sin(x)');
 
+  // Dynamic tool retry keys
+  const [calculusRetryKey, setCalculusRetryKey] = useState<number>(0);
+  const [graphRetryKey, setGraphRetryKey] = useState<number>(0);
+
+  // Engine readiness & active calculation states
+  const [isEngineReady, setIsEngineReady] = useState<boolean>(false);
+  const [engineError, setEngineError] = useState<string | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+
   // Mobile and Desktop layout tabs
   const [mobileTab, setMobileTab] = useState<MobileWorkspaceTab>('calculator');
   const [desktopDeckFilter, setDesktopDeckFilter] = useState<DesktopDeckFilter>('all');
 
   const expressionInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Check and warm up math engine readiness
+  useEffect(() => {
+    try {
+      const probe = evaluateMathExpression('1+1', { angleMode: 'RAD' });
+      if (probe.ok) {
+        setIsEngineReady(true);
+      } else {
+        setIsEngineReady(true);
+      }
+    } catch (err) {
+      setEngineError(err instanceof Error ? err.message : 'Engine initialization failed');
+    }
+  }, []);
 
   // Persist history safely
   useEffect(() => {
@@ -150,29 +183,36 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
       return;
     }
 
-    const res = evaluateMathExpression(trimmed, {
-      angleMode,
-      ans: ansValue,
-    });
+    setIsEvaluating(true);
+    setTimeout(() => {
+      try {
+        const res = evaluateMathExpression(trimmed, {
+          angleMode,
+          ans: ansValue,
+        });
 
-    if (!res.ok || res.value === undefined || res.formatted === undefined) {
-      setErrorMessage(res.error ?? 'Syntax Error: Invalid mathematical expression');
-      return;
-    }
+        if (!res.ok || res.value === undefined || res.formatted === undefined) {
+          setErrorMessage(res.error ?? 'Syntax Error: Invalid mathematical expression');
+          return;
+        }
 
-    setErrorMessage(null);
-    setDisplayResult(res.formatted);
-    setAnsValue(res.value);
+        setErrorMessage(null);
+        setDisplayResult(res.formatted);
+        setAnsValue(res.value);
 
-    const newItem: CalculationHistoryItem = {
-      id: `calc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      expression: trimmed,
-      result: res.formatted,
-      angleMode,
-      timestamp: Date.now(),
-    };
+        const newItem: CalculationHistoryItem = {
+          id: `calc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          expression: trimmed,
+          result: res.formatted,
+          angleMode,
+          timestamp: Date.now(),
+        };
 
-    setHistory((prev) => [newItem, ...prev.slice(0, 49)]);
+        setHistory((prev) => [newItem, ...prev.slice(0, 49)]);
+      } finally {
+        setIsEvaluating(false);
+      }
+    }, 0);
   }, [expression, angleMode, ansValue]);
 
   // Insert token into expression line
@@ -483,6 +523,34 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                   Ans = <strong className="text-cyan-300">{formatNumber(ansValue, 6)}</strong>
                 </span>
               </div>
+
+              {/* Startup progress indicator if initialization takes >150ms */}
+              {!isEngineReady && !engineError && (
+                <CalculatorLoadingIndicator
+                  stage="Preparing calculator"
+                  variant="inline"
+                  delayMs={150}
+                />
+              )}
+              {engineError && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-1.5 text-xs text-rose-300 font-mono"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400" aria-hidden="true" />
+                  <span>Engine warning</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEngineError(null);
+                      setIsEngineReady(true);
+                    }}
+                    className="underline text-rose-200 hover:text-white ml-1 focus-visible:outline-2 focus-visible:outline-rose-400"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -551,7 +619,16 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
             {/* Primary Result Readout */}
             <div className="pt-1 flex items-end justify-between gap-4">
               <div className="text-xs font-mono text-slate-400 space-y-0.5">
-                <div>RESULT ({angleMode})</div>
+                <div className="flex items-center gap-2">
+                  <span>RESULT ({angleMode})</span>
+                  {isEvaluating && (
+                    <CalculatorLoadingIndicator
+                      stage="Evaluating"
+                      variant="inline"
+                      delayMs={150}
+                    />
+                  )}
+                </div>
                 {livePreview !== null && livePreview !== displayResult && !errorMessage && (
                   <div className="text-cyan-400/80" data-testid="calculator-live-preview">
                     Preview: = {livePreview}
@@ -1031,7 +1108,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
             </div>
           </div>
 
-          {/* 1. Calculus Panel */}
+          {/* 1. Calculus Panel (Lazy-loaded with isolated error boundary and elapsed-time loader) */}
           <div
             className={`${
               mobileTab === 'calculus' ? 'block' : 'hidden'
@@ -1041,22 +1118,31 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 : 'lg:hidden'
             }`}
           >
-            <CalculusPanel
-              currentCalculatorExpression={expression}
-              angleMode={angleMode}
-              onSendResultToCalculator={(val) => {
-                setErrorMessage(null);
-                setExpression(val);
-                setDisplayResult(val);
-                setMobileTab('calculator');
-              }}
-              onPlotExpression={(expr) => {
-                handlePlotCurrentExpression(expr);
-              }}
-            />
+            <CalculatorErrorBoundary
+              key={`calculus-boundary-${calculusRetryKey}`}
+              fallbackTitle="Calculus Tool Initialization Error"
+              fallbackMessage="Could not load the symbolic calculus module. Check your connection and retry."
+              onRetry={() => setCalculusRetryKey((k) => k + 1)}
+            >
+              <Suspense fallback={<CalculusPanelSkeleton />}>
+                <LazyCalculusPanel
+                  currentCalculatorExpression={expression}
+                  angleMode={angleMode}
+                  onSendResultToCalculator={(val) => {
+                    setErrorMessage(null);
+                    setExpression(val);
+                    setDisplayResult(val);
+                    setMobileTab('calculator');
+                  }}
+                  onPlotExpression={(expr) => {
+                    handlePlotCurrentExpression(expr);
+                  }}
+                />
+              </Suspense>
+            </CalculatorErrorBoundary>
           </div>
 
-          {/* 2. Function Plotter */}
+          {/* 2. Function Plotter (Lazy-loaded with isolated error boundary and elapsed-time loader) */}
           <div
             className={`${
               mobileTab === 'graph' ? 'block' : 'hidden'
@@ -1066,11 +1152,20 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 : 'lg:hidden'
             }`}
           >
-            <GraphPlotter
-              expression={graphExpression}
-              onExpressionChange={setGraphExpression}
-              angleMode={angleMode}
-            />
+            <CalculatorErrorBoundary
+              key={`graph-boundary-${graphRetryKey}`}
+              fallbackTitle="Graph Plotter Initialization Error"
+              fallbackMessage="Could not load the coordinate plotting engine. Check your connection and retry."
+              onRetry={() => setGraphRetryKey((k) => k + 1)}
+            >
+              <Suspense fallback={<GraphPlotterSkeleton />}>
+                <LazyGraphPlotter
+                  expression={graphExpression}
+                  onExpressionChange={setGraphExpression}
+                  angleMode={angleMode}
+                />
+              </Suspense>
+            </CalculatorErrorBoundary>
           </div>
 
           {/* 3. Persistent Calculation History */}

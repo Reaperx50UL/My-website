@@ -96,3 +96,20 @@ html {
     linear-gradient(to bottom, rgba(30, 41, 59, 0.28) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
 }
+
+
+@keyframes indeterminate-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.animate-indeterminate {
+  animation: indeterminate-bar 1.5s infinite linear;
+}
