@@ -21,9 +21,13 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
   }
 
   const isInteractiveApp = project.slug === "scientific-calculator" || project.slug === "flappy-bird";
+  const isWideApp = project.slug === "scientific-calculator";
 
   return (
-    <div className="py-24 max-w-4xl mx-auto px-4 sm:px-6">
+    <div className={cn(
+      "py-24 mx-auto px-4 sm:px-6",
+      isWideApp ? "max-w-[1440px]" : "max-w-4xl"
+    )}>
       <Link 
         href="/web-lab" 
         className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-8 text-sm"
@@ -32,7 +36,7 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
         Back to Web Lab
       </Link>
 
-      <div className="mb-10">
+      <div className={cn("mb-10", isWideApp ? "max-w-4xl" : "w-full")}>
         <div className="flex items-center gap-3 mb-4 flex-wrap">
           <span className="text-xs px-2.5 py-1 bg-secondary text-cyan-300 border border-cyan-500/20 rounded-md uppercase tracking-wider font-mono">
             {project.category}
@@ -119,7 +123,7 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
         )}
       </div>
 
-      <div className="space-y-16">
+      <div className={cn("space-y-16", isWideApp ? "max-w-4xl" : "w-full")}>
         {(project.problem || project.solution) && (
           <div className="grid md:grid-cols-2 gap-8">
             {project.problem && (
