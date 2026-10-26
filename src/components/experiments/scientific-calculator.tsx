@@ -8,29 +8,26 @@ export function ScientificCalculator() {
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
   return (
-    <div className="w-full voidnod-cosmic-bg text-slate-100 rounded-2xl border border-slate-800/90 p-4 sm:p-6 lg:p-8 shadow-2xl relative">
+    <div className="w-full max-w-[1536px] mx-auto text-slate-100 relative">
       {/* Workspace Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-slate-800/90 gap-4">
+      <div className="mb-5 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-100">
-              Scientific Calculator &amp; Symbolic Calculus Workstation
-            </h2>
-          </div>
-          <p className="text-xs sm:text-sm text-slate-400">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-100">
+            Scientific Calculator &amp; Symbolic Calculus Workstation
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
             High-precision expression evaluation, symbolic differentiation &amp; integration,
             Adaptive Simpson quadrature, and asymptote-aware function plotting.
           </p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden sm:flex text-xs font-mono text-slate-400 items-center gap-2 mr-2">
-            <span>64-bit IEEE 754</span>
-            <span aria-hidden="true">·</span>
-            <span>AST Validated</span>
+          <div className="text-xs font-mono text-slate-400 whitespace-nowrap">
+            <span>Precision: 64-bit IEEE 754</span>
+            <span aria-hidden="true"> · </span>
+            <span>Parser: AST Validated</span>
           </div>
-          
+
           <button
             type="button"
             onClick={() => setShowShortcutsModal(true)}
@@ -42,7 +39,7 @@ export function ScientificCalculator() {
         </div>
       </div>
 
-      {/* Main Scientific Calculator Console */}
+      {/* Main 12-Column Engineering Console */}
       <CalculatorConsole />
 
       {/* Concise Technical Reference Strip */}

@@ -985,15 +985,27 @@ export const MatrixCalculator: React.FC<MatrixCalculatorProps> = ({
                   { id: 'inverse', label: `inv(${targetMatrix})` },
                   { id: 'rank', label: `rank(${targetMatrix})` },
                   { id: 'rref', label: `rref(${targetMatrix})` },
-                  { id: 'scalarMultiply', label: `k · ${targetMatrix}` },
-                  { id: 'power', label: `${targetMatrix}^n` },
+                  {
+                    id: 'scalarMultiply',
+                    label:
+                      selectedOp === 'scalarMultiply' && scalarK.trim()
+                        ? `${scalarK.trim()} · ${targetMatrix}`
+                        : `k · ${targetMatrix}`,
+                  },
+                  {
+                    id: 'power',
+                    label:
+                      selectedOp === 'power' && powerN.trim()
+                        ? `${targetMatrix}^n (n=${powerN.trim()})`
+                        : `${targetMatrix}^n`,
+                  },
                 ] as const
               ).map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => executeOperation(item.id, targetMatrix)}
-                  className={`py-1.5 px-2.5 text-xs font-mono font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+                  className={`py-1.5 px-2.5 text-xs font-mono font-medium rounded-lg border transition-colors inline-flex items-center justify-center whitespace-nowrap shrink-0 ${
                     selectedOp === item.id
                       ? 'bg-violet-600 text-white border-violet-400'
                       : 'bg-[#131C2E] hover:bg-slate-800 text-slate-200 border-slate-800'
@@ -1006,55 +1018,130 @@ export const MatrixCalculator: React.FC<MatrixCalculatorProps> = ({
 
             {/* Conditional Parameter Input for k · M (Scalar) or M^n (Power) */}
             {selectedOp === 'scalarMultiply' && (
-              <div className="flex items-center gap-2 bg-[#070A12] px-2.5 py-1.5 rounded-lg border border-slate-800">
-                <label
-                  htmlFor="matrix-scalar-input"
-                  className="text-xs font-mono text-slate-400 whitespace-nowrap"
-                >
-                  Scalar k =
-                </label>
-                <input
-                  id="matrix-scalar-input"
-                  type="text"
-                  value={scalarK}
-                  onChange={(e) => setScalarK(e.target.value)}
-                  className="w-full px-2 py-0.5 text-xs font-mono bg-[#0B101D] border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-cyan-400"
-                />
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-[#070A12] p-2.5 rounded-lg border border-slate-800">
+                <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+                  <label
+                    htmlFor="matrix-scalar-input"
+                    className="text-xs font-mono text-slate-300 whitespace-nowrap shrink-0"
+                  >
+                    Scalar k =
+                  </label>
+                  <input
+                    id="matrix-scalar-input"
+                    type="text"
+                    inputMode="decimal"
+                    value={scalarK}
+                    onChange={(e) => {
+                      const nextVal = e.target.value;
+                      setScalarK(nextVal);
+                      if (nextVal.trim() !== '' && nextVal.trim() !== '-') {
+                        executeOperation(
+                          'scalarMultiply',
+                          targetMatrix,
+                          undefined,
+                          undefined,
+                          undefined,
+                          nextVal
+                        );
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        executeOperation(
+                          'scalarMultiply',
+                          targetMatrix,
+                          undefined,
+                          undefined,
+                          undefined,
+                          scalarK
+                        );
+                      }
+                    }}
+                    className="w-24 sm:w-32 min-w-[88px] flex-1 px-2.5 py-1 text-sm font-mono font-semibold text-center bg-[#0B101D] border border-cyan-500/40 rounded-md text-slate-100 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() =>
-                    executeOperation('scalarMultiply', targetMatrix, undefined, undefined, undefined, scalarK)
+                    executeOperation(
+                      'scalarMultiply',
+                      targetMatrix,
+                      undefined,
+                      undefined,
+                      undefined,
+                      scalarK
+                    )
                   }
-                  className="px-2.5 py-1 text-xs font-mono font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded whitespace-nowrap shrink-0"
+                  className="px-3 py-1.5 text-xs font-mono font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 rounded-md whitespace-nowrap shrink-0"
                 >
-                  Compute k·{targetMatrix}
+                  Compute {scalarK.trim() || 'k'}·{targetMatrix}
                 </button>
               </div>
             )}
 
             {selectedOp === 'power' && (
-              <div className="flex items-center gap-2 bg-[#070A12] px-2.5 py-1.5 rounded-lg border border-slate-800">
-                <label
-                  htmlFor="matrix-power-input"
-                  className="text-xs font-mono text-slate-400 whitespace-nowrap"
-                >
-                  Integer Power n =
-                </label>
-                <input
-                  id="matrix-power-input"
-                  type="text"
-                  value={powerN}
-                  onChange={(e) => setPowerN(e.target.value)}
-                  className="w-full px-2 py-0.5 text-xs font-mono bg-[#0B101D] border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-cyan-400"
-                />
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-[#070A12] p-2.5 rounded-lg border border-slate-800">
+                <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+                  <label
+                    htmlFor="matrix-power-input"
+                    className="text-xs font-mono text-slate-300 whitespace-nowrap shrink-0"
+                  >
+                    Integer Power n =
+                  </label>
+                  <input
+                    id="matrix-power-input"
+                    type="text"
+                    inputMode="numeric"
+                    value={powerN}
+                    onChange={(e) => {
+                      const nextVal = e.target.value;
+                      setPowerN(nextVal);
+                      if (nextVal.trim() !== '' && nextVal.trim() !== '-') {
+                        executeOperation(
+                          'power',
+                          targetMatrix,
+                          undefined,
+                          undefined,
+                          undefined,
+                          undefined,
+                          nextVal
+                        );
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        executeOperation(
+                          'power',
+                          targetMatrix,
+                          undefined,
+                          undefined,
+                          undefined,
+                          undefined,
+                          powerN
+                        );
+                      }
+                    }}
+                    className="w-24 sm:w-32 min-w-[88px] flex-1 px-2.5 py-1 text-sm font-mono font-semibold text-center bg-[#0B101D] border border-violet-500/50 rounded-md text-slate-100 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() =>
-                    executeOperation('power', targetMatrix, undefined, undefined, undefined, undefined, powerN)
+                    executeOperation(
+                      'power',
+                      targetMatrix,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      powerN
+                    )
                   }
-                  className="px-2.5 py-1 text-xs font-mono font-semibold bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border border-violet-500/30 rounded whitespace-nowrap shrink-0"
+                  className="px-3 py-1.5 text-xs font-mono font-semibold bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border border-violet-500/30 rounded-md whitespace-nowrap shrink-0"
                 >
-                  Compute {targetMatrix}^n
+                  Compute {targetMatrix}^{powerN.trim() || 'n'}
                 </button>
               </div>
             )}

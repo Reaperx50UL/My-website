@@ -72,7 +72,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
       </div>
 
       {/* Scrollable History List */}
-      <div className="max-h-[340px] overflow-y-auto divide-y divide-slate-800/70">
+      <div className="flex-1 max-h-[380px] overflow-y-auto divide-y divide-slate-800/70">
         {items.length === 0 ? (
           <div className="p-8 text-center space-y-1.5">
             <p className="text-xs font-medium text-slate-300">No calculations recorded yet</p>

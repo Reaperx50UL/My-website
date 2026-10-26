@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Calculator,
   Delete,
@@ -19,26 +19,10 @@ import {
   formatNumber,
   type AngleMode,
 } from './utils/mathEngine';
+import { CalculusPanel } from './CalculusPanel';
+import { GraphPlotter } from './GraphPlotter';
 import { HistoryPanel, type CalculationHistoryItem } from './HistoryPanel';
-import { CalculatorLoadingIndicator } from './CalculatorLoadingIndicator';
-import { CalculatorErrorBoundary } from './CalculatorErrorBoundary';
-import {
-  CalculusPanelSkeleton,
-  GraphPlotterSkeleton,
-  MatrixCalculatorSkeleton,
-} from './ToolSkeletons';
-
-const LazyCalculusPanel = React.lazy(() =>
-  import('./CalculusPanel').then((mod) => ({ default: mod.CalculusPanel }))
-);
-
-const LazyGraphPlotter = React.lazy(() =>
-  import('./GraphPlotter').then((mod) => ({ default: mod.GraphPlotter }))
-);
-
-const LazyMatrixCalculator = React.lazy(() =>
-  import('./MatrixCalculator').then((mod) => ({ default: mod.MatrixCalculator }))
-);
+import { MatrixCalculator } from './MatrixCalculator';
 
 const HISTORY_STORAGE_KEY = 'voidnod_scientific_calc_history_v1';
 const MEMORY_STORAGE_KEY = 'voidnod_scientific_calc_memory_v1';
@@ -83,16 +67,6 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedResult, setCopiedResult] = useState<boolean>(false);
 
-  // Dynamic tool retry keys
-  const [calculusRetryKey, setCalculusRetryKey] = useState<number>(0);
-  const [graphRetryKey, setGraphRetryKey] = useState<number>(0);
-  const [matrixRetryKey, setMatrixRetryKey] = useState<number>(0);
-
-  // Engine readiness & active calculation states
-  const [isEngineReady, setIsEngineReady] = useState<boolean>(false);
-  const [engineError, setEngineError] = useState<string | null>(null);
-  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
-
   // Memory state with safe localStorage persistence
   const [memoryValue, setMemoryValue] = useState<number>(() => {
     try {
@@ -133,20 +107,6 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
   const [desktopDeckFilter, setDesktopDeckFilter] = useState<DesktopDeckFilter>('all');
 
   const expressionInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Check and warm up math engine readiness
-  useEffect(() => {
-    try {
-      const probe = evaluateMathExpression('1+1', { angleMode: 'RAD' });
-      if (probe.ok) {
-        setIsEngineReady(true);
-      } else {
-        setIsEngineReady(true);
-      }
-    } catch (err) {
-      setEngineError(err instanceof Error ? err.message : 'Engine initialization failed');
-    }
-  }, []);
 
   // Persist history safely
   useEffect(() => {
@@ -192,36 +152,29 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
       return;
     }
 
-    setIsEvaluating(true);
-    setTimeout(() => {
-      try {
-        const res = evaluateMathExpression(trimmed, {
-          angleMode,
-          ans: ansValue,
-        });
+    const res = evaluateMathExpression(trimmed, {
+      angleMode,
+      ans: ansValue,
+    });
 
-        if (!res.ok || res.value === undefined || res.formatted === undefined) {
-          setErrorMessage(res.error ?? 'Syntax Error: Invalid mathematical expression');
-          return;
-        }
+    if (!res.ok || res.value === undefined || res.formatted === undefined) {
+      setErrorMessage(res.error ?? 'Syntax Error: Invalid mathematical expression');
+      return;
+    }
 
-        setErrorMessage(null);
-        setDisplayResult(res.formatted);
-        setAnsValue(res.value);
+    setErrorMessage(null);
+    setDisplayResult(res.formatted);
+    setAnsValue(res.value);
 
-        const newItem: CalculationHistoryItem = {
-          id: `calc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          expression: trimmed,
-          result: res.formatted,
-          angleMode,
-          timestamp: Date.now(),
-        };
+    const newItem: CalculationHistoryItem = {
+      id: `calc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      expression: trimmed,
+      result: res.formatted,
+      angleMode,
+      timestamp: Date.now(),
+    };
 
-        setHistory((prev) => [newItem, ...prev.slice(0, 49)]);
-      } finally {
-        setIsEvaluating(false);
-      }
-    }, 0);
+    setHistory((prev) => [newItem, ...prev.slice(0, 49)]);
   }, [expression, angleMode, ansValue]);
 
   // Insert token into expression line
@@ -252,27 +205,42 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
       if (trimmed.startsWith('-(') && trimmed.endsWith(')')) {
         return trimmed.slice(2, -1);
       }
+      if (/^-[0-9.]+$/.test(trimmed)) {
+        return trimmed.slice(1);
+      }
+      if (/^[0-9.]+$/.test(trimmed)) {
+        return `-${trimmed}`;
+      }
       return `-(${trimmed})`;
     });
   }, []);
 
-  // Memory actions
-  const resolveCurrentNumericValue = (): number | null => {
-    const fromResult = Number(displayResult);
-    if (Number.isFinite(fromResult)) return fromResult;
-    const evaluated = evaluateMathExpression(expression, { angleMode, ans: ansValue });
-    if (evaluated.ok && evaluated.value !== undefined) return evaluated.value;
-    return null;
+  // Memory operations (MC, MR, M+, M-)
+  const resolveCurrentNumericValue = useCallback((): number | null => {
+    const trimmed = expression.trim();
+    if (trimmed) {
+      const res = evaluateMathExpression(trimmed, { angleMode, ans: ansValue });
+      if (res.ok && res.value !== undefined) {
+        return res.value;
+      }
+      setErrorMessage(res.error ?? 'Cannot store invalid expression in memory');
+      return null;
+    }
+    const parsedDisplay = Number(displayResult);
+    return Number.isFinite(parsedDisplay) ? parsedDisplay : ansValue;
+  }, [expression, angleMode, ansValue, displayResult]);
+
+  const handleMemoryClear = () => {
+    setMemoryValue(0);
   };
 
   const handleMemoryRecall = () => {
     setErrorMessage(null);
     const formattedMem = formatNumber(memoryValue);
     setExpression((prev) => {
-      if (!prev) return formattedMem;
-      const lastChar = prev.slice(-1);
-      if (/[0-9.]/.test(lastChar)) {
-        return `${prev} × ${formattedMem}`;
+      if (!prev.trim()) return formattedMem;
+      if (/[0-9a-zA-Zπ)]$/.test(prev.trim())) {
+        return `${prev} * ${formattedMem}`;
       }
       return `${prev}${formattedMem}`;
     });
@@ -316,6 +284,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
           target.tagName === 'SELECT' ||
           target.isContentEditable)
       ) {
+        // If focused inside the main calculator expression input, handle Enter / Escape
         if (target === expressionInputRef.current) {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -394,8 +363,29 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
     }
   };
 
+  const handleDeckFilterClick = useCallback((tabId: DesktopDeckFilter) => {
+    setDesktopDeckFilter(tabId);
+    if (tabId === 'matrix') {
+      setMobileTab('matrix');
+      requestAnimationFrame(() => {
+        const el = document.getElementById('matrix-workbench');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    } else if (tabId === 'calculus') {
+      setMobileTab('calculus');
+    } else if (tabId === 'graph') {
+      setMobileTab('graph');
+    } else if (tabId === 'history') {
+      setMobileTab('history');
+    } else if (tabId === 'all') {
+      setMobileTab('calculator');
+    }
+  }, []);
+
   return (
-    <div className={`w-full max-w-[1400px] mx-auto ${className}`}>
+    <div className={`w-full max-w-[1536px] mx-auto ${className}`}>
       {/* Mobile Workspace Switcher (< 1024px) */}
       <div
         role="tablist"
@@ -406,14 +396,17 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
           type="button"
           role="tab"
           aria-selected={mobileTab === 'calculator'}
-          onClick={() => setMobileTab('calculator')}
-          className={`min-h-[44px] px-1.5 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 ${
+          onClick={() => {
+            setMobileTab('calculator');
+            setDesktopDeckFilter('all');
+          }}
+          className={`min-h-[44px] px-1 py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap shrink-0 ${
             mobileTab === 'calculator'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Calculator className="w-3.5 h-3.5" aria-hidden="true" />
+          <Calculator className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>Keypad</span>
         </button>
 
@@ -421,14 +414,17 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
           type="button"
           role="tab"
           aria-selected={mobileTab === 'matrix'}
-          onClick={() => setMobileTab('matrix')}
-          className={`min-h-[44px] px-1.5 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 ${
+          onClick={() => {
+            setMobileTab('matrix');
+            setDesktopDeckFilter('matrix');
+          }}
+          className={`min-h-[44px] px-1 py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap shrink-0 ${
             mobileTab === 'matrix'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Grid className="w-3.5 h-3.5" aria-hidden="true" />
+          <Grid className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>Matrix</span>
         </button>
 
@@ -436,14 +432,17 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
           type="button"
           role="tab"
           aria-selected={mobileTab === 'calculus'}
-          onClick={() => setMobileTab('calculus')}
-          className={`min-h-[44px] px-1.5 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 ${
+          onClick={() => {
+            setMobileTab('calculus');
+            setDesktopDeckFilter('calculus');
+          }}
+          className={`min-h-[44px] px-1 py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap shrink-0 ${
             mobileTab === 'calculus'
               ? 'bg-violet-500/25 text-violet-200 border border-violet-500/40'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sigma className="w-3.5 h-3.5" aria-hidden="true" />
+          <Sigma className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>Calculus</span>
         </button>
 
@@ -451,14 +450,17 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
           type="button"
           role="tab"
           aria-selected={mobileTab === 'graph'}
-          onClick={() => setMobileTab('graph')}
-          className={`min-h-[44px] px-1.5 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 ${
+          onClick={() => {
+            setMobileTab('graph');
+            setDesktopDeckFilter('graph');
+          }}
+          className={`min-h-[44px] px-1 py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap shrink-0 ${
             mobileTab === 'graph'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Activity className="w-3.5 h-3.5" aria-hidden="true" />
+          <Activity className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>Graph</span>
         </button>
 
@@ -466,14 +468,17 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
           type="button"
           role="tab"
           aria-selected={mobileTab === 'history'}
-          onClick={() => setMobileTab('history')}
-          className={`min-h-[44px] px-1.5 py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 ${
+          onClick={() => {
+            setMobileTab('history');
+            setDesktopDeckFilter('history');
+          }}
+          className={`min-h-[44px] px-1 py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap shrink-0 ${
             mobileTab === 'history'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <History className="w-3.5 h-3.5" aria-hidden="true" />
+          <History className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>History</span>
         </button>
       </div>
@@ -487,456 +492,462 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               mobileTab !== 'calculator' ? 'hidden lg:flex' : 'flex'
             }`}
           >
-            {/* Instrument Telemetry & Angle Mode Bar */}
-            <div className="px-4 py-3 bg-[#0B101B] border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                {/* Degree / Radian Toggle */}
-                <div
-                  role="group"
-                  aria-label="Angle unit mode"
-                  className="inline-flex items-center p-0.5 bg-[#070A12] border border-slate-800 rounded-lg"
+          {/* Instrument Telemetry & Angle Mode Bar */}
+          <div className="px-4 py-3 bg-[#0B101B] border-b border-slate-800/90 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {/* Degree / Radian Toggle */}
+              <div
+                role="group"
+                aria-label="Angle unit mode"
+                className="inline-flex items-center p-0.5 bg-[#070A12] border border-slate-800 rounded-lg"
+              >
+                <button
+                  type="button"
+                  onClick={() => setAngleMode('RAD')}
+                  aria-pressed={angleMode === 'RAD'}
+                  className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+                    angleMode === 'RAD'
+                      ? 'bg-cyan-500 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
                 >
+                  RAD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAngleMode('DEG')}
+                  aria-pressed={angleMode === 'DEG'}
+                  className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+                    angleMode === 'DEG'
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  DEG
+                </button>
+              </div>
+
+              {/* Quiet unboxed telemetry metadata */}
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                <span data-testid="memory-indicator">
+                  M = <strong className="text-slate-200">{formatNumber(memoryValue, 6)}</strong>
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  Ans = <strong className="text-cyan-300">{formatNumber(ansValue, 6)}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handlePlotCurrentExpression()}
+                className="px-2.5 py-1 text-xs font-medium bg-slate-800/90 hover:bg-slate-800 text-cyan-300 border border-slate-700/80 rounded-lg flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+                title="Plot current expression on function graph"
+              >
+                <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Plot Expr</span>
+              </button>
+            </div>
+          </div>
+
+          {/* High-Contrast Primary Display Screen */}
+          <div className="p-5 bg-[#070A12] border-b border-slate-800/90 space-y-3">
+            {/* Editable Expression Input Line */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="calculator-expression-input"
+                  className="text-xs font-medium text-slate-400"
+                >
+                  Expression Line
+                </label>
+                {expression && (
                   <button
                     type="button"
-                    onClick={() => setAngleMode('RAD')}
-                    aria-pressed={angleMode === 'RAD'}
-                    className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
-                      angleMode === 'RAD'
-                        ? 'bg-cyan-500 text-slate-950'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                    onClick={handleClearAll}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
                   >
-                    RAD
+                    <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                    <span>Reset</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setAngleMode('DEG')}
-                    aria-pressed={angleMode === 'DEG'}
-                    className={`px-3 py-1 text-xs font-mono font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
-                      angleMode === 'DEG'
-                        ? 'bg-amber-400 text-slate-950'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    DEG
-                  </button>
-                </div>
-
-                {/* Quiet unboxed telemetry metadata */}
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-                  <span data-testid="memory-indicator">
-                    M = <strong className="text-slate-200">{formatNumber(memoryValue, 6)}</strong>
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    Ans = <strong className="text-cyan-300">{formatNumber(ansValue, 6)}</strong>
-                  </span>
-                </div>
-
-                {/* Startup progress indicator if initialization takes >150ms */}
-                {!isEngineReady && !engineError && (
-                  <CalculatorLoadingIndicator
-                    stage="Preparing calculator"
-                    variant="inline"
-                    delayMs={150}
-                  />
                 )}
-                {engineError && (
-                  <div
-                    role="alert"
-                    className="flex items-center gap-1.5 text-xs text-rose-300 font-mono"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5 text-rose-400" aria-hidden="true" />
-                    <span>Engine warning</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEngineError(null);
-                        setIsEngineReady(true);
-                      }}
-                      className="underline text-rose-200 hover:text-white ml-1 focus-visible:outline-2 focus-visible:outline-rose-400"
-                    >
-                      Retry
-                    </button>
+              </div>
+
+              <input
+                ref={expressionInputRef}
+                id="calculator-expression-input"
+                type="text"
+                aria-label="Mathematical expression"
+                value={expression}
+                onChange={(e) => {
+                  setErrorMessage(null);
+                  setExpression(e.target.value);
+                }}
+                placeholder="Type or click keys: e.g. 2 + 3 × 4, sin(π/2), 5! + sqrt(81)"
+                className="w-full px-3.5 py-2.5 text-base sm:text-lg font-mono bg-[#0B101D] border border-slate-800 focus:border-cyan-400 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
+              />
+            </div>
+
+            {/* Error Alert Banner */}
+            {errorMessage && (
+              <div
+                role="alert"
+                data-testid="calculator-error"
+                className="px-3.5 py-2.5 bg-rose-950/50 border border-rose-500/40 rounded-lg flex items-start gap-2.5 text-xs text-rose-200"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Primary Result Readout */}
+            <div className="pt-1 flex items-end justify-between gap-4">
+              <div className="text-xs font-mono text-slate-400 space-y-0.5">
+                <div>RESULT ({angleMode})</div>
+                {livePreview !== null && livePreview !== displayResult && !errorMessage && (
+                  <div className="text-cyan-400/80" data-testid="calculator-live-preview">
+                    Preview: = {livePreview}
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <output
+                  aria-label="Calculation result"
+                  data-testid="calculator-result"
+                  className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-slate-50 tabular-nums truncate"
+                >
+                  {displayResult}
+                </output>
+
                 <button
                   type="button"
-                  onClick={() => handlePlotCurrentExpression()}
-                  className="px-2.5 py-1 text-xs font-medium bg-slate-800/90 hover:bg-slate-800 text-cyan-300 border border-slate-700/80 rounded-lg flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
-                  title="Plot current expression on function graph"
+                  onClick={handleCopyResult}
+                  aria-label="Copy calculation result"
+                  title="Copy result to clipboard"
+                  className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 rounded-lg border border-slate-800 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
                 >
-                  <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Plot Expr</span>
+                  {copiedResult ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* High-Contrast Primary Display Screen */}
-            <div className="p-5 bg-[#070A12] border-b border-slate-800/90 space-y-3">
-              {/* Editable Expression Input Line */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="calculator-expression-input"
-                    className="text-xs font-medium text-slate-400"
-                  >
-                    Expression Line
-                  </label>
-                  {expression && (
-                    <button
-                      type="button"
-                      onClick={handleClearAll}
-                      className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
-                    >
-                      <RotateCcw className="w-3 h-3" aria-hidden="true" />
-                      <span>Reset</span>
-                    </button>
-                  )}
-                </div>
+          {/* Memory & Mode Control Strip */}
+          <div className="px-4 py-2.5 bg-[#0B101B] border-b border-slate-800/90 grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <button
+              type="button"
+              onClick={handleMemoryClear}
+              aria-label="Memory Clear (MC)"
+              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+            >
+              MC
+            </button>
+            <button
+              type="button"
+              onClick={handleMemoryRecall}
+              aria-label="Memory Recall (MR)"
+              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+            >
+              MR
+            </button>
+            <button
+              type="button"
+              onClick={handleMemoryAdd}
+              aria-label="Memory Add (M+)"
+              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+            >
+              M+
+            </button>
+            <button
+              type="button"
+              onClick={handleMemorySubtract}
+              aria-label="Memory Subtract (M-)"
+              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+            >
+              M−
+            </button>
+            <button
+              type="button"
+              onClick={() => insertToken('Ans')}
+              aria-label="Insert previous answer (Ans)"
+              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-violet-600/20 hover:bg-violet-600/30 text-violet-200 border border-violet-500/40 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+            >
+              Ans
+            </button>
+            <button
+              type="button"
+              onClick={() => insertToken('x')}
+              aria-label="Insert variable x"
+              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+            >
+              var x
+            </button>
+          </div>
 
-                <input
-                  ref={expressionInputRef}
-                  id="calculator-expression-input"
-                  type="text"
-                  aria-label="Mathematical expression"
-                  value={expression}
-                  onChange={(e) => {
-                    setErrorMessage(null);
-                    setExpression(e.target.value);
-                  }}
-                  placeholder="Type or click keys: e.g. 2 + 3 × 4, sin(π/2), 5! + sqrt(81)"
-                  className="w-full px-3.5 py-2.5 text-base sm:text-lg font-mono bg-[#0B101D] border border-slate-800 focus:border-cyan-400 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
-                />
-              </div>
+          {/* Scientific & Primary Keypad Grid */}
+          <div className="p-4 space-y-3 bg-[#0F1624]">
+            {/* Scientific Function Matrix (4 rows x 6 cols on sm+, 4 cols on xs) */}
+            <div
+              role="group"
+              aria-label="Scientific functions keypad"
+              className="grid grid-cols-4 sm:grid-cols-6 gap-2"
+            >
+              {/* Toggle 2nd functions */}
+              <button
+                type="button"
+                onClick={() => setIsSecondMode((prev) => !prev)}
+                aria-pressed={isSecondMode}
+                aria-label="Toggle inverse trig functions (2nd)"
+                className={`min-h-[44px] py-2 px-2 text-xs font-mono font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+                  isSecondMode
+                    ? 'bg-violet-600 text-white border-violet-400'
+                    : 'bg-[#131C2E] hover:bg-slate-800 text-slate-300 border-slate-800'
+                }`}
+              >
+                2nd
+              </button>
 
-              {/* Error Alert Banner */}
-              {errorMessage && (
-                <div
-                  role="alert"
-                  data-testid="calculator-error"
-                  className="px-3.5 py-2.5 bg-rose-950/50 border border-rose-500/40 rounded-lg flex items-start gap-2.5 text-xs text-rose-200"
+              {/* Toggle Hyperbolic */}
+              <button
+                type="button"
+                onClick={() => setIsHyperbolic((prev) => !prev)}
+                aria-pressed={isHyperbolic}
+                aria-label="Toggle hyperbolic functions (HYP)"
+                className={`min-h-[44px] py-2 px-2 text-xs font-mono font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+                  isHyperbolic
+                    ? 'bg-cyan-600 text-white border-cyan-400'
+                    : 'bg-[#131C2E] hover:bg-slate-800 text-slate-300 border-slate-800'
+                }`}
+              >
+                HYP
+              </button>
+
+              {/* Dynamic Trig Buttons (sin/cos/tan or asin/acos/atan or sinh/cosh/tanh) */}
+              {trigButtons.map((btn) => (
+                <button
+                  key={btn.label}
+                  type="button"
+                  onClick={() => insertToken(btn.token)}
+                  aria-label={btn.aria}
+                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-cyan-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
                 >
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" aria-hidden="true" />
-                  <span>{errorMessage}</span>
-                </div>
-              )}
+                  {btn.label}
+                </button>
+              ))}
 
-              {/* Primary Result Readout */}
-              <div className="pt-1 flex items-end justify-between gap-4">
-                <div className="text-xs font-mono text-slate-400 space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span>RESULT ({angleMode})</span>
-                    {isEvaluating && (
-                      <CalculatorLoadingIndicator
-                        stage="Evaluating"
-                        variant="inline"
-                        delayMs={150}
-                      />
-                    )}
-                  </div>
-                  {livePreview !== null && livePreview !== displayResult && !errorMessage && (
-                    <div className="text-cyan-400/80" data-testid="calculator-live-preview">
-                      Preview: = {livePreview}
-                    </div>
-                  )}
-                </div>
+              {/* Constant Pi */}
+              <button
+                type="button"
+                onClick={() => insertToken('π')}
+                aria-label="Constant Pi (π)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#131C2E] hover:bg-slate-800 text-violet-300 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                π
+              </button>
 
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <output
-                    aria-label="Calculation result"
-                    data-testid="calculator-result"
-                    className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-slate-50 tabular-nums truncate"
-                  >
-                    {displayResult}
-                  </output>
+              {/* Row 2 of Scientific Functions */}
+              <button
+                type="button"
+                onClick={() => insertToken('ln(')}
+                aria-label="Natural logarithm (ln)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                ln
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={handleCopyResult}
-                    aria-label="Copy calculation result"
-                    title="Copy result to clipboard"
-                    className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 rounded-lg border border-slate-800 transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
-                  >
-                    {copiedResult ? (
-                      <Check className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => insertToken('log(')}
+                aria-label="Base-10 logarithm (log)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                log<sub className="text-[9px] leading-none">10</sub>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('e^(')}
+                aria-label="Exponential e to the power of x"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                e<sup className="text-[9px] leading-none">x</sup>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('10^(')}
+                aria-label="10 to the power of x"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                10<sup className="text-[9px] leading-none">x</sup>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('e')}
+                aria-label="Euler's constant (e)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#131C2E] hover:bg-slate-800 text-violet-300 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                e
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('e')}
+                aria-label="Scientific notation exponent (EE)"
+                title="Scientific notation (e.g. 1.5e-4)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                EE
+              </button>
+
+              {/* Row 3 of Scientific Functions */}
+              <button
+                type="button"
+                onClick={() => insertToken('^2')}
+                aria-label="Square (x²)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                x<sup className="text-[9px] leading-none">2</sup>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('^3')}
+                aria-label="Cube (x³)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                x<sup className="text-[9px] leading-none">3</sup>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('^')}
+                aria-label="Power (x^y)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                x<sup className="text-[9px] leading-none">y</sup>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('sqrt(')}
+                aria-label="Square root"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                √x
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('cbrt(')}
+                aria-label="Cube root"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                <sup className="text-[9px] leading-none">3</sup>√x
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('!')}
+                aria-label="Factorial (n!)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                n!
+              </button>
+
+              {/* Row 4 of Scientific Functions */}
+              <button
+                type="button"
+                onClick={() => insertToken('abs(')}
+                aria-label="Absolute value |x|"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                |x|
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken(' mod ')}
+                aria-label="Modulo operation (mod)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                mod
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('%')}
+                aria-label="Percentage (%)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                %
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('1/(')}
+                aria-label="Reciprocal (1/x)"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#131C2E] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                1/x
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken('(')}
+                aria-label="Left parenthesis ("
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#131C2E] hover:bg-slate-800 text-cyan-300 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                (
+              </button>
+
+              <button
+                type="button"
+                onClick={() => insertToken(')')}
+                aria-label="Right parenthesis )"
+                className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#131C2E] hover:bg-slate-800 text-cyan-300 border border-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400"
+              >
+                )
+              </button>
             </div>
 
-            {/* Scientific & Primary Keypad Grid */}
-            <div className="p-4 space-y-3 bg-[#0F1624]">
-              {/* Scientific Function Matrix (4 rows x 6 cols on sm+, 4 cols on xs) */}
+            <div className="border-t border-slate-800/80 pt-3">
+              {/* Primary Digits & Arithmetic Keypad (4 columns x 5 rows) */}
               <div
                 role="group"
-                aria-label="Scientific functions keypad"
-                className="grid grid-cols-4 sm:grid-cols-6 gap-1.5"
+                aria-label="Numeric and arithmetic keypad"
+                className="grid grid-cols-4 gap-2.5"
               >
-                {/* Mode Toggles */}
-                <button
-                  type="button"
-                  onClick={() => setIsSecondMode(!isSecondMode)}
-                  aria-pressed={isSecondMode}
-                  className={`min-h-[44px] py-2 px-2 text-xs font-mono font-semibold rounded-lg border transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 ${
-                    isSecondMode
-                      ? 'bg-cyan-500/25 text-cyan-200 border-cyan-400/60'
-                      : 'bg-[#0B101D] text-slate-300 border-slate-800 hover:bg-slate-800'
-                  }`}
-                >
-                  2nd
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsHyperbolic(!isHyperbolic)}
-                  aria-pressed={isHyperbolic}
-                  className={`min-h-[44px] py-2 px-2 text-xs font-mono font-semibold rounded-lg border transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 ${
-                    isHyperbolic
-                      ? 'bg-violet-500/25 text-violet-200 border-violet-400/60'
-                      : 'bg-[#0B101D] text-slate-300 border-slate-800 hover:bg-slate-800'
-                  }`}
-                >
-                  hyp
-                </button>
-
-                {/* Trigonometric functions */}
-                {trigButtons.map((btn) => (
-                  <button
-                    key={btn.label}
-                    type="button"
-                    onClick={() => insertToken(btn.token)}
-                    aria-label={btn.aria}
-                    className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                  >
-                    {btn.label}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('π')}
-                  aria-label="Constant Pi (π)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#0B101D] hover:bg-slate-800 text-cyan-300 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  π
-                </button>
-
-                {/* Logarithms and Exponentials */}
-                <button
-                  type="button"
-                  onClick={() => insertToken(isSecondMode ? 'e^(' : 'ln(')}
-                  aria-label={isSecondMode ? 'e to the power of x' : 'Natural logarithm'}
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  {isSecondMode ? 'eˣ' : 'ln'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken(isSecondMode ? '10^(' : 'log(')}
-                  aria-label={isSecondMode ? '10 to the power of x' : 'Base-10 logarithm'}
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  {isSecondMode ? '10ˣ' : 'log'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('log2(')}
-                  aria-label="Base-2 logarithm"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  log₂
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('e')}
-                  aria-label="Euler constant (e)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#0B101D] hover:bg-slate-800 text-cyan-300 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  e
-                </button>
-
-                {/* Powers and Roots */}
-                <button
-                  type="button"
-                  onClick={() => insertToken('^2')}
-                  aria-label="Square (x²)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  x²
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('^')}
-                  aria-label="Power (xʸ)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  xʸ
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken(isSecondMode ? 'cbrt(' : 'sqrt(')}
-                  aria-label={isSecondMode ? 'Cube root' : 'Square root'}
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  {isSecondMode ? '∛x' : '√x'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('abs(')}
-                  aria-label="Absolute value"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  |x|
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('!')}
-                  aria-label="Factorial (n!)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  n!
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken(' mod ')}
-                  aria-label="Modulo operator"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  mod
-                </button>
-
-                {/* Brackets & Inversion */}
-                <button
-                  type="button"
-                  onClick={() => insertToken('(')}
-                  aria-label="Open parenthesis"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  (
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken(')')}
-                  aria-label="Close parenthesis"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  )
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('^(-1)')}
-                  aria-label="Reciprocal (1/x)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-medium bg-[#0B101D] hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  1/x
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => insertToken('Ans')}
-                  aria-label="Previous answer (Ans)"
-                  className="min-h-[44px] py-2 px-2 text-xs font-mono font-semibold bg-[#0B101D] hover:bg-slate-800 text-cyan-300 border border-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  Ans
-                </button>
-              </div>
-
-              {/* Memory Function Strip */}
-              <div
-                role="group"
-                aria-label="Memory operations"
-                className="grid grid-cols-5 gap-1.5 pt-1"
-              >
-                <button
-                  type="button"
-                  onClick={() => setMemoryValue(0)}
-                  aria-label="Clear Memory (MC)"
-                  className="min-h-[38px] py-1.5 px-2 text-xs font-mono bg-[#0B101B] hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  MC
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMemoryRecall}
-                  aria-label="Recall Memory (MR)"
-                  className="min-h-[38px] py-1.5 px-2 text-xs font-mono bg-[#0B101B] hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  MR
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMemoryAdd}
-                  aria-label="Add to Memory (M+)"
-                  className="min-h-[38px] py-1.5 px-2 text-xs font-mono bg-[#0B101B] hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  M+
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMemorySubtract}
-                  aria-label="Subtract from Memory (M-)"
-                  className="min-h-[38px] py-1.5 px-2 text-xs font-mono bg-[#0B101B] hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  M−
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const val = resolveCurrentNumericValue();
-                    if (val !== null) setMemoryValue(val);
-                  }}
-                  aria-label="Store into Memory (MS)"
-                  className="min-h-[38px] py-1.5 px-2 text-xs font-mono bg-[#0B101B] hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
-                >
-                  MS
-                </button>
-              </div>
-
-              {/* Primary Arithmetic Numeric Keypad (4 columns) */}
-              <div
-                role="group"
-                aria-label="Numeric keypad"
-                className="grid grid-cols-4 gap-2 pt-1"
-              >
-                {/* Row 1: AC, DEL, ±, ÷ */}
+                {/* Row 1: AC, Backspace, ±, ÷ */}
                 <button
                   type="button"
                   onClick={handleClearAll}
                   aria-label="All Clear (AC)"
-                  className="min-h-[48px] py-2.5 px-3 text-sm font-mono font-bold bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 border border-rose-500/30 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-rose-400"
+                  className="min-h-[48px] py-2.5 px-3 text-sm font-mono font-bold bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 border border-rose-500/30 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                 >
                   AC
                 </button>
                 <button
                   type="button"
                   onClick={handleBackspace}
-                  aria-label="Delete character (DEL)"
-                  className="min-h-[48px] py-2.5 px-3 text-sm font-mono font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors flex items-center justify-center focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  aria-label="Backspace"
+                  className="min-h-[48px] py-2.5 px-3 text-sm font-mono font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/80 rounded-lg flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                 >
                   <Delete className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   onClick={handleToggleSign}
-                  aria-label="Negate sign (±)"
-                  className="min-h-[48px] py-2.5 px-3 text-sm font-mono font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  aria-label="Toggle positive or negative sign"
+                  className="min-h-[48px] py-2.5 px-3 text-sm font-mono font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/80 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                 >
                   ±
                 </button>
@@ -1040,10 +1051,12 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               </div>
             </div>
           </div>
+          </div>
 
           {/* Matrix Workbench sits directly below the Main Calculator on Desktop ('all' or 'matrix' view), and in 'matrix' tab on Mobile */}
           <div
-            className={`flex-1 flex flex-col ${
+            id="matrix-workbench"
+            className={`flex-1 flex flex-col scroll-mt-24 transition-all duration-300 ${
               mobileTab === 'matrix' ? 'flex' : 'hidden'
             } ${
               desktopDeckFilter === 'all' || desktopDeckFilter === 'matrix'
@@ -1051,24 +1064,15 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 : 'lg:hidden'
             }`}
           >
-            <CalculatorErrorBoundary
-              key={`matrix-boundary-${matrixRetryKey}`}
-              fallbackTitle="Matrix Workbench Initialization Error"
-              fallbackMessage="Could not load the linear algebra matrix engine. Check your connection and retry."
-              onRetry={() => setMatrixRetryKey((k) => k + 1)}
-            >
-              <Suspense fallback={<MatrixCalculatorSkeleton />}>
-                <LazyMatrixCalculator
-                  className="flex-1"
-                  onSendScalarToCalculator={(val) => {
-                    setErrorMessage(null);
-                    setExpression(val);
-                    setDisplayResult(val);
-                    setMobileTab('calculator');
-                  }}
-                />
-              </Suspense>
-            </CalculatorErrorBoundary>
+            <MatrixCalculator
+              className="flex-1"
+              onSendScalarToCalculator={(val) => {
+                setErrorMessage(null);
+                setExpression(val);
+                setDisplayResult(val);
+                setMobileTab('calculator');
+              }}
+            />
           </div>
         </div>
 
@@ -1092,7 +1096,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setDesktopDeckFilter(tab.id)}
+                  onClick={() => handleDeckFilterClick(tab.id)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
                     desktopDeckFilter === tab.id
                       ? 'bg-slate-800 text-cyan-300 border border-slate-700'
@@ -1105,7 +1109,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
             </div>
           </div>
 
-          {/* 1. Calculus Panel (Lazy-loaded with isolated error boundary and elapsed-time loader) */}
+          {/* 1. Calculus Panel */}
           <div
             className={`${
               mobileTab === 'calculus' ? 'block' : 'hidden'
@@ -1117,31 +1121,22 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 : 'lg:hidden'
             }`}
           >
-            <CalculatorErrorBoundary
-              key={`calculus-boundary-${calculusRetryKey}`}
-              fallbackTitle="Calculus Tool Initialization Error"
-              fallbackMessage="Could not load the symbolic calculus module. Check your connection and retry."
-              onRetry={() => setCalculusRetryKey((k) => k + 1)}
-            >
-              <Suspense fallback={<CalculusPanelSkeleton />}>
-                <LazyCalculusPanel
-                  currentCalculatorExpression={expression}
-                  angleMode={angleMode}
-                  onSendResultToCalculator={(val) => {
-                    setErrorMessage(null);
-                    setExpression(val);
-                    setDisplayResult(val);
-                    setMobileTab('calculator');
-                  }}
-                  onPlotExpression={(expr) => {
-                    handlePlotCurrentExpression(expr);
-                  }}
-                />
-              </Suspense>
-            </CalculatorErrorBoundary>
+            <CalculusPanel
+              currentCalculatorExpression={expression}
+              angleMode={angleMode}
+              onSendResultToCalculator={(val) => {
+                setErrorMessage(null);
+                setExpression(val);
+                setDisplayResult(val);
+                setMobileTab('calculator');
+              }}
+              onPlotExpression={(expr) => {
+                handlePlotCurrentExpression(expr);
+              }}
+            />
           </div>
 
-          {/* 2. Function Plotter (Lazy-loaded with isolated error boundary and elapsed-time loader) */}
+          {/* 2. Function Plotter */}
           <div
             className={`${
               mobileTab === 'graph' ? 'block' : 'hidden'
@@ -1153,20 +1148,11 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 : 'lg:hidden'
             }`}
           >
-            <CalculatorErrorBoundary
-              key={`graph-boundary-${graphRetryKey}`}
-              fallbackTitle="Graph Plotter Initialization Error"
-              fallbackMessage="Could not load the coordinate plotting engine. Check your connection and retry."
-              onRetry={() => setGraphRetryKey((k) => k + 1)}
-            >
-              <Suspense fallback={<GraphPlotterSkeleton />}>
-                <LazyGraphPlotter
-                  expression={graphExpression}
-                  onExpressionChange={setGraphExpression}
-                  angleMode={angleMode}
-                />
-              </Suspense>
-            </CalculatorErrorBoundary>
+            <GraphPlotter
+              expression={graphExpression}
+              onExpressionChange={setGraphExpression}
+              angleMode={angleMode}
+            />
           </div>
 
           {/* 3. Persistent Calculation History */}

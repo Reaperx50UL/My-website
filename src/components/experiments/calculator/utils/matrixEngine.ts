@@ -64,6 +64,11 @@ export function toExactFraction(
   const sign = cleanVal < 0 ? -1 : 1;
   const x = Math.abs(cleanVal);
 
+  // Numbers beyond IEEE-754 exact integer precision (9e15) should use scientific/decimal notation
+  if (x > Number.MAX_SAFE_INTEGER) {
+    return { text: formatNumber(cleanVal, 8), isExact: false };
+  }
+
   if (Math.abs(x - Math.round(x)) < tolerance) {
     return { text: String(sign * Math.round(x)), isExact: true };
   }
@@ -108,6 +113,16 @@ export function toExactFraction(
 export function formatMatrixCellValue(val: number, decimalPlaces = 6): FormattedCell {
   const clean = Math.abs(val) < 1e-12 ? 0 : val;
   const frac = toExactFraction(clean);
+  if (Math.abs(clean) > Number.MAX_SAFE_INTEGER) {
+    const sciStr = formatNumber(clean, 8);
+    return {
+      raw: clean,
+      decimal: sciStr,
+      fraction: sciStr,
+      isExactFraction: false,
+      isRoundedDecimal: true,
+    };
+  }
   const roundedDec = Number(clean.toFixed(decimalPlaces));
   const decimalStr = String(roundedDec);
   const isRoundedDecimal = Math.abs(clean - roundedDec) > 1e-12;
@@ -721,13 +736,13 @@ export function powerMatrix(
   }
 
   const p = evalExp.value;
-  if (p < -20 || p > 20) {
+  if (p < -100 || p > 100) {
     return {
       ok: false,
       operation: 'power',
       operationLabel: `${targetName}^${p}`,
       resultType: 'matrix',
-      error: `Exponent Out of Bounds: Integer power (${p}) must be between -20 and 20.`,
+      error: `Exponent Out of Bounds: Integer power (${p}) must be between -100 and 100.`,
     };
   }
 
@@ -784,6 +799,17 @@ export function powerMatrix(
     }
   }
 
+  const hasOverflow = acc.some((row) => row.some((v) => !Number.isFinite(v)));
+  if (hasOverflow) {
+    return {
+      ok: false,
+      operation: 'power',
+      operationLabel: `${targetName}^${p}`,
+      resultType: 'matrix',
+      error: `Numerical Overflow: Matrix entries in ${targetName}^${p} exceed IEEE 754 64-bit floating-point range.`,
+    };
+  }
+
   const formatted = formatNumericMatrix(acc);
   return {
     ok: true,
@@ -793,7 +819,7 @@ export function powerMatrix(
     matrix: acc,
     formattedMatrix: formatted.cells,
     hasApproximations: formatted.hasApproximations,
-    auxiliaryInfo: `Integer power p = ${p} (${n}×${n})`,
+    auxiliaryInfo: `Integer power n = ${p} (${n}×${n})`,
   };
 }
 

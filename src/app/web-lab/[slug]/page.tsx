@@ -22,12 +22,20 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
 
   const isInteractiveApp = project.slug === "scientific-calculator" || project.slug === "flappy-bird";
   const isWideApp = project.slug === "scientific-calculator";
+  const isCalculator = project.slug === "scientific-calculator";
 
   return (
-    <div className={cn(
-      "py-24 mx-auto px-4 sm:px-6",
-      isWideApp ? "max-w-[1440px]" : "max-w-4xl"
-    )}>
+    <>
+      {isCalculator && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-[-1] pointer-events-none voidnod-cosmic-bg"
+        />
+      )}
+      <div className={cn(
+        "py-24 mx-auto w-full",
+        isWideApp ? "max-w-[1536px] px-0 sm:px-2" : "max-w-4xl px-4 sm:px-6"
+      )}>
       <Link 
         href="/web-lab" 
         className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-8 text-sm"
@@ -74,10 +82,6 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
       {/* Live Interactive Application Embed */}
       {project.slug === "scientific-calculator" && (
         <div className="mb-16">
-          <div className="text-xs font-mono text-cyan-400/70 mb-3 uppercase tracking-wider flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            Live Application Terminal
-          </div>
           <ScientificCalculator />
         </div>
       )}
@@ -169,5 +173,6 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
         )}
       </div>
     </div>
+    </>
   );
 }

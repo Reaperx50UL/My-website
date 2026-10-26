@@ -21,7 +21,6 @@ import {
   type DefiniteIntegralResult,
 } from './utils/calculusEngine';
 import type { AngleMode } from './utils/mathEngine';
-import { CalculatorLoadingIndicator } from './CalculatorLoadingIndicator';
 
 export type CalculusTab = 'differentiate' | 'indefinite' | 'definite';
 
@@ -85,7 +84,6 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
   );
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [isCalculating, setIsCalculating] = useState<boolean>(false);
 
   const handleCopy = async (text: string, key: string) => {
     try {
@@ -110,33 +108,26 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
     const targetExpr = exprOverride ?? expression;
     const targetVar = varOverride ?? variable;
 
-    setIsCalculating(true);
-    setTimeout(() => {
-      try {
-        if (targetTab === 'differentiate') {
-          const res = differentiateExpression(
-            targetExpr,
-            targetVar,
-            evalAtOverride !== undefined ? evalAtOverride : evalPoint,
-            orderOverride ?? diffOrder
-          );
-          setDiffResult(res);
-        } else if (targetTab === 'indefinite') {
-          const res = integrateIndefinite(targetExpr, targetVar);
-          setIndefResult(res);
-        } else {
-          const res = integrateDefinite(
-            targetExpr,
-            targetVar,
-            lowerOverride ?? lowerBound,
-            upperOverride ?? upperBound
-          );
-          setDefResult(res);
-        }
-      } finally {
-        setIsCalculating(false);
-      }
-    }, 10);
+    if (targetTab === 'differentiate') {
+      const res = differentiateExpression(
+        targetExpr,
+        targetVar,
+        evalAtOverride !== undefined ? evalAtOverride : evalPoint,
+        orderOverride ?? diffOrder
+      );
+      setDiffResult(res);
+    } else if (targetTab === 'indefinite') {
+      const res = integrateIndefinite(targetExpr, targetVar);
+      setIndefResult(res);
+    } else {
+      const res = integrateDefinite(
+        targetExpr,
+        targetVar,
+        lowerOverride ?? lowerBound,
+        upperOverride ?? upperBound
+      );
+      setDefResult(res);
+    }
   };
 
   // Re-run when switching tabs so the currently displayed expression is evaluated immediately
@@ -202,7 +193,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
       <div
         role="tablist"
         aria-label="Calculus operation mode"
-        className="grid grid-cols-3 gap-1 p-1.5 bg-[#090D16] border-b border-slate-800/80"
+        className="grid grid-cols-3 gap-1.5 p-1.5 bg-[#090D16] border-b border-slate-800/80"
       >
         <button
           type="button"
@@ -211,13 +202,14 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
           onClick={() => {
             setActiveTab('differentiate');
           }}
-          className={`py-2 px-2.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+          className={`py-2 px-1.5 text-xs font-medium rounded-lg transition-colors flex flex-col items-center justify-center gap-0.5 text-center min-w-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
             activeTab === 'differentiate'
               ? 'bg-violet-600/25 text-violet-200 border border-violet-500/40'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          Differentiate (d/dx)
+          <span className="font-semibold leading-tight">Differentiate </span>
+          <span className="text-[11px] font-mono opacity-85 leading-tight">(d/dx)</span>
         </button>
         <button
           type="button"
@@ -226,13 +218,14 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
           onClick={() => {
             setActiveTab('indefinite');
           }}
-          className={`py-2 px-2.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+          className={`py-2 px-1.5 text-xs font-medium rounded-lg transition-colors flex flex-col items-center justify-center gap-0.5 text-center min-w-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
             activeTab === 'indefinite'
               ? 'bg-violet-600/25 text-violet-200 border border-violet-500/40'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          Indefinite (∫ dx)
+          <span className="font-semibold leading-tight">Indefinite </span>
+          <span className="text-[11px] font-mono opacity-85 leading-tight">(∫ dx)</span>
         </button>
         <button
           type="button"
@@ -241,13 +234,14 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
           onClick={() => {
             setActiveTab('definite');
           }}
-          className={`py-2 px-2.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
+          className={`py-2 px-1.5 text-xs font-medium rounded-lg transition-colors flex flex-col items-center justify-center gap-0.5 text-center min-w-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
             activeTab === 'definite'
               ? 'bg-violet-600/25 text-violet-200 border border-violet-500/40'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          Definite (∫[a→b])
+          <span className="font-semibold leading-tight">Definite </span>
+          <span className="text-[11px] font-mono opacity-85 leading-tight">(∫[a→b])</span>
         </button>
       </div>
 
@@ -473,18 +467,8 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
         {/* Results Output Card */}
         <div
           aria-live="polite"
-          className="mt-3 p-3.5 bg-[#070A12] border border-slate-800 rounded-lg space-y-2.5 relative"
+          className="mt-3 p-3.5 bg-[#070A12] border border-slate-800 rounded-lg space-y-2.5"
         >
-          {isCalculating && (
-            <div className="pb-1">
-              <CalculatorLoadingIndicator
-                stage="Computing calculus"
-                variant="inline"
-                delayMs={150}
-              />
-            </div>
-          )}
-
           {/* DIFFERENTIATION RESULT */}
           {activeTab === 'differentiate' && diffResult && (
             <>
