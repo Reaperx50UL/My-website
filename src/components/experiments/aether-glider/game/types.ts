@@ -59,6 +59,8 @@ export interface ObstaclePair {
   icicleVy: number;
   /** For Cyber City laser grid: true when the high-energy laser beam is active across the gap */
   laserActive: boolean;
+  /** Tracks whether this obstacle's signature trap audio cue has fired as the player approaches */
+  trapSoundPlayed?: boolean;
 }
 
 export interface FloatingPopup {

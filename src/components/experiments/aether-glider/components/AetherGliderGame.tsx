@@ -131,12 +131,13 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
   useEffect(() => {
     const controller = new AudioController(loadMutedPreference(mutedKey));
+    controller.setEnvironmentMusic(loadSelectedEnvironment(envStorageKey), 'title');
     audioRef.current = controller;
     return () => {
       controller.dispose();
       audioRef.current = null;
     };
-  }, [mutedKey]);
+  }, [envStorageKey, mutedKey]);
 
   const [phase, setPhase] = useState<GamePhase>('title');
   const [score, setScore] = useState<number>(0);
@@ -167,6 +168,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
   const syncPhaseAttr = useCallback((nextPhase: GamePhase) => {
     setPhase(nextPhase);
+    audioRef.current?.setMusicPhase(nextPhase);
     if (typeof document !== 'undefined' && document.body) {
       document.body.dataset.state = nextPhase;
     }
@@ -192,7 +194,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       setAbilityStatusText('READY');
       setAbilityReady(true);
       setAbilityActive(false);
-      audioRef.current?.playClick();
+      audioRef.current?.playBirdSelect(birdId);
     },
     [birdStorageKey]
   );
@@ -206,7 +208,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       setSelectedEnvId(envId);
       saveSelectedEnvironment(envId, envStorageKey);
       selectEnvironment(simRef.current, envId);
-      audioRef.current?.playClick();
+      audioRef.current?.playEnvironmentSelect(envId, simRef.current.phase);
     },
     [envStorageKey]
   );
@@ -222,6 +224,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         saveMutedPreference(next, mutedKey);
         audioRef.current?.setMuted(next);
         if (!next) {
+          audioRef.current?.setEnvironmentMusic(simRef.current.environmentId, simRef.current.phase);
           audioRef.current?.playClick();
         }
         return next;
@@ -260,7 +263,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       setTierLabel(diff.tierLabel);
       setRunStats(null);
       syncPhaseAttr('playing');
-      audioRef.current?.playFlap();
+      audioRef.current?.setEnvironmentMusic(sim.environmentId, 'playing');
+      audioRef.current?.playFlap(sim.birdId);
     },
     [bestScoreKey, syncPhaseAttr]
   );
@@ -321,7 +325,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     }
     const flapped = triggerFlap(sim, configRef.current, reducedMotionRef.current);
     if (flapped) {
-      audioRef.current?.playFlap();
+      audioRef.current?.playFlap(sim.birdId);
     }
   }, [handleStartOrRestart]);
 
@@ -431,6 +435,10 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         }
       }
 
+      if (events.trapTriggered) {
+        audioRef.current?.playTrapSound(events.trapTriggered);
+      }
+
       if (events.scoredPoint || events.shieldBlocked) {
         setScore(sim.score);
         const diff = computeDifficultyParams(sim.score, cfg);
@@ -443,7 +451,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           setBestScore(saved);
         }
 
-        if (events.shieldBlocked || events.milestoneReached) {
+        if (events.shieldBlocked) {
+          audioRef.current?.playShieldShatter();
+        } else if (events.milestoneReached) {
           audioRef.current?.playMilestone();
         } else {
           audioRef.current?.playScore(sim.score);
@@ -457,7 +467,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           sim.frozenRunStats.bestScore = saved;
         }
         setBestScore(saved);
-        audioRef.current?.playCollision();
+        audioRef.current?.setMusicPhase('gameover');
+        audioRef.current?.playCollision(sim.causeOfDefeat);
       }
 
       if (events.gameOverTransitioned) {

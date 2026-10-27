@@ -5,6 +5,7 @@ import {
   EnvironmentId,
   GROUND_HEIGHT,
   GameConfig,
+  TrapType,
   WORLD_HEIGHT,
   getBirdProfile,
   getEnvironmentProfile,
@@ -255,6 +256,7 @@ export function selectEnvironment(state: SimulationState, environmentId: Environ
   const env = getEnvironmentProfile(environmentId);
   for (let i = 0; i < state.obstacles.length; i++) {
     state.obstacles[i].trapType = env.trapType;
+    state.obstacles[i].trapSoundPlayed = false;
   }
 }
 
@@ -668,6 +670,7 @@ export interface StepEvents {
   collided: boolean;
   shieldBlocked: boolean;
   gameOverTransitioned: boolean;
+  trapTriggered: TrapType | null;
 }
 
 export function stepSimulation(
@@ -682,6 +685,7 @@ export function stepSimulation(
     collided: false,
     shieldBlocked: false,
     gameOverTransitioned: false,
+    trapTriggered: null,
   };
 
   const dt = Math.max(0, Math.min(rawDt, 0.05));
@@ -823,6 +827,10 @@ export function stepSimulation(
         // Gentle vertical crosswind push (-220 updraft or +180 downdraft)
         const windAccel = obs.windDirection > 0 ? -240 : 185;
         state.player.vy += windAccel * trapDt;
+        if (!obs.trapSoundPlayed) {
+          obs.trapSoundPlayed = true;
+          events.trapTriggered = 'whirlwind_gust';
+        }
       }
     }
   }
@@ -887,6 +895,8 @@ export function stepSimulation(
     obs.gaugeAngle = (obs.gaugeAngle + trapDt * 2.2) % (Math.PI * 2);
     obs.trapPhase = (obs.trapPhase + trapDt * 2.5) % (Math.PI * 2);
 
+    const isNearPlayer = obs.x - state.player.x <= 235 && obs.x + obs.width >= state.player.x - 15;
+
     // Update environment-specific trap dynamics
     if (!obs.trapDisarmed && !obs.shatteredByShield) {
       if (obs.trapType === 'oscillating_gears' && !reducedMotion) {
@@ -898,16 +908,28 @@ export function stepSimulation(
           state.worldHeight - state.groundHeight - 20,
           obs.gapCenterY + halfGap
         );
+        if (isNearPlayer && !obs.trapSoundPlayed) {
+          obs.trapSoundPlayed = true;
+          events.trapTriggered = 'oscillating_gears';
+        }
       } else if (obs.trapType === 'magma_geyser') {
         // Erupts periodically into the lower part of the gap (up to 44px high, leaving plenty of upper clearance)
         const wave = Math.sin(obs.trapPhase);
         obs.geyserHeight = wave > 0.15 ? ((wave - 0.15) / 0.85) * 44 : 0;
+        if (isNearPlayer && obs.geyserHeight > 12 && !obs.trapSoundPlayed) {
+          obs.trapSoundPlayed = true;
+          events.trapTriggered = 'magma_geyser';
+        }
       } else if (obs.trapType === 'falling_icicle') {
         // Trigger icicle drop when glider approaches within 210px
         if (!obs.icicleTriggered && obs.x - state.player.x <= 210 && obs.x > state.player.x) {
           obs.icicleTriggered = true;
           obs.icicleY = obs.topHeight;
           obs.icicleVy = 35;
+          if (!obs.trapSoundPlayed) {
+            obs.trapSoundPlayed = true;
+            events.trapTriggered = 'falling_icicle';
+          }
         }
         if (obs.icicleTriggered) {
           obs.icicleVy += 360 * trapDt;
@@ -918,6 +940,10 @@ export function stepSimulation(
       } else if (obs.trapType === 'laser_grid') {
         // Laser fires for a brief pulse window; automatically disarms right as player enters safe pass window if unarmed
         obs.laserActive = Math.sin(obs.trapPhase) > 0.68;
+        if (isNearPlayer && obs.laserActive && !obs.trapSoundPlayed) {
+          obs.trapSoundPlayed = true;
+          events.trapTriggered = 'laser_grid';
+        }
       }
     } else {
       obs.geyserHeight = 0;
