@@ -150,6 +150,13 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   const [abilityReady, setAbilityReady] = useState<boolean>(true);
   const [abilityActive, setAbilityActive] = useState<boolean>(false);
   const [isCompactHeight, setIsCompactHeight] = useState<boolean>(false);
+  const [isMobileOrTablet, setIsMobileOrTablet] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsMobileOrTablet(window.innerWidth <= 1024);
+    }
+  }, []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -165,6 +172,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     )
   );
   const heldKeysRef = useRef<Set<string>>(new Set());
+  const lastTapTimeRef = useRef<number>(0);
 
   const syncPhaseAttr = useCallback((nextPhase: GamePhase) => {
     setPhase(nextPhase);
@@ -251,6 +259,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
       resetForNewRun(sim, configRef.current, Date.now());
       heldKeysRef.current.clear();
+      lastTapTimeRef.current = 0;
 
       setShowTuningModal(false);
       setScore(0);
@@ -330,7 +339,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   }, [handleStartOrRestart]);
 
   const handleTriggerAbility = useCallback(
-    (e?: React.MouseEvent<HTMLButtonElement>) => {
+    (e?: React.MouseEvent<HTMLButtonElement>): boolean => {
       if (e) {
         e.stopPropagation();
         e.currentTarget.blur();
@@ -349,6 +358,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         setAbilityStatusText(`ACTIVE ${sim.abilityActiveTimer.toFixed(1)}s`);
         audioRef.current?.playAbility(sim.birdId);
       }
+      return used;
     },
     [bestScoreKey]
   );
@@ -373,6 +383,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       if (rect.width <= 0 || rect.height <= 0) return;
 
       setIsCompactHeight(rect.height < 540);
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : rect.width;
+      setIsMobileOrTablet(viewportWidth <= 1024 || rect.width <= 1024);
 
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const aspect = rect.width / rect.height;
@@ -662,7 +674,11 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       <canvas
         ref={canvasRef}
         data-testid="game-canvas"
-        aria-label="Aether Glider interactive sky playfield. Tap or click to flap upward."
+        aria-label={
+          isMobileOrTablet
+            ? 'Aether Glider interactive sky playfield. Tap to flap upward. Double-tap to activate special ability.'
+            : 'Aether Glider interactive sky playfield. Click or press Space to flap upward.'
+        }
         onPointerDown={(e) => {
           if (e.button === 2 && phase === 'playing') {
             e.preventDefault();
@@ -672,7 +688,22 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           if (e.button !== 0 && e.pointerType === 'mouse') return;
           e.preventDefault();
           if (phase === 'playing') {
-            handlePlayerFlapAction();
+            if (isMobileOrTablet || e.pointerType === 'touch') {
+              const now = performance.now();
+              const isDoubleTap = now - lastTapTimeRef.current <= 320;
+              if (isDoubleTap) {
+                lastTapTimeRef.current = 0;
+                const triggered = handleTriggerAbility();
+                if (!triggered) {
+                  handlePlayerFlapAction();
+                }
+              } else {
+                lastTapTimeRef.current = now;
+                handlePlayerFlapAction();
+              }
+            } else {
+              handlePlayerFlapAction();
+            }
           } else if (phase === 'title' && !showTuningModal) {
             handleStartOrRestart();
           }
@@ -687,8 +718,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           isCompactHeight ? 'p-2' : 'p-3 sm:p-4'
         }`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className={`flex ${isCompactHeight ? 'flex-row items-center gap-2' : 'flex-col gap-2'}`}>
+        <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+          <div className={`flex ${isCompactHeight ? 'flex-row items-center gap-2' : 'flex-col items-start gap-2'}`}>
             {/* Top-Left Telemetry Plaque */}
             <div
               className={`pointer-events-auto flex items-center gap-2.5 rounded-xl ${
@@ -750,9 +781,11 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 data-testid="hud-ability-button"
                 onClick={handleTriggerAbility}
                 disabled={!abilityReady && !abilityActive}
-                aria-label={`Activate ${selectedBird.abilityName} (Press E). Status: ${abilityStatusText}`}
-                className={`pointer-events-auto flex items-center gap-2 rounded-xl ${
-                  isCompactHeight ? 'px-2.5 py-1' : 'px-3 py-1.5 sm:py-2'
+                aria-label={`Activate ${selectedBird.abilityName} (${
+                  isMobileOrTablet ? 'Double-Tap' : 'Press E'
+                }). Status: ${abilityStatusText}`}
+                className={`pointer-events-auto flex items-center gap-1.5 sm:gap-2 rounded-xl ${
+                  isCompactHeight ? 'px-2 py-1' : 'px-2.5 sm:px-3 py-1.5 sm:py-2'
                 } text-left transition-transform active:scale-95 cursor-pointer disabled:opacity-65`}
                 style={{
                   backgroundColor: abilityActive
@@ -770,7 +803,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               >
                 <AbilityIconSvg
                   birdId={selectedBirdId}
-                  className={isCompactHeight ? 'w-5 h-5 shrink-0' : 'w-6 h-6 shrink-0'}
+                  className="w-5 h-5 sm:w-6 sm:h-6 shrink-0"
                 />
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -778,10 +811,10 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                       {selectedBird.abilityName}
                     </span>
                     <span
-                      className="text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded bg-amber-950/90 text-amber-300"
+                      className="text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded bg-amber-950/90 text-amber-300 whitespace-nowrap"
                       style={{ fontFamily: '"JetBrains Mono", monospace' }}
                     >
-                      [E]
+                      {isMobileOrTablet ? '2x TAP' : '[E]'}
                     </span>
                   </div>
                   <div
@@ -806,11 +839,11 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
           {/* Top-Center Live Score Display during Active Play */}
           {phase === 'playing' && (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center shrink-0">
               <div
                 data-testid="hud-live-score"
                 className={`${
-                  isCompactHeight ? 'text-3xl leading-none' : 'text-4xl sm:text-6xl'
+                  isCompactHeight ? 'text-3xl leading-none' : 'text-3xl sm:text-6xl leading-none'
                 } font-extrabold tracking-tight text-amber-200 select-none`}
                 style={{
                   fontFamily: '"Bricolage Grotesque", sans-serif',
@@ -828,7 +861,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           )}
 
           {/* Top-Right Compact Utility Icon Buttons */}
-          <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
+          <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 shrink-0">
             <button
               type="button"
               tabIndex={-1}
@@ -836,9 +869,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               aria-label={muted ? 'Unmute sound effects (M)' : 'Mute sound effects (M)'}
               aria-pressed={!muted}
               title={muted ? 'Unmute Sound [M]' : 'Mute Sound [M]'}
-              className={`flex ${
-                isCompactHeight ? 'h-9 w-9' : 'h-10 w-10 sm:h-11 sm:w-11'
-              } items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400`}
+              className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
               style={{
                 backgroundColor: 'rgba(20, 14, 30, 0.9)',
                 border: '2px solid #B45309',
@@ -862,9 +893,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               }}
               aria-label="Gameplay tuning and accessibility settings"
               title="Tuning & Settings"
-              className={`flex ${
-                isCompactHeight ? 'h-9 w-9' : 'h-10 w-10 sm:h-11 sm:w-11'
-              } items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400`}
+              className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
               style={{
                 backgroundColor: showTuningModal
                   ? 'rgba(180, 83, 9, 0.92)'
@@ -884,9 +913,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   onClick={handleTogglePause}
                   aria-label="Pause game (P)"
                   title="Pause Game [P]"
-                  className={`flex ${
-                    isCompactHeight ? 'h-9 w-9' : 'h-10 w-10 sm:h-11 sm:w-11'
-                  } items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400`}
+                  className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
                   style={{
                     backgroundColor: 'rgba(20, 14, 30, 0.9)',
                     border: '2px solid #B45309',
@@ -902,9 +929,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   onClick={handleStartOrRestart}
                   aria-label="Restart run (R)"
                   title="Restart Run [R]"
-                  className={`flex ${
-                    isCompactHeight ? 'h-9 w-9' : 'h-10 w-10 sm:h-11 sm:w-11'
-                  } items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400`}
+                  className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
                   style={{
                     backgroundColor: 'rgba(20, 14, 30, 0.9)',
                     border: '2px solid #B45309',
@@ -927,7 +952,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)',
               }}
             >
-              Space / Tap Flap · E Ability · Q Realm · P Pause · M Mute
+              {isMobileOrTablet
+                ? 'Tap Flap · Double-Tap Ability · P Pause · M Mute'
+                : 'Space / Click Flap · E Ability · Q Realm · P Pause · M Mute'}
             </p>
           </div>
         )}
@@ -1080,7 +1107,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   <div className="text-[11px] font-extrabold text-amber-100 whitespace-nowrap truncate">
                     {selectedBird.name} ·{' '}
                     <span style={{ color: selectedBird.colors.auraHex }}>
-                      [E] {selectedBird.abilityName}
+                      {isMobileOrTablet ? '[Double-Tap]' : '[E]'} {selectedBird.abilityName}
                     </span>
                   </div>
                   <p className="text-[10px] sm:text-[11px] text-amber-100/80 leading-snug line-clamp-2">
@@ -1181,7 +1208,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)',
                 }}
               >
-                Space / Tap Flap · E Ability · Q Realm · P Pause · M Mute
+                {isMobileOrTablet
+                  ? 'Tap Flap · Double-Tap Ability · Q Realm · P Pause · M Mute'
+                  : 'Space / Tap Flap · E Ability · Q Realm · P Pause · M Mute'}
               </p>
             </div>
           </div>
