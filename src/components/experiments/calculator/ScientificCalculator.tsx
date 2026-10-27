@@ -13,6 +13,7 @@ import {
   RotateCcw,
   TrendingUp,
   Grid,
+  Scale,
 } from 'lucide-react';
 import {
   evaluateMathExpression,
@@ -23,6 +24,7 @@ import { CalculusPanel } from './CalculusPanel';
 import { GraphPlotter } from './GraphPlotter';
 import { HistoryPanel, type CalculationHistoryItem } from './HistoryPanel';
 import { MatrixCalculator } from './MatrixCalculator';
+import { UnitConverterPanel } from './UnitConverterPanel';
 
 const HISTORY_STORAGE_KEY = 'voidnod_scientific_calc_history_v1';
 const MEMORY_STORAGE_KEY = 'voidnod_scientific_calc_memory_v1';
@@ -50,8 +52,8 @@ export interface ScientificCalculatorProps {
   className?: string;
 }
 
-type MobileWorkspaceTab = 'calculator' | 'matrix' | 'calculus' | 'graph' | 'history';
-type DesktopDeckFilter = 'all' | 'matrix' | 'calculus' | 'graph' | 'history';
+type MobileWorkspaceTab = 'calculator' | 'matrix' | 'calculus' | 'units' | 'graph' | 'history';
+type DesktopDeckFilter = 'all' | 'matrix' | 'calculus' | 'units' | 'graph' | 'history';
 
 export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
   initialExpression = '',
@@ -375,6 +377,8 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
       });
     } else if (tabId === 'calculus') {
       setMobileTab('calculus');
+    } else if (tabId === 'units') {
+      setMobileTab('units');
     } else if (tabId === 'graph') {
       setMobileTab('graph');
     } else if (tabId === 'history') {
@@ -390,7 +394,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
       <div
         role="tablist"
         aria-label="Mobile calculator workspace tabs"
-        className="grid grid-cols-5 gap-1 p-1.5 mb-4 bg-[#0B101B] border border-slate-800 rounded-xl lg:hidden"
+        className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 p-1.5 mb-4 bg-[#0B101B] border border-slate-800 rounded-xl lg:hidden"
       >
         <button
           type="button"
@@ -444,6 +448,23 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
         >
           <Sigma className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>Calculus</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobileTab === 'units'}
+          onClick={() => {
+            setMobileTab('units');
+            setDesktopDeckFilter('units');
+          }}
+          className={`min-h-[44px] px-1 py-1.5 text-[11px] sm:text-xs font-semibold rounded-lg flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-colors whitespace-nowrap shrink-0 ${
+            mobileTab === 'units'
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Scale className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>Units</span>
         </button>
 
         <button
@@ -1079,16 +1100,17 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
         {/* RIGHT COLUMN (5 cols on Desktop): Inspection Deck (Calculus, Graph, History) */}
         <div className="lg:col-span-5 flex flex-col gap-5">
           {/* Desktop Panel Filter Control */}
-          <div className="hidden lg:flex items-center justify-between p-1.5 bg-[#0B101B] border border-slate-800/90 rounded-xl">
+          <div className="hidden lg:flex flex-wrap items-center justify-between gap-2 p-1.5 bg-[#0B101B] border border-slate-800/90 rounded-xl">
             <span className="px-2.5 text-xs font-medium text-slate-400">
               Lab Deck View
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {(
                 [
                   { id: 'all', label: 'All Tools' },
                   { id: 'matrix', label: 'Matrix' },
                   { id: 'calculus', label: 'Calculus' },
+                  { id: 'units', label: 'Units' },
                   { id: 'graph', label: 'Graph' },
                   { id: 'history', label: `History (${history.length})` },
                 ] as const
@@ -1096,6 +1118,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 <button
                   key={tab.id}
                   type="button"
+                  data-testid={`deck-tab-${tab.id}`}
                   onClick={() => handleDeckFilterClick(tab.id)}
                   className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-cyan-400 ${
                     desktopDeckFilter === tab.id
@@ -1107,6 +1130,25 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Unit Converter Panel (Length & Mass) */}
+          <div
+            className={`${
+              mobileTab === 'units' ? 'block' : 'hidden'
+            } ${
+              desktopDeckFilter === 'units' ? 'lg:block' : 'lg:hidden'
+            }`}
+          >
+            <UnitConverterPanel
+              currentCalculatorValue={expression.trim() || displayResult}
+              onSendResultToCalculator={(val) => {
+                setErrorMessage(null);
+                setExpression(val);
+                setDisplayResult(val);
+                setMobileTab('calculator');
+              }}
+            />
           </div>
 
           {/* 1. Calculus Panel */}
@@ -1162,7 +1204,8 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
             } ${
               desktopDeckFilter === 'all' ||
               desktopDeckFilter === 'history' ||
-              desktopDeckFilter === 'matrix'
+              desktopDeckFilter === 'matrix' ||
+              desktopDeckFilter === 'units'
                 ? 'lg:flex'
                 : 'lg:hidden'
             }`}

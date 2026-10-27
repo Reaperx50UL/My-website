@@ -185,7 +185,8 @@ export const webLabData: WebLabProject[] = [
       "Power, square root, cube root, and factorial calculations",
       "Full desktop keyboard shortcut support and mobile touch controls",
       "Real-time expression history and answer memory recall",
-      "Precision rounding and zero-division error handling"
+      "Precision rounding and zero-division error handling",
+      "Interactive unit converter for length and mass with multi-scale equivalents"
     ],
     technologies: ["React", "TypeScript", "Tailwind CSS", "Lucide Icons"],
     status: "Completed",
