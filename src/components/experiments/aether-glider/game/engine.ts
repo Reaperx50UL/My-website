@@ -21,7 +21,7 @@ import {
   SimulationState,
 } from './types';
 
-export const PARTICLE_POOL_SIZE = 96;
+export const PARTICLE_POOL_SIZE = 160;
 export const POPUP_POOL_SIZE = 12;
 
 /** Deterministic Mulberry32-style PRNG step */
@@ -39,6 +39,80 @@ export function getMedalForScore(score: number): MedalTier {
   if (score >= 12) return 'silver';
   if (score >= 5) return 'bronze';
   return 'none';
+}
+
+/**
+ * Computes the score multiplier for consecutive successful dodges in the current run:
+ * - 0–1 dodges: 1x
+ * - 2–3 dodges: 2x
+ * - 4–5 dodges: 3x
+ * - 6–8 dodges: 4x
+ * - 9+ dodges:  5x (MAX)
+ */
+export function computeComboMultiplier(comboCount: number): number {
+  const safeCombo = Math.max(0, Math.floor(comboCount));
+  if (safeCombo >= 9) return 5;
+  if (safeCombo >= 6) return 4;
+  if (safeCombo >= 4) return 3;
+  if (safeCombo >= 2) return 2;
+  return 1;
+}
+
+export interface ComboTierInfo {
+  multiplier: number;
+  label: string;
+  colorHex: string;
+  nextTierAt: number | null;
+  progressToNext: number;
+}
+
+export function getComboTierInfo(comboCount: number): ComboTierInfo {
+  const safeCombo = Math.max(0, Math.floor(comboCount));
+  const multiplier = computeComboMultiplier(safeCombo);
+
+  if (multiplier >= 5) {
+    return {
+      multiplier: 5,
+      label: 'AETHER OVERDRIVE',
+      colorHex: '#FBBF24',
+      nextTierAt: null,
+      progressToNext: 1,
+    };
+  }
+  if (multiplier === 4) {
+    return {
+      multiplier: 4,
+      label: 'NOVA STREAK',
+      colorHex: '#C084FC',
+      nextTierAt: 9,
+      progressToNext: (safeCombo - 6) / 3,
+    };
+  }
+  if (multiplier === 3) {
+    return {
+      multiplier: 3,
+      label: 'GALE SURGE',
+      colorHex: '#38BDF8',
+      nextTierAt: 6,
+      progressToNext: (safeCombo - 4) / 2,
+    };
+  }
+  if (multiplier === 2) {
+    return {
+      multiplier: 2,
+      label: 'WIND FLOW',
+      colorHex: '#34D399',
+      nextTierAt: 4,
+      progressToNext: (safeCombo - 2) / 2,
+    };
+  }
+  return {
+    multiplier: 1,
+    label: safeCombo === 1 ? 'DODGE LOCKED' : 'BASE FLIGHT',
+    colorHex: '#FDE68A',
+    nextTierAt: 2,
+    progressToNext: safeCombo / 2,
+  };
 }
 
 export function computeDifficultyParams(
@@ -98,6 +172,7 @@ export function createParticlePool(): Particle[] {
       shape: 'spark',
       rotation: 0,
       vRot: 0,
+      gravityScale: 1,
     });
   }
   return pool;
@@ -136,6 +211,7 @@ export function spawnPooledParticle(
     shape: ParticleShape;
     rotation?: number;
     vRot?: number;
+    gravityScale?: number;
   }
 ): void {
   const p = state.particles[state.particleCursor % state.particles.length];
@@ -153,6 +229,7 @@ export function spawnPooledParticle(
   p.shape = opts.shape;
   p.rotation = opts.rotation ?? 0;
   p.vRot = opts.vRot ?? 0;
+  p.gravityScale = opts.gravityScale ?? 1;
 }
 
 export function spawnFloatingPopup(
@@ -221,6 +298,10 @@ export function createInitialState(
     particleCursor: 0,
     score: 0,
     gatesClearedCount: 0,
+    comboCount: 0,
+    maxCombo: 0,
+    comboMultiplier: 1,
+    peakComboMultiplier: 1,
     bestScore,
     isNewBest: false,
     flightTimeSec: 0,
@@ -288,6 +369,10 @@ export function resetForNewRun(
 
   state.score = 0;
   state.gatesClearedCount = 0;
+  state.comboCount = 0;
+  state.maxCombo = 0;
+  state.comboMultiplier = 1;
+  state.peakComboMultiplier = 1;
   state.isNewBest = false;
   state.flightTimeSec = 0;
   state.launchGraceTimer = config.launchGraceDuration;
@@ -332,21 +417,39 @@ export function triggerFlap(
   state.player.flapImpulseTimer = 0.18;
   state.player.wingPhase = 0.15;
 
-  const count = reducedMotion ? 2 : 5;
+  const count = reducedMotion ? 3 : 7;
   for (let i = 0; i < count; i++) {
     const angle = Math.PI * 0.65 + (nextRandom(state) - 0.5) * 0.8;
-    const speed = 45 + nextRandom(state) * 75;
+    const speed = 48 + nextRandom(state) * 80;
+    const shape: ParticleShape =
+      i === 0
+        ? 'feather'
+        : i === 1
+        ? 'gear'
+        : i === 2
+        ? 'smoke'
+        : i === 3
+        ? 'streak'
+        : 'spark';
     spawnPooledParticle(state, {
       x: state.player.x - 10,
       y: state.player.y + 6,
-      vx: Math.cos(angle) * speed - 35,
+      vx: Math.cos(angle) * speed - 42,
       vy: Math.sin(angle) * speed,
-      size: 3 + nextRandom(state) * 3,
-      maxLife: 0.28 + nextRandom(state) * 0.18,
-      color: i % 2 === 0 ? bird.colors.wing : bird.colors.auraHex,
-      shape: i === 0 ? 'feather' : 'spark',
-      rotation: nextRandom(state) * Math.PI * 2,
-      vRot: (nextRandom(state) - 0.5) * 6,
+      size: shape === 'gear' ? 4.5 : shape === 'streak' ? 5.5 : 3 + nextRandom(state) * 3,
+      maxLife: 0.3 + nextRandom(state) * 0.2,
+      color:
+        shape === 'gear'
+          ? '#F59E0B'
+          : shape === 'smoke'
+          ? '#FDE68A'
+          : i % 2 === 0
+          ? bird.colors.wing
+          : bird.colors.auraHex,
+      shape,
+      rotation: shape === 'streak' ? 0 : nextRandom(state) * Math.PI * 2,
+      vRot: shape === 'streak' ? 0 : (nextRandom(state) - 0.5) * 8,
+      gravityScale: shape === 'smoke' ? -0.35 : shape === 'streak' ? 0 : 0.75,
     });
   }
 
@@ -441,23 +544,262 @@ export function triggerSpecialAbility(
     );
   }
 
-  const ringCount = reducedMotion ? 4 : 12;
-  for (let i = 0; i < ringCount; i++) {
-    const ang = (Math.PI * 2 * i) / ringCount;
-    const spd = 65 + nextRandom(state) * 85;
+  // Multi-layered Brass-and-Sky Ability Activation Particle Burst
+  const burstCount = reducedMotion ? 8 : 22;
+  for (let i = 0; i < burstCount; i++) {
+    const ang = (Math.PI * 2 * i) / burstCount + (nextRandom(state) - 0.5) * 0.15;
+    const spd = 70 + nextRandom(state) * 115;
+
+    let shape: ParticleShape = 'spark';
+    let color = bird.colors.auraHex;
+    let size = 4;
+    let gravityScale = 0.45;
+    let vx = Math.cos(ang) * spd;
+    let vy = Math.sin(ang) * spd;
+
+    if (i % 5 === 0) {
+      // Miniature burnished brass clockwork cogwheel
+      shape = 'gear';
+      color = i % 10 === 0 ? '#F59E0B' : '#FDE68A';
+      size = 5 + nextRandom(state) * 2;
+      gravityScale = 0.65;
+    } else if (i % 4 === 0) {
+      // Expanding harmonic sky-ring
+      shape = 'ring';
+      color = bird.colors.auraHex;
+      size = 5.5;
+      gravityScale = 0.15;
+    } else if (i % 3 === 0) {
+      // High-velocity slipstream wind streak or aether prism
+      shape = bird.id === 'zephyr' ? 'streak' : 'prism';
+      color = i % 6 === 0 ? '#FEF3C7' : bird.colors.auraHex;
+      size = shape === 'streak' ? 7 : 4.8;
+      gravityScale = shape === 'streak' ? 0 : -0.15;
+      if (shape === 'streak') {
+        vx = -140 - nextRandom(state) * 130;
+        vy = (nextRandom(state) - 0.5) * 90;
+      }
+    } else if (bird.id === 'ignis' && i % 2 === 0) {
+      // Pressurized solar-brass steam puff
+      shape = 'smoke';
+      color = '#FBBF24';
+      size = 5.2;
+      gravityScale = -0.4;
+    }
+
     spawnPooledParticle(state, {
-      x: state.player.x,
-      y: state.player.y,
-      vx: Math.cos(ang) * spd,
-      vy: Math.sin(ang) * spd,
-      size: i % 3 === 0 ? 5.5 : 3.5,
-      maxLife: 0.45,
-      color: bird.colors.auraHex,
-      shape: i % 3 === 0 ? 'ring' : 'spark',
+      x: state.player.x + Math.cos(ang) * 8,
+      y: state.player.y + Math.sin(ang) * 8,
+      vx,
+      vy,
+      size,
+      maxLife: 0.44 + nextRandom(state) * 0.24,
+      color,
+      shape,
+      rotation: shape === 'streak' ? Math.atan2(vy, vx) : nextRandom(state) * Math.PI * 2,
+      vRot: shape === 'streak' ? 0 : (nextRandom(state) - 0.5) * 10,
+      gravityScale,
     });
   }
 
   return true;
+}
+
+/**
+ * Emits brass-and-sky particles during high-speed maneuvers:
+ * - Steep dives or rapid climbs (|vy| >= 225)
+ * - Power flap surges (flapImpulseTimer > 0)
+ * - High-speed slipstream / overdrive flight (speedMultiplier >= 1.15 or comboMultiplier >= 2)
+ */
+export function emitHighSpeedManeuverParticles(
+  state: SimulationState,
+  dt: number,
+  speedMultiplier: number,
+  reducedMotion = false
+): number {
+  if (state.phase !== 'playing' || state.pendingGameOver) return 0;
+
+  const bird = getBirdProfile(state.birdId);
+  const absVy = Math.abs(state.player.vy);
+  const isSteepManeuver = absVy >= 225;
+  const isFlapSurge = state.player.flapImpulseTimer > 0.04;
+  const isHighSpeedSlipstream = speedMultiplier >= 1.15 || state.comboMultiplier >= 2;
+
+  if (!isSteepManeuver && !isFlapSurge && !isHighSpeedSlipstream) {
+    return 0;
+  }
+
+  let spawned = 0;
+
+  // 1. Steep Dive or Climb Maneuver: Aerodynamic sky-slipstream streaks + tumbling brass gears
+  if (isSteepManeuver) {
+    const chance = reducedMotion ? 0.35 : Math.min(0.95, dt * 36 * (absVy / 260));
+    if (nextRandom(state) <= chance || dt >= 0.03) {
+      const diveSign = state.player.vy >= 0 ? 1 : -1;
+      const offsetY = (nextRandom(state) - 0.5) * 16;
+      const vx = -135 - nextRandom(state) * 95;
+      const vy = -state.player.vy * 0.32 + (nextRandom(state) - 0.5) * 35;
+
+      // Sky slipstream wind-streak
+      spawnPooledParticle(state, {
+        x: state.player.x - 8,
+        y: state.player.y + offsetY,
+        vx,
+        vy,
+        size: 5.5 + nextRandom(state) * 2.5,
+        maxLife: 0.28 + nextRandom(state) * 0.14,
+        color: diveSign > 0 ? '#FDE68A' : '#7DD3FC',
+        shape: 'streak',
+        rotation: Math.atan2(vy, vx),
+        vRot: 0,
+        gravityScale: 0,
+      });
+      spawned++;
+
+      // Tumbling clockwork brass cog or exhaust spark on steep maneuvers
+      if (!reducedMotion && (absVy >= 270 || nextRandom(state) > 0.45)) {
+        const isGear = nextRandom(state) > 0.45;
+        spawnPooledParticle(state, {
+          x: state.player.x - 14,
+          y: state.player.y - diveSign * 4,
+          vx: -85 - nextRandom(state) * 65,
+          vy: -state.player.vy * 0.22 + (nextRandom(state) - 0.5) * 40,
+          size: isGear ? 4.4 : 3.2,
+          maxLife: 0.36 + nextRandom(state) * 0.16,
+          color: isGear ? '#F59E0B' : bird.colors.auraHex,
+          shape: isGear ? 'gear' : 'spark',
+          rotation: nextRandom(state) * Math.PI * 2,
+          vRot: (nextRandom(state) - 0.5) * 11,
+          gravityScale: isGear ? 0.65 : 0.35,
+        });
+        spawned++;
+      }
+    }
+  }
+
+  // 2. High-Speed Slipstream / Combo Overdrive Contrail
+  if (isHighSpeedSlipstream && !reducedMotion) {
+    const slipChance = Math.min(0.85, dt * 24 * speedMultiplier);
+    if (nextRandom(state) <= slipChance) {
+      const usePrism = state.comboMultiplier >= 3 && nextRandom(state) > 0.5;
+      spawnPooledParticle(state, {
+        x: state.player.x - 15,
+        y: state.player.y + (nextRandom(state) - 0.5) * 14,
+        vx: -120 * speedMultiplier - nextRandom(state) * 60,
+        vy: (nextRandom(state) - 0.5) * 24,
+        size: usePrism ? 4.2 : 5.2,
+        maxLife: 0.26 + nextRandom(state) * 0.12,
+        color: usePrism ? bird.colors.auraHex : '#FEF3C7',
+        shape: usePrism ? 'prism' : 'streak',
+        rotation: 0,
+        vRot: usePrism ? 5 : 0,
+        gravityScale: 0,
+      });
+      spawned++;
+    }
+  }
+
+  return spawned;
+}
+
+/**
+ * Continuously emits signature brass-and-sky particles while a bird's special ability is active.
+ */
+export function emitActiveAbilityParticles(
+  state: SimulationState,
+  dt: number,
+  reducedMotion = false
+): number {
+  if (
+    state.phase !== 'playing' ||
+    state.pendingGameOver ||
+    (state.abilityActiveTimer <= 0 && !state.shieldActive)
+  ) {
+    return 0;
+  }
+
+  const bird = getBirdProfile(state.birdId);
+  const emitRate = reducedMotion ? 12 : 34;
+  if (nextRandom(state) > Math.min(1, dt * emitRate) && dt < 0.025) {
+    return 0;
+  }
+
+  let spawned = 0;
+  const angle = state.flightTimeSec * 7.5 + nextRandom(state) * Math.PI * 2;
+
+  if (bird.id === 'kora') {
+    // Aether Shield: Orbiting golden brass gears & crystalline ward prisms
+    const radius = 26;
+    const isGear = nextRandom(state) > 0.5;
+    spawnPooledParticle(state, {
+      x: state.player.x + Math.cos(angle) * radius,
+      y: state.player.y + Math.sin(angle) * radius,
+      vx: -45 + Math.cos(angle + Math.PI * 0.5) * 35,
+      vy: Math.sin(angle + Math.PI * 0.5) * 35,
+      size: isGear ? 4.6 : 4.2,
+      maxLife: 0.34,
+      color: isGear ? '#F59E0B' : '#FEF3C7',
+      shape: isGear ? 'gear' : 'prism',
+      rotation: angle,
+      vRot: isGear ? 8 : 4,
+      gravityScale: 0,
+    });
+    spawned++;
+  } else if (bird.id === 'zephyr') {
+    // Gale Dash: Supersonic sky-blue & brass Mach slipstream streaks
+    const vy = (nextRandom(state) - 0.5) * 55;
+    const vx = -220 - nextRandom(state) * 120;
+    spawnPooledParticle(state, {
+      x: state.player.x - 6,
+      y: state.player.y + (nextRandom(state) - 0.5) * 22,
+      vx,
+      vy,
+      size: 7.5,
+      maxLife: 0.25,
+      color: nextRandom(state) > 0.35 ? '#38BDF8' : '#FDE68A',
+      shape: 'streak',
+      rotation: Math.atan2(vy, vx),
+      vRot: 0,
+      gravityScale: 0,
+    });
+    spawned++;
+  } else if (bird.id === 'ignis') {
+    // Solar Pulse: Rising ember-brass steam & forge sparks
+    const isSmoke = nextRandom(state) > 0.55;
+    spawnPooledParticle(state, {
+      x: state.player.x - 8 + (nextRandom(state) - 0.5) * 16,
+      y: state.player.y + (nextRandom(state) - 0.5) * 16,
+      vx: -75 - nextRandom(state) * 50,
+      vy: -35 - nextRandom(state) * 45,
+      size: isSmoke ? 5.2 : 4.2,
+      maxLife: 0.36,
+      color: isSmoke ? '#FBBF24' : '#F87171',
+      shape: isSmoke ? 'smoke' : 'gear',
+      rotation: nextRandom(state) * Math.PI * 2,
+      vRot: (nextRandom(state) - 0.5) * 9,
+      gravityScale: isSmoke ? -0.45 : 0.35,
+    });
+    spawned++;
+  } else if (bird.id === 'chronos') {
+    // Time Dilation: Counter-rotating escapement gears & emerald chrono prisms
+    const isGear = nextRandom(state) > 0.45;
+    spawnPooledParticle(state, {
+      x: state.player.x + Math.cos(angle) * 22,
+      y: state.player.y + Math.sin(angle) * 22,
+      vx: -35 + (nextRandom(state) - 0.5) * 30,
+      vy: (nextRandom(state) - 0.5) * 30,
+      size: isGear ? 4.8 : 4.0,
+      maxLife: 0.38,
+      color: isGear ? '#FDE68A' : '#34D399',
+      shape: isGear ? 'gear' : 'prism',
+      rotation: angle,
+      vRot: -9,
+      gravityScale: -0.1,
+    });
+    spawned++;
+  }
+
+  return spawned;
 }
 
 export function spawnObstaclePair(
@@ -636,6 +978,8 @@ function triggerDefeatSequence(
     bestScore: state.bestScore,
     isNewBest: state.isNewBest,
     gatesCleared: state.gatesClearedCount,
+    maxCombo: state.maxCombo,
+    peakComboMultiplier: state.peakComboMultiplier,
     flightTimeSec: Number(state.flightTimeSec.toFixed(1)),
     peakSpeedMultiplier: diff.multiplier,
     medal: getMedalForScore(state.score),
@@ -644,6 +988,8 @@ function triggerDefeatSequence(
     environmentId: state.environmentId,
     abilitiesUsed: state.abilitiesUsed,
   };
+  state.comboCount = 0;
+  state.comboMultiplier = 1;
 
   const burstCount = reducedMotion ? 6 : 20;
   for (let i = 0; i < burstCount; i++) {
@@ -667,6 +1013,8 @@ function triggerDefeatSequence(
 export interface StepEvents {
   scoredPoint: boolean;
   milestoneReached: boolean;
+  comboTierUp: boolean;
+  comboBroken: boolean;
   collided: boolean;
   shieldBlocked: boolean;
   gameOverTransitioned: boolean;
@@ -682,6 +1030,8 @@ export function stepSimulation(
   const events: StepEvents = {
     scoredPoint: false,
     milestoneReached: false,
+    comboTierUp: false,
+    comboBroken: false,
     collided: false,
     shieldBlocked: false,
     gameOverTransitioned: false,
@@ -709,7 +1059,7 @@ export function stepSimulation(
     }
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vy += 140 * dt;
+    p.vy += 140 * (p.gravityScale ?? 1) * dt;
     p.rotation += p.vRot * dt;
     p.alpha = Math.max(0, 1 - p.life / p.maxLife);
   }
@@ -878,6 +1228,10 @@ export function stepSimulation(
     }
   }
 
+  // Trigger brass-and-sky particle emitters for high-speed maneuvers & active abilities
+  emitHighSpeedManeuverParticles(state, dt, diff.multiplier * speedMultiplier, reducedMotion);
+  emitActiveAbilityParticles(state, dt, reducedMotion);
+
   const initialRunwayPx = Math.max(420, config.baseObstacleSpeed * 2.45);
   if (state.obstacles.length === 0) {
     if (state.distanceTraveled >= initialRunwayPx - 220) {
@@ -955,9 +1309,24 @@ export function stepSimulation(
       obs.passed = true;
       state.gatesClearedCount += 1;
 
+      const prevMultiplier = state.comboMultiplier;
+      state.comboCount += 1;
+      state.comboMultiplier = computeComboMultiplier(state.comboCount);
+      state.maxCombo = Math.max(state.maxCombo, state.comboCount);
+      state.peakComboMultiplier = Math.max(
+        state.peakComboMultiplier,
+        state.comboMultiplier
+      );
+
+      const didComboTierUp = state.comboMultiplier > prevMultiplier;
+      if (didComboTierUp) {
+        events.comboTierUp = true;
+      }
+
       const isChronosHarmonic =
         state.birdId === 'chronos' && state.gatesClearedCount % 4 === 0;
-      const pointsEarned = isChronosHarmonic ? 2 : 1;
+      const basePoints = isChronosHarmonic ? 2 : 1;
+      const pointsEarned = basePoints * state.comboMultiplier;
 
       state.score += pointsEarned;
       events.scoredPoint = true;
@@ -967,25 +1336,45 @@ export function stepSimulation(
         state.isNewBest = true;
       }
 
-      const isMilestone = state.score > 0 && state.score % 5 === 0;
-      if (isMilestone || isChronosHarmonic) {
+      const isMilestone = state.gatesClearedCount > 0 && state.gatesClearedCount % 5 === 0;
+      if (isMilestone || isChronosHarmonic || didComboTierUp) {
         events.milestoneReached = true;
+      }
+
+      const comboTier = getComboTierInfo(state.comboCount);
+      let popupSubtext = '';
+      if (isChronosHarmonic && state.comboMultiplier > 1) {
+        popupSubtext = `HARMONIC x${state.comboMultiplier} • ${state.comboCount} STREAK`;
+      } else if (didComboTierUp) {
+        popupSubtext = `COMBO x${state.comboMultiplier}! • ${state.comboCount} STREAK`;
+      } else if (state.comboMultiplier > 1) {
+        popupSubtext = `x${state.comboMultiplier} COMBO • ${state.comboCount} STREAK`;
+      } else if (isChronosHarmonic) {
+        popupSubtext = 'HARMONIC!';
+      } else if (isMilestone) {
+        popupSubtext = `${state.gatesClearedCount} GATES!`;
       }
 
       spawnFloatingPopup(
         state,
         state.player.x + 12,
         Math.max(64, state.player.y - 26),
-        isChronosHarmonic ? '+2' : '+1',
+        `+${pointsEarned}`,
+        popupSubtext,
         isChronosHarmonic
-          ? 'HARMONIC!'
+          ? '#34D399'
+          : state.comboMultiplier > 1
+          ? comboTier.colorHex
           : isMilestone
-          ? `${state.score} GATES!`
-          : '',
-        isChronosHarmonic || isMilestone ? '#34D399' : '#FDE68A'
+          ? '#34D399'
+          : '#FDE68A'
       );
 
-      const sparkCount = reducedMotion ? 3 : isMilestone || isChronosHarmonic ? 12 : 6;
+      const sparkCount = reducedMotion
+        ? 3
+        : isMilestone || isChronosHarmonic || didComboTierUp
+        ? 12
+        : 6;
       for (let s = 0; s < sparkCount; s++) {
         const ang = (Math.PI * 2 * s) / sparkCount;
         const spd = 45 + nextRandom(state) * 75;
@@ -994,9 +1383,14 @@ export function stepSimulation(
           y: obs.gapCenterY,
           vx: Math.cos(ang) * spd,
           vy: Math.sin(ang) * spd,
-          size: isMilestone ? 4.5 : 3.2,
+          size: isMilestone || didComboTierUp ? 4.5 : 3.2,
           maxLife: 0.42,
-          color: isChronosHarmonic ? '#34D399' : bird.colors.auraHex,
+          color:
+            state.comboMultiplier > 1
+              ? comboTier.colorHex
+              : isChronosHarmonic
+              ? '#34D399'
+              : bird.colors.auraHex,
           shape: s === 0 ? 'ring' : 'spark',
         });
       }
@@ -1017,6 +1411,13 @@ export function stepSimulation(
       collision.obstacleIndex >= 0
     ) {
       const obs = state.obstacles[collision.obstacleIndex];
+      const hadComboStreak = state.comboCount >= 2;
+      state.comboCount = 0;
+      state.comboMultiplier = 1;
+      if (hadComboStreak) {
+        events.comboBroken = true;
+      }
+
       obs.shatteredByShield = true;
       obs.trapDisarmed = true;
       obs.topHeight = 0;
@@ -1041,7 +1442,7 @@ export function stepSimulation(
         state.player.x + 14,
         Math.max(60, state.player.y - 28),
         'SHIELD BLOCK!',
-        '+1 HAZARD SHATTERED',
+        hadComboStreak ? 'STREAK RESET • +1 SHATTER' : '+1 HAZARD SHATTERED',
         '#FBBF24'
       );
 

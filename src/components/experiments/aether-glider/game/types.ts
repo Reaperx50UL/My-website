@@ -77,7 +77,14 @@ export interface FloatingPopup {
   scale: number;
 }
 
-export type ParticleShape = 'spark' | 'feather' | 'ring' | 'smoke';
+export type ParticleShape =
+  | 'spark'
+  | 'feather'
+  | 'ring'
+  | 'smoke'
+  | 'gear'
+  | 'streak'
+  | 'prism';
 
 export interface Particle {
   active: boolean;
@@ -93,6 +100,7 @@ export interface Particle {
   shape: ParticleShape;
   rotation: number;
   vRot: number;
+  gravityScale?: number;
 }
 
 export interface DifficultyParams {
@@ -109,6 +117,8 @@ export interface RunStats {
   bestScore: number;
   isNewBest: boolean;
   gatesCleared: number;
+  maxCombo: number;
+  peakComboMultiplier: number;
   flightTimeSec: number;
   peakSpeedMultiplier: number;
   medal: MedalTier;
@@ -133,6 +143,10 @@ export interface SimulationState {
   particleCursor: number;
   score: number;
   gatesClearedCount: number;
+  comboCount: number;
+  maxCombo: number;
+  comboMultiplier: number;
+  peakComboMultiplier: number;
   bestScore: number;
   isNewBest: boolean;
   flightTimeSec: number;
@@ -154,3 +168,4 @@ export interface SimulationState {
   causeOfDefeat: DefeatCause;
   frozenRunStats: RunStats | null;
 }
+

@@ -822,21 +822,22 @@ export class AudioController {
     this.playTrapSound(profile.trapType);
   }
 
-  public playScore(score: number): void {
+  public playScore(score: number, comboMultiplier = 1): void {
     const ctx = this.ensureContext();
     if (!ctx) return;
 
     try {
       const now = ctx.currentTime;
       const scaleNotes = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
-      const baseFreq = scaleNotes[score % scaleNotes.length];
+      const pitchBoost = 1 + Math.max(0, comboMultiplier - 1) * 0.06;
+      const baseFreq = scaleNotes[score % scaleNotes.length] * pitchBoost;
 
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc1.type = 'sine';
-      osc2.type = 'triangle';
+      osc2.type = comboMultiplier >= 3 ? 'sawtooth' : 'triangle';
       osc1.frequency.setValueAtTime(baseFreq, now);
       osc1.frequency.setValueAtTime(baseFreq * 1.25, now + 0.065);
       osc2.frequency.setValueAtTime(baseFreq * 2, now);
@@ -854,6 +855,25 @@ export class AudioController {
       osc2.start(now);
       osc1.stop(now + 0.25);
       osc2.stop(now + 0.25);
+    } catch {
+      // Ignore audio errors
+    }
+  }
+
+  public playComboTierUp(multiplier: number): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const rootShift = 1 + Math.max(0, multiplier - 2) * 0.12;
+      const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51].slice(
+        0,
+        Math.min(5, multiplier + 1)
+      );
+      notes.forEach((freq, idx) => {
+        this.scheduleBellNote(ctx, now + idx * 0.042, freq * rootShift, 0.22, 0.095);
+      });
     } catch {
       // Ignore audio errors
     }

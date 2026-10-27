@@ -17,6 +17,7 @@ import {
 import {
   computeDifficultyParams,
   createInitialState,
+  getComboTierInfo,
   resetForNewRun,
   selectBird,
   selectEnvironment,
@@ -141,6 +142,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
   const [phase, setPhase] = useState<GamePhase>('title');
   const [score, setScore] = useState<number>(0);
+  const [comboCount, setComboCount] = useState<number>(0);
+  const [comboMultiplier, setComboMultiplier] = useState<number>(1);
   const [bestScore, setBestScore] = useState<number>(() => loadBestScore(bestScoreKey));
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
   const [tierLabel, setTierLabel] = useState<string>('Calm Skies');
@@ -263,6 +266,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
       setShowTuningModal(false);
       setScore(0);
+      setComboCount(0);
+      setComboMultiplier(1);
       setBestScore(sim.bestScore);
       setAbilityStatusText('READY');
       setAbilityReady(true);
@@ -289,11 +294,15 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       sim.obstacles = [];
       sim.pendingGameOver = false;
       sim.score = 0;
+      sim.comboCount = 0;
+      sim.comboMultiplier = 1;
       sim.abilityActiveTimer = 0;
       sim.abilityCooldownTimer = 0;
       sim.shieldActive = false;
       setShowTuningModal(false);
       setScore(0);
+      setComboCount(0);
+      setComboMultiplier(1);
       syncPhaseAttr('title');
       audioRef.current?.playClick();
     },
@@ -451,6 +460,11 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         audioRef.current?.playTrapSound(events.trapTriggered);
       }
 
+      if (events.scoredPoint || events.shieldBlocked || events.comboBroken) {
+        setComboCount(sim.comboCount);
+        setComboMultiplier(sim.comboMultiplier);
+      }
+
       if (events.scoredPoint || events.shieldBlocked) {
         setScore(sim.score);
         const diff = computeDifficultyParams(sim.score, cfg);
@@ -467,8 +481,10 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           audioRef.current?.playShieldShatter();
         } else if (events.milestoneReached) {
           audioRef.current?.playMilestone();
-        } else {
-          audioRef.current?.playScore(sim.score);
+        } else if (events.comboTierUp) {
+          audioRef.current?.playComboTierUp(sim.comboMultiplier);
+        } else if (events.scoredPoint) {
+          audioRef.current?.playScore(sim.score, sim.comboMultiplier);
         }
       }
 
@@ -479,6 +495,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           sim.frozenRunStats.bestScore = saved;
         }
         setBestScore(saved);
+        setComboCount(0);
+        setComboMultiplier(1);
         audioRef.current?.setMusicPhase('gameover');
         audioRef.current?.playCollision(sim.causeOfDefeat);
       }
@@ -664,9 +682,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       {/* Screen-reader live region for accessible score announcements */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {phase === 'playing'
-          ? `Flying as ${selectedBird.name} in ${selectedEnv.name}. Trap: ${selectedEnv.trapName}. Score ${score}.`
+          ? `Flying as ${selectedBird.name} in ${selectedEnv.name}. Trap: ${selectedEnv.trapName}. Score ${score}. Combo ${comboMultiplier}x (${comboCount} streak).`
           : phase === 'gameover'
-          ? `Game Over. Final score ${runStats?.score ?? score}. Best score ${bestScore}.`
+          ? `Game Over. Final score ${runStats?.score ?? score}. Max combo ${runStats?.maxCombo ?? 0} (${runStats?.peakComboMultiplier ?? 1}x). Best score ${bestScore}.`
           : `Aether Glider ready. Bird: ${selectedBird.name}. Environment: ${selectedEnv.name} (${selectedEnv.trapName}).`}
       </div>
 
@@ -837,28 +855,75 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             )}
           </div>
 
-          {/* Top-Center Live Score Display during Active Play */}
-          {phase === 'playing' && (
-            <div className="flex flex-col items-center shrink-0">
-              <div
-                data-testid="hud-live-score"
-                className={`${
-                  isCompactHeight ? 'text-3xl leading-none' : 'text-3xl sm:text-6xl leading-none'
-                } font-extrabold tracking-tight text-amber-200 select-none`}
-                style={{
-                  fontFamily: '"Bricolage Grotesque", sans-serif',
-                  fontVariantNumeric: 'tabular-nums',
-                  textShadow:
-                    '0 4px 0 #1C120C, 0 -2px 0 #1C120C, 3px 0 0 #1C120C, -3px 0 0 #1C120C, 0 10px 24px rgba(0,0,0,0.65)',
-                }}
-              >
-                {score}
+          {/* Top-Center Live Score & Combo Multiplier Display during Active Play */}
+          {phase === 'playing' && (() => {
+            const comboTier = getComboTierInfo(comboCount);
+            return (
+              <div className="flex flex-col items-center shrink-0">
+                <div
+                  data-testid="hud-live-score"
+                  className={`${
+                    isCompactHeight ? 'text-3xl leading-none' : 'text-3xl sm:text-6xl leading-none'
+                  } font-extrabold tracking-tight text-amber-200 select-none`}
+                  style={{
+                    fontFamily: '"Bricolage Grotesque", sans-serif',
+                    fontVariantNumeric: 'tabular-nums',
+                    textShadow:
+                      '0 4px 0 #1C120C, 0 -2px 0 #1C120C, 3px 0 0 #1C120C, -3px 0 0 #1C120C, 0 10px 24px rgba(0,0,0,0.65)',
+                  }}
+                >
+                  {score}
+                </div>
+                <span className="text-[9px] sm:text-[10px] font-bold tracking-[0.2em] text-amber-100/90 uppercase">
+                  Score
+                </span>
+
+                {/* Live Combo Multiplier & Dodge Streak Badge */}
+                <div
+                  data-testid="hud-combo-badge"
+                  data-combo-count={comboCount}
+                  data-combo-multiplier={comboMultiplier}
+                  className={`mt-1 flex flex-col items-center rounded-lg px-2 py-0.5 transition-transform ${
+                    comboMultiplier > 1 ? 'scale-105' : 'opacity-90'
+                  }`}
+                  style={{
+                    backgroundColor: 'rgba(18, 13, 28, 0.9)',
+                    border: `1.5px solid ${
+                      comboMultiplier > 1 ? comboTier.colorHex : 'rgba(217, 119, 6, 0.45)'
+                    }`,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+                  }}
+                >
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span
+                      data-testid="hud-combo-multiplier"
+                      className="text-[11px] sm:text-xs font-extrabold"
+                      style={{
+                        fontFamily: '"JetBrains Mono", monospace',
+                        fontVariantNumeric: 'tabular-nums',
+                        color: comboTier.colorHex,
+                      }}
+                    >
+                      {comboMultiplier}x COMBO
+                    </span>
+                    <span className="text-[9px] sm:text-[10px] font-bold text-amber-100/80">
+                      · {comboCount} {comboCount === 1 ? 'DODGE' : 'STREAK'}
+                    </span>
+                  </div>
+                  {/* Tier progress bar */}
+                  <div className="mt-0.5 h-1 w-full rounded-full bg-slate-900/90 overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-200 rounded-full"
+                      style={{
+                        width: `${Math.max(8, Math.round(comboTier.progressToNext * 100))}%`,
+                        backgroundColor: comboTier.colorHex,
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-              <span className="text-[9px] sm:text-[11px] font-bold tracking-[0.2em] text-amber-100/90 uppercase">
-                Gates
-              </span>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Top-Right Compact Utility Icon Buttons */}
           <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 shrink-0">
@@ -1402,8 +1467,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               </div>
             )}
 
-            {/* 3 Tabular Stat Tiles */}
-            <div className={`${isCompactHeight ? 'mt-2' : 'mt-3'} grid grid-cols-3 gap-2`}>
+            {/* 4 Tabular Stat Tiles (Score, Best Run, Max Combo, Flight Time) */}
+            <div className={`${isCompactHeight ? 'mt-2' : 'mt-3'} grid grid-cols-2 sm:grid-cols-4 gap-2`}>
               <div
                 className="flex flex-col justify-between rounded-xl p-2"
                 style={{
@@ -1417,7 +1482,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 <div
                   data-testid="gameover-final-score"
                   className={`mt-0.5 ${
-                    isCompactHeight ? 'text-lg' : 'text-2xl'
+                    isCompactHeight ? 'text-lg' : 'text-xl sm:text-2xl'
                   } font-extrabold text-amber-100`}
                   style={{
                     fontFamily: '"JetBrains Mono", monospace',
@@ -1441,7 +1506,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 <div
                   data-testid="gameover-best-score"
                   className={`mt-0.5 ${
-                    isCompactHeight ? 'text-lg' : 'text-2xl'
+                    isCompactHeight ? 'text-lg' : 'text-xl sm:text-2xl'
                   } font-extrabold text-amber-400`}
                   style={{
                     fontFamily: '"JetBrains Mono", monospace',
@@ -1460,11 +1525,38 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 }}
               >
                 <div className="text-[10px] font-bold uppercase tracking-wider text-amber-300/75 whitespace-nowrap">
+                  Max Combo
+                </div>
+                <div
+                  data-testid="gameover-max-combo"
+                  className={`mt-0.5 ${
+                    isCompactHeight ? 'text-lg' : 'text-xl sm:text-2xl'
+                  } font-extrabold text-emerald-400 whitespace-nowrap`}
+                  style={{
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {runStats?.maxCombo ?? 0}{' '}
+                  <span className="text-xs font-bold text-amber-300">
+                    ({runStats?.peakComboMultiplier ?? 1}x)
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className="flex flex-col justify-between rounded-xl p-2"
+                style={{
+                  backgroundColor: '#120D1D',
+                  border: '1px solid rgba(217, 119, 6, 0.35)',
+                }}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-300/75 whitespace-nowrap">
                   Flight Time
                 </div>
                 <div
                   className={`mt-0.5 ${
-                    isCompactHeight ? 'text-lg' : 'text-2xl'
+                    isCompactHeight ? 'text-lg' : 'text-xl sm:text-2xl'
                   } font-extrabold text-sky-300`}
                   style={{
                     fontFamily: '"JetBrains Mono", monospace',

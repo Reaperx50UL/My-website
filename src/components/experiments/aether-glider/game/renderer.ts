@@ -1657,7 +1657,73 @@ export function renderGameCanvas(
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rotation);
 
-    if (p.shape === 'ring') {
+    if (p.shape === 'gear') {
+      // Miniature Clockwork Brass Cogwheel with 6 teeth & hollow axle
+      const outerR = p.size * 1.15;
+      const bodyR = p.size * 0.78;
+      ctx.fillStyle = p.color;
+      for (let t = 0; t < 6; t++) {
+        ctx.save();
+        ctx.rotate((t * Math.PI) / 3);
+        ctx.fillRect(-p.size * 0.24, -outerR, p.size * 0.48, outerR * 2);
+        ctx.restore();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#78350F';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Specular brass axle ring
+      ctx.fillStyle = '#FEF3C7';
+      ctx.beginPath();
+      ctx.arc(0, 0, p.size * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.shape === 'streak') {
+      // High-speed aerodynamic sky-slipstream wind ribbon
+      const len = p.size * 3.8;
+      const thickness = Math.max(1.4, p.size * 0.36);
+      const streakGrad = ctx.createLinearGradient(-len * 0.6, 0, len * 0.4, 0);
+      streakGrad.addColorStop(0, 'rgba(254, 243, 199, 0)');
+      streakGrad.addColorStop(0.55, p.color);
+      streakGrad.addColorStop(1, '#FFFFFF');
+      ctx.strokeStyle = streakGrad;
+      ctx.lineWidth = thickness;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-len * 0.6, 0);
+      ctx.lineTo(len * 0.4, 0);
+      ctx.stroke();
+    } else if (p.shape === 'prism') {
+      // 4-point aether crystal diamond mote with brass-white core
+      const r = p.size * 1.25;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(r * 0.45, -r * 0.45);
+      ctx.lineTo(r, 0);
+      ctx.lineTo(r * 0.45, r * 0.45);
+      ctx.lineTo(0, r);
+      ctx.lineTo(-r * 0.45, r * 0.45);
+      ctx.lineTo(-r, 0);
+      ctx.lineTo(-r * 0.45, -r * 0.45);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#FEF3C7';
+      ctx.beginPath();
+      ctx.arc(0, 0, p.size * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.shape === 'smoke') {
+      // Expanding pressurized clockwork steam puff
+      const puffR = p.size * (1.1 + (1 - p.alpha) * 1.05);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, puffR, 0, Math.PI * 2);
+      ctx.arc(-puffR * 0.45, puffR * 0.15, puffR * 0.68, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (p.shape === 'ring') {
       ctx.strokeStyle = p.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1666,12 +1732,23 @@ export function renderGameCanvas(
     } else if (p.shape === 'feather') {
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.ellipse(0, 0, p.size * 1.4, p.size * 0.55, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, p.size * 1.45, p.size * 0.55, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = '#FEF3C7';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-p.size * 1.1, 0);
+      ctx.lineTo(p.size * 1.1, 0);
+      ctx.stroke();
     } else {
+      // Glowing brass spark with bright core
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FEF3C7';
+      ctx.beginPath();
+      ctx.arc(0, 0, p.size * 0.42, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
