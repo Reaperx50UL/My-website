@@ -175,7 +175,6 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     )
   );
   const heldKeysRef = useRef<Set<string>>(new Set());
-  const lastTapTimeRef = useRef<number>(0);
 
   const syncPhaseAttr = useCallback((nextPhase: GamePhase) => {
     setPhase(nextPhase);
@@ -262,7 +261,6 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
       resetForNewRun(sim, configRef.current, Date.now());
       heldKeysRef.current.clear();
-      lastTapTimeRef.current = 0;
 
       setShowTuningModal(false);
       setScore(0);
@@ -694,7 +692,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         data-testid="game-canvas"
         aria-label={
           isMobileOrTablet
-            ? 'Aether Glider interactive sky playfield. Tap to flap upward. Double-tap to activate special ability.'
+            ? 'Aether Glider interactive sky playfield. Tap to flap upward. Tap Ability button to activate special ability.'
             : 'Aether Glider interactive sky playfield. Click or press Space to flap upward.'
         }
         onPointerDown={(e) => {
@@ -706,22 +704,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           if (e.button !== 0 && e.pointerType === 'mouse') return;
           e.preventDefault();
           if (phase === 'playing') {
-            if (isMobileOrTablet || e.pointerType === 'touch') {
-              const now = performance.now();
-              const isDoubleTap = now - lastTapTimeRef.current <= 320;
-              if (isDoubleTap) {
-                lastTapTimeRef.current = 0;
-                const triggered = handleTriggerAbility();
-                if (!triggered) {
-                  handlePlayerFlapAction();
-                }
-              } else {
-                lastTapTimeRef.current = now;
-                handlePlayerFlapAction();
-              }
-            } else {
-              handlePlayerFlapAction();
-            }
+            handlePlayerFlapAction();
           } else if (phase === 'title' && !showTuningModal) {
             handleStartOrRestart();
           }
@@ -800,7 +783,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 onClick={handleTriggerAbility}
                 disabled={!abilityReady && !abilityActive}
                 aria-label={`Activate ${selectedBird.abilityName} (${
-                  isMobileOrTablet ? 'Double-Tap' : 'Press E'
+                  isMobileOrTablet ? 'Ability Button' : 'Press E'
                 }). Status: ${abilityStatusText}`}
                 className={`pointer-events-auto flex items-center gap-1.5 sm:gap-2 rounded-xl ${
                   isCompactHeight ? 'px-2 py-1' : 'px-2.5 sm:px-3 py-1.5 sm:py-2'
@@ -832,7 +815,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                       className="text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded bg-amber-950/90 text-amber-300 whitespace-nowrap"
                       style={{ fontFamily: '"JetBrains Mono", monospace' }}
                     >
-                      {isMobileOrTablet ? '2x TAP' : '[E]'}
+                      {isMobileOrTablet ? 'ABILITY' : '[E]'}
                     </span>
                   </div>
                   <div
@@ -1008,9 +991,112 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           </div>
         </div>
 
-        {/* Bottom Safe Margin Control Hint (Active Flight Only) */}
+        {/* Bottom Area: Mobile/Tablet Dedicated Ability Action Button + Control Hint (Active Flight Only) */}
         {phase === 'playing' && (
-          <div className="flex justify-center pb-1 sm:pb-2">
+          <div className="relative flex flex-col items-center justify-end">
+          {/* Dedicated On-Screen Ability Button — Exclusively for Mobile & Tablet View */}
+          {phase === 'playing' && isMobileOrTablet && (
+            <div
+              className={`pointer-events-auto self-end ${
+                isCompactHeight ? 'mb-1 mr-1' : 'mb-2 sm:mb-3 mr-1 sm:mr-2'
+              }`}
+            >
+              <button
+                type="button"
+                tabIndex={-1}
+                data-testid="mobile-ability-button"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleTriggerAbility();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTriggerAbility(e);
+                }}
+                disabled={!abilityReady && !abilityActive}
+                aria-label={`Activate ${selectedBird.abilityName} ability. Status: ${abilityStatusText}`}
+                className={`group flex items-center gap-2.5 rounded-2xl ${
+                  isCompactHeight
+                    ? 'px-3 py-2'
+                    : 'px-3.5 py-2.5 sm:px-4 sm:py-3'
+                } text-left transition-transform active:scale-90 cursor-pointer select-none disabled:opacity-65`}
+                style={{
+                  backgroundColor: abilityActive
+                    ? 'rgba(180, 83, 9, 0.96)'
+                    : abilityReady
+                    ? 'rgba(20, 14, 30, 0.94)'
+                    : 'rgba(15, 12, 24, 0.82)',
+                  border: abilityActive
+                    ? '2.5px solid #FEF3C7'
+                    : abilityReady
+                    ? `2.5px solid ${selectedBird.colors.auraHex}`
+                    : '2px solid #475569',
+                  boxShadow: abilityActive
+                    ? '0 0 22px rgba(251, 191, 36, 0.75), 0 8px 20px rgba(0, 0, 0, 0.6)'
+                    : abilityReady
+                    ? `0 0 18px ${selectedBird.colors.auraHex}55, 0 8px 20px rgba(0, 0, 0, 0.6)`
+                    : '0 6px 16px rgba(0, 0, 0, 0.5)',
+                }}
+              >
+                <div
+                  className={`flex items-center justify-center rounded-xl ${
+                    isCompactHeight ? 'w-9 h-9' : 'w-11 h-11 sm:w-12 sm:h-12'
+                  } shrink-0`}
+                  style={{
+                    backgroundColor: abilityActive
+                      ? 'rgba(254, 243, 199, 0.22)'
+                      : abilityReady
+                      ? 'rgba(245, 158, 11, 0.18)'
+                      : 'rgba(51, 65, 85, 0.35)',
+                    border: abilityActive
+                      ? '1.5px solid #FEF3C7'
+                      : abilityReady
+                      ? `1.5px solid ${selectedBird.colors.auraHex}`
+                      : '1.5px solid #64748B',
+                  }}
+                >
+                  <AbilityIconSvg
+                    birdId={selectedBirdId}
+                    className={isCompactHeight ? 'w-6 h-6' : 'w-7 h-7 sm:w-8 sm:h-8'}
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span
+                    className="text-[9px] sm:text-[10px] font-extrabold tracking-widest uppercase text-amber-300/90 leading-none"
+                    style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                  >
+                    ABILITY
+                  </span>
+                  <span
+                    className={`${
+                      isCompactHeight ? 'text-xs' : 'text-xs sm:text-sm'
+                    } font-extrabold text-amber-50 whitespace-nowrap leading-tight mt-0.5`}
+                  >
+                    {selectedBird.abilityName}
+                  </span>
+                  <span
+                    data-testid="mobile-ability-status"
+                    className="text-[10px] sm:text-[11px] font-bold tracking-wider uppercase whitespace-nowrap leading-tight mt-0.5"
+                    style={{
+                      fontFamily: '"JetBrains Mono", monospace',
+                      fontVariantNumeric: 'tabular-nums',
+                      color: abilityActive
+                        ? '#FEF08A'
+                        : abilityReady
+                        ? '#34D399'
+                        : '#94A3B8',
+                    }}
+                  >
+                    {abilityStatusText}
+                  </span>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Bottom Safe Margin Control Hint */}
+          <div className="flex justify-center pb-0.5">
             <p
               className="text-center text-[10px] sm:text-xs font-medium tracking-wide text-amber-100/95 px-2 py-0.5 whitespace-nowrap"
               style={{
@@ -1018,10 +1104,11 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               }}
             >
               {isMobileOrTablet
-                ? 'Tap Flap · Double-Tap Ability · P Pause · M Mute'
+                ? 'Tap Flap · Ability Button · P Pause · M Mute'
                 : 'Space / Click Flap · E Ability · Q Realm · P Pause · M Mute'}
             </p>
           </div>
+        </div>
         )}
       </div>
 
@@ -1172,7 +1259,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   <div className="text-[11px] font-extrabold text-amber-100 whitespace-nowrap truncate">
                     {selectedBird.name} ·{' '}
                     <span style={{ color: selectedBird.colors.auraHex }}>
-                      {isMobileOrTablet ? '[Double-Tap]' : '[E]'} {selectedBird.abilityName}
+                      {isMobileOrTablet ? '[Ability Button]' : '[E]'} {selectedBird.abilityName}
                     </span>
                   </div>
                   <p className="text-[10px] sm:text-[11px] text-amber-100/80 leading-snug line-clamp-2">
@@ -1274,7 +1361,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 }}
               >
                 {isMobileOrTablet
-                  ? 'Tap Flap · Double-Tap Ability · Q Realm · P Pause · M Mute'
+                  ? 'Tap Flap · Ability Button · Q Realm · P Pause · M Mute'
                   : 'Space / Tap Flap · E Ability · Q Realm · P Pause · M Mute'}
               </p>
             </div>
