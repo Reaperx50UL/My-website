@@ -1,6 +1,13 @@
 import nerdamer from 'nerdamer';
 import { evaluateMathExpression, formatNumber, normalizeMathExpression } from './mathEngine';
 
+/**
+ * Documented tolerance for normalizing tiny floating-point residual noise
+ * to clean '0' in display values (e.g. 2.22044604925e-16 -> 0).
+ * Underlying mathematical calculations remain unaltered.
+ */
+export const ZERO_DISPLAY_TOLERANCE = 1e-14;
+
 export interface DerivativeResult {
   ok: boolean;
   expressionInput: string;
@@ -23,6 +30,8 @@ export interface IndefiniteIntegralResult {
   symbolicRaw?: string;
   symbolicDisplay?: string;
   symbolicWithConstant?: string;
+  isSpecialFunction?: boolean;
+  specialFunctionName?: string;
   explanation?: string;
   error?: string;
 }
@@ -41,6 +50,7 @@ export interface DefiniteIntegralResult {
   numericValue?: number;
   isApproximateOnly: boolean;
   methodLabel: string;
+  toleranceLabel?: string;
   note?: string;
   error?: string;
 }
@@ -51,7 +61,9 @@ export interface DefiniteIntegralResult {
  * and `log10(x)` represents base-10 logarithm.
  */
 export function prepareForNerdamer(input: string, variable = 'x'): string {
-  let expr = normalizeMathExpression(input, { allowVariables: [variable, 'x', 't', 'u', 'n'] });
+  let expr = normalizeMathExpression(input, {
+    allowVariables: [variable, 'x', 't', 'u', 'n', 'y', 'z', 's'],
+  });
   // Convert ln(...) to log(...) for Nerdamer's natural log convention
   expr = expr.replace(/\bln\s*\(/g, 'log(');
   return expr;
@@ -97,6 +109,7 @@ function validateVariable(variable: string): { ok: boolean; clean: string; error
 
 /**
  * 1. Symbolic Differentiation + Optional Point Evaluation (always in Radians).
+ * Supports orders 1 through 10 and normalizes floating-point noise for display.
  */
 export function differentiateExpression(
   expressionInput: string,
@@ -127,13 +140,13 @@ export function differentiateExpression(
   }
   const variable = varCheck.clean;
 
-  if (!Number.isInteger(order) || order < 1 || order > 5) {
+  if (!Number.isInteger(order) || order < 1 || order > 10) {
     return {
       ok: false,
       expressionInput,
       variable,
       order,
-      error: 'Derivative order must be an integer between 1 and 5.',
+      error: 'Derivative order must be a positive integer between 1 and 10.',
     };
   }
 
@@ -195,16 +208,30 @@ export function differentiateExpression(
       }
 
       result.evaluatedAt = evalAtInput.trim();
-      result.evaluatedNumeric = numResult.formatted;
 
-      // Also compute exact symbolic value at point if possible
+      // Compute exact symbolic value at point if possible
+      let exactText = '';
       try {
         const pointCas = prepareForNerdamer(evalAtInput.trim(), variable);
         const exactEntity = diffEntity.subst(variable, pointCas).simplify();
-        const exactText = exactEntity.text({ sort: true }).replace(/\blog\(/g, 'ln(');
+        exactText = exactEntity.text({ sort: true }).replace(/\blog\(/g, 'ln(');
         result.evaluatedExact = exactText;
       } catch {
-        result.evaluatedExact = numResult.formatted;
+        exactText = numResult.formatted ?? '';
+        result.evaluatedExact = numResult.formatted ?? '';
+      }
+
+      // Floating-point noise normalization:
+      // If exact symbolic result resolves to 0 or numeric magnitude is below ZERO_DISPLAY_TOLERANCE,
+      // present clean '0' to avoid distracting representations like 2.22044604925e-16.
+      if (
+        exactText === '0' ||
+        (numResult.value !== undefined && Math.abs(numResult.value) < ZERO_DISPLAY_TOLERANCE)
+      ) {
+        result.evaluatedNumeric = '0';
+        result.evaluatedExact = '0';
+      } else {
+        result.evaluatedNumeric = numResult.formatted ?? '';
       }
     }
 
@@ -222,7 +249,8 @@ export function differentiateExpression(
 }
 
 /**
- * 2. Symbolic Indefinite Integration with + C and honest unsupported detection.
+ * 2. Symbolic Indefinite Integration with + C, special function handling (e.g. erf),
+ * and honest unsupported detection.
  */
 export function integrateIndefinite(
   expressionInput: string,
@@ -263,6 +291,58 @@ export function integrateIndefinite(
       /\bdefint\s*\(/.test(rawText);
 
     if (hasUnevaluatedIntegral) {
+      // Check for special function antiderivatives that CAS can differentiate and verify:
+      // 1. Gauss Error Function for Gaussian forms e^(-x^2), exp(-x^2), or e^(-a*x^2)
+      const specialCandidates: Array<{
+        name: string;
+        candidate: string;
+        explanation: string;
+      }> = [];
+
+      // Unscaled Gaussian e^(-x^2)
+      specialCandidates.push({
+        name: `Gauss error function erf(${variable})`,
+        candidate: `(sqrt(pi)/2)*erf(${variable})`,
+        explanation: `Antiderivative expressed in terms of the Gauss error function erf(${variable}), as this non-elementary integral has no closed-form in terms of elementary functions.`,
+      });
+
+      // Scaled Gaussian e^(-a*x^2)
+      const scaledMatch = casInput.match(/^(?:e\^|-e\^|exp)\s*\(\s*-\s*([0-9.]+)\s*\*?\s*[a-zA-Z]\^2\s*\)$/);
+      if (scaledMatch && scaledMatch[1]) {
+        const aVal = scaledMatch[1];
+        specialCandidates.push({
+          name: `Gauss error function erf(sqrt(${aVal})*${variable})`,
+          candidate: `(sqrt(pi)/(2*sqrt(${aVal})))*erf(sqrt(${aVal})*${variable})`,
+          explanation: `Antiderivative expressed in terms of the Gauss error function erf(u) with scaling a = ${aVal}.`,
+        });
+      }
+
+      // Check each candidate by differentiating back to verify it matches casInput
+      for (const sp of specialCandidates) {
+        try {
+          const deriv = nerdamer.diff(sp.candidate, variable).simplify();
+          const diff = nerdamer(`(${deriv.text()}) - (${casInput})`).simplify().text();
+          if (diff === '0') {
+            const { canonical, compact } = formatSymbolicDisplay(sp.candidate, variable);
+            return {
+              ok: true,
+              supported: true,
+              expressionInput,
+              variable,
+              symbolicRaw: canonical,
+              symbolicDisplay: compact,
+              symbolicWithConstant: `${compact} + C`,
+              isSpecialFunction: true,
+              specialFunctionName: sp.name,
+              explanation: sp.explanation,
+            };
+          }
+        } catch {
+          // Verification failed, proceed to next candidate
+        }
+      }
+
+      // If no special function matches, report clearly and guide user to definite integration
       return {
         ok: true,
         supported: false,
@@ -286,7 +366,6 @@ export function integrateIndefinite(
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // If Nerdamer throws a recursion or integration error on non-elementary integrals, report cleanly
     if (/integral|recursion|maximum call stack|unable to/i.test(msg)) {
       return {
         ok: true,
@@ -356,8 +435,6 @@ export function adaptiveSimpsonIntegrate(
     1,
   ];
 
-  // Slightly nudge exact endpoints inward by 1e-12 only if endpoint itself is singular?
-  // No: if the user integrates 1/x from 0 to 1, it is a divergent improper integral and MUST report a singularity!
   for (const r of probeRatios) {
     const xProbe = left + (right - left) * r;
     let yProbe: number;
@@ -435,7 +512,7 @@ export function adaptiveSimpsonIntegrate(
   }
 
   try {
-    // Subdivide interval into 4 base panels so symmetric functions (like sin(x) on [-pi, pi] or 1/x^2 on [-1, 1]) never fool a single 3-point Simpson check
+    // Subdivide interval into 4 base panels so symmetric functions never fool a single 3-point Simpson check
     const numPanels = 4;
     const panelWidth = (right - left) / numPanels;
     let total = 0;
@@ -462,7 +539,7 @@ export function adaptiveSimpsonIntegrate(
 
     const signedTotal = sign * total;
     // Clamp near-zero floating point residual (e.g. integrating odd function over [-a, a])
-    const finalVal = Math.abs(signedTotal) < 1e-14 ? 0 : signedTotal;
+    const finalVal = Math.abs(signedTotal) < ZERO_DISPLAY_TOLERANCE ? 0 : signedTotal;
     return { ok: true, value: finalVal };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -473,6 +550,7 @@ export function adaptiveSimpsonIntegrate(
 /**
  * 3. Definite Integral over [lowerBound, upperBound].
  * Returns exact symbolic result when available, plus numerical approximation via Adaptive Simpson's Rule.
+ * Evaluates reversed bounds with direction sign inversion and detailed mathematical explanation.
  */
 export function integrateDefinite(
   expressionInput: string,
@@ -602,9 +680,10 @@ export function integrateDefinite(
   }
 
   const numericValue = simpsonRes.value;
-  const numericApprox = formatNumber(numericValue, 12);
+  let numericApprox =
+    Math.abs(numericValue) < ZERO_DISPLAY_TOLERANCE ? '0' : formatNumber(numericValue, 12);
 
-  // Now attempt exact symbolic evaluation via Fundamental Theorem of Calculus: F(b) - F(a)
+  // Attempt exact symbolic evaluation via Fundamental Theorem of Calculus: F(b) - F(a)
   let exactSymbolic: string | null = null;
   try {
     const casInput = prepareForNerdamer(trimmedExpr, variable);
@@ -625,7 +704,10 @@ export function integrateDefinite(
         Math.abs(candidateEval.value - numericValue) <=
           Math.max(1e-6, Math.abs(numericValue) * 1e-5)
       ) {
-        exactSymbolic = candidateText;
+        exactSymbolic = candidateText === '0' ? '0' : candidateText;
+        if (exactSymbolic === '0') {
+          numericApprox = '0';
+        }
       }
     }
   } catch {
@@ -633,6 +715,14 @@ export function integrateDefinite(
   }
 
   const isApproximateOnly = exactSymbolic === null;
+
+  // Build clear, informative multi-line note
+  let note: string | undefined;
+  if (boundsReversed) {
+    note = `Direction Reversal Property: Lower bound a = ${lowerBoundInput.trim()} is greater than upper bound b = ${upperBoundInput.trim()}. Because integration proceeds backwards along the real line, the integral changes sign according to the fundamental property: ∫[a→b] f(x) dx = −∫[b→a] f(x) dx.`;
+  } else if (isApproximateOnly) {
+    note = `Symbolic closed-form evaluation is unavailable for this integral. Displaying high-precision numerical approximation evaluated via Adaptive Simpson’s quadrature (tolerance: 10⁻¹⁰).`;
+  }
 
   return {
     ok: true,
@@ -650,10 +740,7 @@ export function integrateDefinite(
     methodLabel: isApproximateOnly
       ? "Adaptive Simpson's Rule (Numerical Approximation)"
       : "Fundamental Theorem of Calculus + Adaptive Simpson's Rule",
-    note: boundsReversed
-      ? `Lower bound (${lowerBoundInput.trim()}) > upper bound (${upperBoundInput.trim()}); evaluated with reversed orientation: ∫[a→b] f(x)dx = −∫[b→a] f(x)dx.`
-      : isApproximateOnly
-      ? 'Symbolic closed-form evaluation is unavailable for this integral; showing numerical approximation via Adaptive Simpson’s rule.'
-      : undefined,
+    toleranceLabel: "Adaptive Simpson Quadrature (rel-tol: 10⁻¹⁰, max-depth: 18)",
+    note,
   };
 }

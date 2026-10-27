@@ -11,6 +11,7 @@ import {
   Info,
   Play,
   Sparkles,
+  Compass,
 } from 'lucide-react';
 import {
   differentiateExpression,
@@ -42,7 +43,7 @@ const INDEF_PRESETS = [
   { label: 'x²', expr: 'x^2' },
   { label: '2x·cos(x²)', expr: '2*x*cos(x^2)' },
   { label: '1/(1+x²)', expr: '1/(1+x^2)' },
-  { label: 'e^(−x²) (Non-elementary)', expr: 'e^(-x^2)' },
+  { label: 'e^(−x²)', expr: 'e^(-x^2)' },
 ];
 
 const DEF_PRESETS = [
@@ -91,7 +92,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 1600);
     } catch {
-      // Clipboard fallback ignored safely
+      // Clipboard fallback handled safely
     }
   };
 
@@ -208,7 +209,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          <span className="font-semibold leading-tight">Differentiate </span>
+          <span className="font-semibold leading-tight">Differentiate</span>
           <span className="text-[11px] font-mono opacity-85 leading-tight">(d/dx)</span>
         </button>
         <button
@@ -224,7 +225,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          <span className="font-semibold leading-tight">Indefinite </span>
+          <span className="font-semibold leading-tight">Indefinite</span>
           <span className="text-[11px] font-mono opacity-85 leading-tight">(∫ dx)</span>
         </button>
         <button
@@ -240,7 +241,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
           }`}
         >
-          <span className="font-semibold leading-tight">Definite </span>
+          <span className="font-semibold leading-tight">Definite</span>
           <span className="text-[11px] font-mono opacity-85 leading-tight">(∫[a→b])</span>
         </button>
       </div>
@@ -395,6 +396,8 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                 <option value={1}>1st (d/d{variable || 'x'})</option>
                 <option value={2}>2nd (d²/d{variable || 'x'}²)</option>
                 <option value={3}>3rd (d³/d{variable || 'x'}³)</option>
+                <option value={4}>4th (d⁴/d{variable || 'x'}⁴)</option>
+                <option value={5}>5th (d⁵/d{variable || 'x'}⁵)</option>
               </select>
             </div>
           </div>
@@ -438,6 +441,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
           </div>
         )}
 
+        {/* Action Buttons */}
         <div className="flex items-center gap-2 pt-1">
           <button
             type="submit"
@@ -464,12 +468,12 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
           </button>
         </div>
 
-        {/* Results Output Card */}
+        {/* Results Output Section */}
         <div
           aria-live="polite"
-          className="mt-3 p-3.5 bg-[#070A12] border border-slate-800 rounded-lg space-y-2.5"
+          className="mt-3 p-3.5 bg-[#070A12] border border-slate-800 rounded-lg space-y-3"
         >
-          {/* DIFFERENTIATION RESULT */}
+          {/* ================= DIFFERENTIATION RESULT ================= */}
           {activeTab === 'differentiate' && diffResult && (
             <>
               {!diffResult.ok ? (
@@ -479,15 +483,39 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                      <span>
+                  {/* Row 1: Function & Order Overview */}
+                  <div className="p-2.5 rounded-lg bg-[#0B101D] border border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-slate-400">Function:</span>
+                      <code className="font-mono font-semibold text-slate-200">
+                        f({diffResult.variable}) = {diffResult.expressionInput}
+                      </code>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400">Order:</span>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-violet-950/60 text-violet-300 border border-violet-800/40">
+                        {diffResult.order === 1
+                          ? '1st Derivative (d/dx)'
+                          : diffResult.order === 2
+                          ? '2nd Derivative (d²/dx²)'
+                          : diffResult.order === 3
+                          ? '3rd Derivative (d³/dx³)'
+                          : `${diffResult.order}th Derivative`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Symbolic Derivative */}
+                  <div className="p-3 rounded-lg bg-[#0B101D] border border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span className="font-medium text-slate-300">
                         Symbolic Derivative{' '}
-                        <code className="font-mono text-violet-300">
+                        <code className="font-mono text-cyan-400">
                           {diffResult.order === 1
-                            ? `d/d${diffResult.variable}`
-                            : `d^${diffResult.order}/d${diffResult.variable}^${diffResult.order}`}{' '}
-                          [{diffResult.expressionInput}]
+                            ? `f'(${diffResult.variable})`
+                            : diffResult.order === 2
+                            ? `f''(${diffResult.variable})`
+                            : `f^(${diffResult.order})(${diffResult.variable})`}
                         </code>
                       </span>
                       <div className="flex items-center gap-1.5">
@@ -496,20 +524,19 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                           onClick={() =>
                             onPlotExpression(diffResult.symbolicRaw ?? diffResult.symbolicDisplay ?? '')
                           }
-                          className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium px-1.5 py-0.5 rounded hover:bg-slate-800/60 transition-colors"
+                          className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium px-2 py-0.5 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors"
+                          title="Plot this derivative function"
                         >
                           Plot f&apos;(x)
                         </button>
                         <button
                           type="button"
                           onClick={() =>
-                            handleCopy(
-                              diffResult.symbolicDisplay ?? '',
-                              'diff-symbolic'
-                            )
+                            handleCopy(diffResult.symbolicDisplay ?? '', 'diff-symbolic')
                           }
                           aria-label="Copy symbolic derivative"
                           className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors"
+                          title="Copy derivative"
                         >
                           {copiedKey === 'diff-symbolic' ? (
                             <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -519,27 +546,30 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                         </button>
                       </div>
                     </div>
+
                     <div
                       data-testid="calculus-diff-symbolic"
-                      className="text-lg font-mono font-semibold text-cyan-300 break-all"
+                      className="text-lg font-mono font-bold text-cyan-300 break-words whitespace-normal leading-relaxed"
                     >
                       {diffResult.symbolicDisplay}
                     </div>
+
                     {diffResult.symbolicRaw &&
                       diffResult.symbolicRaw !== diffResult.symbolicDisplay && (
-                        <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                        <div className="text-[11px] font-mono text-slate-400 pt-0.5">
                           Parser syntax: {diffResult.symbolicRaw}
                         </div>
                       )}
                   </div>
 
+                  {/* Row 3: Point Evaluation (Normalized) */}
                   {diffResult.evaluatedAt !== undefined &&
                     diffResult.evaluatedNumeric !== undefined && (
-                      <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                      <div className="p-3 rounded-lg bg-[#0B101D] border border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="text-xs text-slate-400">
-                            Evaluated at{' '}
-                            <code className="font-mono text-slate-200">
+                            Point Evaluation at{' '}
+                            <code className="font-mono text-cyan-300">
                               {diffResult.variable} = {diffResult.evaluatedAt}
                             </code>
                           </div>
@@ -549,17 +579,40 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                           >
                             {diffResult.evaluatedNumeric}
                           </div>
+                          {diffResult.evaluatedExact &&
+                            diffResult.evaluatedExact !== diffResult.evaluatedNumeric && (
+                              <div className="text-[11px] font-mono text-violet-300 mt-0.5">
+                                Exact: {diffResult.evaluatedExact}
+                              </div>
+                            )}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onSendResultToCalculator(diffResult.evaluatedNumeric ?? '')
-                          }
-                          className="px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-md transition-colors whitespace-nowrap shrink-0"
-                        >
-                          Use in Calc
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopy(diffResult.evaluatedNumeric ?? '', 'diff-eval')
+                            }
+                            aria-label="Copy evaluated derivative value"
+                            className="p-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors"
+                            title="Copy evaluated value"
+                          >
+                            {copiedKey === 'diff-eval' ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSendResultToCalculator(diffResult.evaluatedNumeric ?? '')
+                            }
+                            className="px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-md transition-colors whitespace-nowrap shrink-0"
+                          >
+                            Use in Calc
+                          </button>
+                        </div>
                       </div>
                     )}
                 </div>
@@ -567,7 +620,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
             </>
           )}
 
-          {/* INDEFINITE INTEGRAL RESULT */}
+          {/* ================= INDEFINITE INTEGRAL RESULT ================= */}
           {activeTab === 'indefinite' && indefResult && (
             <>
               {!indefResult.ok ? (
@@ -576,14 +629,14 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                   <span>{indefResult.error}</span>
                 </div>
               ) : !indefResult.supported ? (
-                <div className="space-y-2">
+                <div className="space-y-2.5 p-3 rounded-lg bg-amber-950/25 border border-amber-500/30">
                   <div className="flex items-start gap-2 text-amber-300 text-xs">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" aria-hidden="true" />
-                    <div>
-                      <p className="font-semibold">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-amber-200">
                         Symbolic Closed-Form Antiderivative Unavailable
                       </p>
-                      <p className="text-slate-300 mt-1 leading-relaxed">
+                      <p className="text-slate-300 text-xs leading-relaxed break-words whitespace-normal">
                         {indefResult.explanation}
                       </p>
                     </div>
@@ -597,41 +650,90 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                   </button>
                 </div>
               ) : (
-                <div>
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <span>
-                      Symbolic Antiderivative{' '}
-                      <code className="font-mono text-violet-300">
-                        ∫ ({indefResult.expressionInput}) d{indefResult.variable}
-                      </code>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCopy(indefResult.symbolicWithConstant ?? '', 'indef-symbolic')
-                      }
-                      aria-label="Copy indefinite integral"
-                      className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors"
+                <div className="space-y-3">
+                  {/* Antiderivative Display Equation */}
+                  <div className="p-3 rounded-lg bg-[#0B101D] border border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span className="font-medium text-slate-300">
+                        Symbolic Antiderivative Equation
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {indefResult.symbolicDisplay && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onPlotExpression(indefResult.symbolicDisplay ?? '')
+                            }
+                            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium px-2 py-0.5 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors"
+                            title="Plot antiderivative F(x)"
+                          >
+                            Plot F(x)
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopy(indefResult.symbolicWithConstant ?? '', 'indef-symbolic')
+                          }
+                          aria-label="Copy indefinite integral"
+                          className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors"
+                          title="Copy equation"
+                        >
+                          {copiedKey === 'indef-symbolic' ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      data-testid="calculus-indef-result"
+                      className="text-lg font-mono font-bold text-cyan-300 break-words whitespace-normal leading-relaxed"
                     >
-                      {copiedKey === 'indef-symbolic' ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
+                      <span className="text-violet-300">
+                        ∫ ({indefResult.expressionInput}) d{indefResult.variable} ={' '}
+                      </span>
+                      <span>{indefResult.symbolicWithConstant}</span>
+                    </div>
+
+                    {indefResult.symbolicDisplay && (
+                      <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-800/70">
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          F({indefResult.variable}) = {indefResult.symbolicDisplay}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSendResultToCalculator(indefResult.symbolicDisplay ?? '')
+                          }
+                          className="px-2 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded transition-colors"
+                        >
+                          Use in Calc
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div
-                    data-testid="calculus-indef-result"
-                    className="text-lg font-mono font-semibold text-cyan-300 break-all"
-                  >
-                    {indefResult.symbolicWithConstant}
-                  </div>
+
+                  {/* Special Function Note Card */}
+                  {indefResult.isSpecialFunction && (
+                    <div className="p-3 rounded-lg bg-cyan-950/20 border border-cyan-500/30 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300">
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" aria-hidden="true" />
+                        <span>Special Function Representation: {indefResult.specialFunctionName}</span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed break-words whitespace-normal">
+                        {indefResult.explanation}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </>
           )}
 
-          {/* DEFINITE INTEGRAL RESULT */}
+          {/* ================= DEFINITE INTEGRAL RESULT ================= */}
           {activeTab === 'definite' && defResult && (
             <>
               {!defResult.ok ? (
@@ -641,76 +743,139 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>
-                      Definite Integral{' '}
-                      <code className="font-mono text-violet-300">
-                        ∫[{defResult.lowerBoundInput} → {defResult.upperBoundInput}] (
-                        {defResult.expressionInput}) d{defResult.variable}
+                  {/* Top Header Card: Integrand & Bounds */}
+                  <div className="p-2.5 rounded-lg bg-[#0B101D] border border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-slate-400">Integral:</span>
+                      <code className="font-mono font-semibold text-violet-300">
+                        ∫[{defResult.lowerBoundInput} → {defResult.upperBoundInput}] ({defResult.expressionInput}) d{defResult.variable}
                       </code>
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-400">
-                      {defResult.isApproximateOnly ? 'Numerical Approximation' : 'Exact + Numeric'}
-                    </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {defResult.boundsReversed && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-amber-950/60 text-amber-300 border border-amber-700/50 flex items-center gap-1">
+                          <Compass className="w-3 h-3" />
+                          <span>Reversed (a &gt; b)</span>
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700/80">
+                        {defResult.isApproximateOnly ? 'Numerical Quadrature' : 'Exact + Numeric'}
+                      </span>
+                    </div>
                   </div>
 
+                  {/* Distinct Grid: Exact Symbolic and Decimal Approximation */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {/* Exact Symbolic Box */}
-                    <div className="p-2.5 rounded-lg bg-[#0B101D] border border-slate-800/90">
-                      <div className="text-[11px] text-slate-400 mb-1">
-                        Exact Symbolic Value
-                      </div>
-                      {defResult.exactSymbolic !== null &&
-                      defResult.exactSymbolic !== undefined ? (
-                        <div
-                          data-testid="calculus-def-exact"
-                          className="text-lg font-mono font-bold text-violet-300 break-all"
-                        >
-                          {defResult.exactSymbolic}
+                    {/* Exact Symbolic Value Card */}
+                    <div className="p-3 rounded-lg bg-[#0B101D] border border-slate-800/90 flex flex-col justify-between space-y-2">
+                      <div>
+                        <div className="text-[11px] font-medium text-slate-400 mb-1">
+                          Exact Symbolic Value
                         </div>
-                      ) : (
-                        <div
-                          data-testid="calculus-def-exact"
-                          className="text-xs font-mono text-amber-300/90"
-                        >
-                          No closed-form symbolic value (Approximate only)
+                        {defResult.exactSymbolic !== null &&
+                        defResult.exactSymbolic !== undefined ? (
+                          <div
+                            data-testid="calculus-def-exact"
+                            className="text-lg font-mono font-bold text-violet-300 break-words whitespace-normal leading-relaxed"
+                          >
+                            {defResult.exactSymbolic}
+                          </div>
+                        ) : (
+                          <div
+                            data-testid="calculus-def-exact"
+                            className="text-xs font-mono text-amber-300/90 leading-relaxed"
+                          >
+                            No closed-form elementary value (Approximate only)
+                          </div>
+                        )}
+                      </div>
+
+                      {defResult.exactSymbolic && (
+                        <div className="flex items-center justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopy(defResult.exactSymbolic ?? '', 'def-exact')
+                            }
+                            aria-label="Copy exact value"
+                            className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors"
+                            title="Copy exact symbolic value"
+                          >
+                            {copiedKey === 'def-exact' ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
                         </div>
                       )}
                     </div>
 
-                    {/* Decimal Approximation Box */}
-                    <div className="p-2.5 rounded-lg bg-[#0B101D] border border-slate-800/90 flex items-center justify-between gap-2">
+                    {/* Decimal Approximation Card */}
+                    <div className="p-3 rounded-lg bg-[#0B101D] border border-slate-800/90 flex flex-col justify-between space-y-2">
                       <div>
-                        <div className="text-[11px] text-slate-400 mb-1">
-                          {defResult.isApproximateOnly
-                            ? 'Approximate (Adaptive Simpson)'
-                            : 'Decimal Approximation'}
+                        <div className="text-[11px] font-medium text-slate-400 mb-1">
+                          Decimal Approximation
                         </div>
                         <div
                           data-testid="calculus-def-numeric"
-                          className="text-lg font-mono font-bold text-cyan-300 tabular-nums"
+                          className="text-lg font-mono font-bold text-cyan-300 tabular-nums break-words whitespace-normal"
                         >
                           {defResult.isApproximateOnly ? '≈ ' : ''}
                           {defResult.numericApprox}
                         </div>
+                        <div className="text-[11px] font-mono text-slate-500 mt-1">
+                          Method: {defResult.methodLabel.includes('Simpson') ? 'Adaptive Simpson' : 'FTC'} · tol: 10⁻¹⁰
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onSendResultToCalculator(defResult.numericApprox ?? '')
-                        }
-                        className="px-2 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded transition-colors whitespace-nowrap shrink-0"
-                      >
-                        Use
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCopy(defResult.numericApprox ?? '', 'def-numeric')
+                          }
+                          aria-label="Copy decimal approximation"
+                          className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors"
+                          title="Copy decimal approximation"
+                        >
+                          {copiedKey === 'def-numeric' ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSendResultToCalculator(defResult.numericApprox ?? '')
+                          }
+                          className="px-2 py-1 text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded transition-colors whitespace-nowrap shrink-0"
+                        >
+                          Use in Calc
+                        </button>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Explanatory Notes & Analysis Section (Readable wrapping section) */}
                   {defResult.note && (
-                    <div className="text-[11px] text-slate-400 flex items-start gap-1.5 pt-1">
-                      <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" aria-hidden="true" />
-                      <span>{defResult.note}</span>
+                    <div className="p-3 rounded-lg bg-[#0B101D]/90 border border-slate-800/80 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                        {defResult.boundsReversed ? (
+                          <Compass className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" aria-hidden="true" />
+                        )}
+                        <span>
+                          {defResult.boundsReversed
+                            ? 'Integration Direction & Sign Analysis'
+                            : 'Numerical Quadrature Properties'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed break-words whitespace-normal">
+                        {defResult.note}
+                      </p>
                     </div>
                   )}
                 </div>
