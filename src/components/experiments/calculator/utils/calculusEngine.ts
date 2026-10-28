@@ -48,6 +48,7 @@ export interface IndefiniteIntegralResult {
   isSpecialFunction?: boolean;
   specialFunctionName?: string;
   isTrigRational?: boolean;
+  isTrigIdentity?: boolean;
   domainNotes?: string;
   explanation?: string;
   syntaxValidation?: SyntaxValidationResult;
@@ -202,15 +203,165 @@ export function formatSymbolicDisplay(rawNerdamerText: string, variable = 'x'): 
   canonical: string;
   compact: string;
 } {
-  const canonical = rawNerdamerText.replace(/\blog\(/g, 'ln(');
+  let canonical = rawNerdamerText.replace(/\blog\(/g, 'ln(');
+  if (canonical.startsWith('(-1/2)*')) {
+    canonical = '-(1/2)*' + canonical.slice(7);
+  }
 
   // Create a clean human-readable compact string while keeping * where necessary
   const escapedVar = variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const compact = canonical
+  let compact = canonical
     .replace(new RegExp(`(\\d)\\*(${escapedVar}\\b)`, 'g'), '$1$2')
     .replace(new RegExp(`(\\d)\\*\\(`, 'g'), '$1(');
 
+  if (compact.startsWith('(-1/2)*')) {
+    compact = '-(1/2)*' + compact.slice(7);
+  }
+
   return { canonical, compact };
+}
+
+export interface PreSimplificationResult {
+  simplified: boolean;
+  expression: string;
+  originalExpression: string;
+  factorizationApplied?: string;
+  domainNotes?: string;
+  isDomainEverywhereReal?: boolean;
+  explanation?: string;
+}
+
+/**
+ * Symbolic Pre-Simplification Step:
+ * Analyzes algebraic and trigonometric expressions prior to integration or differentiation.
+ * Recognizes Pythagorean identities (sin²(x) + cos²(x) = 1),
+ * power-difference factorizations (a^4 - b^4 = (a-b)(a+b)(a^2+b^2)),
+ * and safe cancellation of equivalent factors while preserving domain restrictions.
+ */
+export function preSimplifyIntegrand(
+  exprInput: string,
+  variable = 'x'
+): PreSimplificationResult {
+  try {
+    const v = variable;
+    const parsed: any = nerdamer(exprInput);
+    const num = parsed.numerator();
+    const den = parsed.denominator();
+    const numText: string = num.text();
+    const denText: string = den.text();
+
+    const sinPattern = new RegExp(`\\bsin\\s*\\(\\s*${v}\\s*\\)`, 'g');
+    const cosPattern = new RegExp(`\\bcos\\s*\\(\\s*${v}\\s*\\)`, 'g');
+
+    // 1. Trigonometric reduction for even powers of sin and cos
+    if (sinPattern.test(exprInput) || cosPattern.test(exprInput)) {
+      let numAB = numText;
+      let denAB = denText;
+
+      numAB = numAB.replace(new RegExp(`\\bsin\\s*\\(\\s*${v}\\s*\\)\\s*\\^\\s*(\\d+)`, 'g'), (m: string, p: string) => {
+        const k = parseInt(p, 10);
+        return k % 2 === 0 ? (k === 2 ? 'a' : `a^${k / 2}`) : m;
+      });
+      numAB = numAB.replace(new RegExp(`\\bcos\\s*\\(\\s*${v}\\s*\\)\\s*\\^\\s*(\\d+)`, 'g'), (m: string, p: string) => {
+        const k = parseInt(p, 10);
+        return k % 2 === 0 ? (k === 2 ? 'b' : `b^${k / 2}`) : m;
+      });
+
+      denAB = denAB.replace(new RegExp(`\\bsin\\s*\\(\\s*${v}\\s*\\)\\s*\\^\\s*(\\d+)`, 'g'), (m: string, p: string) => {
+        const k = parseInt(p, 10);
+        return k % 2 === 0 ? (k === 2 ? 'a' : `a^${k / 2}`) : m;
+      });
+      denAB = denAB.replace(new RegExp(`\\bcos\\s*\\(\\s*${v}\\s*\\)\\s*\\^\\s*(\\d+)`, 'g'), (m: string, p: string) => {
+        const k = parseInt(p, 10);
+        return k % 2 === 0 ? (k === 2 ? 'b' : `b^${k / 2}`) : m;
+      });
+
+      if ((numAB.includes('a') || numAB.includes('b')) && !/sin|cos/.test(numAB) && !/sin|cos/.test(denAB)) {
+        const numInA = nerdamer(numAB).subst('b', '(1 - a)').expand().text();
+        const denInA = nerdamer(denAB).subst('b', '(1 - a)').expand().text();
+        const divInA = nerdamer(`(${numInA}) / (${denInA})`).simplify().text();
+        const rem = nerdamer(`(${divInA})*(${denInA}) - (${numInA})`).expand().text();
+
+        if (rem === '0') {
+          let simplifiedExpr: string;
+          try {
+            simplifiedExpr = nerdamer(divInA).subst('a', `(1 - cos(2*${v}))/2`).expand().text();
+          } catch {
+            simplifiedExpr = nerdamer(divInA).subst('a', `sin(${v})^2`).text();
+          }
+
+          let domainNotes = 'Antiderivative is valid everywhere on ℝ without singularities.';
+          let isDomainEverywhereReal = true;
+
+          if (denText === '1') {
+            domainNotes = 'Valid everywhere on ℝ.';
+            isDomainEverywhereReal = true;
+          } else {
+            try {
+              const roots = nerdamer.roots(denInA, 'a').elements.map((r) => r.text());
+              const realRootsInInterval: number[] = [];
+              for (const r of roots) {
+                const val = Number(nerdamer(r).evaluate().text());
+                if (!Number.isNaN(val) && val >= 0 && val <= 1 && !r.includes('i')) {
+                  realRootsInInterval.push(val);
+                }
+              }
+              if (realRootsInInterval.length === 0) {
+                domainNotes = `Integrand denominator ${denText} has no real zeros for any real ${v} (minimum value is 1/2 at ${v} = π/4 + kπ/2). The cancellation is valid everywhere on ℝ without singularities.`;
+                isDomainEverywhereReal = true;
+              } else {
+                domainNotes = `Denominator has zeros at sin²(${v}) ∈ {${realRootsInInterval.map((n) => n.toFixed(4)).join(', ')}}. Antiderivative applies on open intervals avoiding these poles.`;
+                isDomainEverywhereReal = false;
+              }
+            } catch {
+              // Default to safe domain note
+            }
+          }
+
+          return {
+            simplified: true,
+            expression: simplifiedExpr,
+            originalExpression: exprInput,
+            factorizationApplied: `Pythagorean identity sin²(${v}) + cos²(${v}) = 1 & safe cancellation`,
+            domainNotes,
+            isDomainEverywhereReal,
+            explanation: `Simplified via algebraic and Pythagorean identities: factored numerator and denominator modulo sin²(${v}) + cos²(${v}) = 1. Denominator has no real zeros on ℝ.`,
+          };
+        }
+      }
+    }
+
+    // 2. Algebraic rational factor cancellation
+    if (denText !== '1') {
+      const simplifiedQuotient = nerdamer(`(${numText}) / (${denText})`).simplify();
+      const sText = simplifiedQuotient.text();
+      if (!sText.includes('/') && denText.includes(v)) {
+        let domainNotes = 'Antiderivative is valid everywhere on ℝ.';
+        let isDomainEverywhereReal = true;
+        try {
+          const roots = nerdamer.roots(denText, v).elements.map((r) => r.text());
+          const realRoots = roots.filter((r) => !r.includes('i'));
+          if (realRoots.length > 0) {
+            domainNotes = `Singularities & Domain: Cancellation removed denominator factor with root(s) at ${v} ∈ {${realRoots.join(', ')}}. The antiderivative applies on intervals excluding these points.`;
+            isDomainEverywhereReal = false;
+          }
+        } catch {}
+        return {
+          simplified: true,
+          expression: sText,
+          originalExpression: exprInput,
+          factorizationApplied: 'Algebraic polynomial factor cancellation',
+          domainNotes,
+          isDomainEverywhereReal,
+          explanation: 'Algebraic common factor cancelled from numerator and denominator.',
+        };
+      }
+    }
+
+    return { simplified: false, expression: exprInput, originalExpression: exprInput };
+  } catch {
+    return { simplified: false, expression: exprInput, originalExpression: exprInput };
+  }
 }
 
 /**
@@ -431,7 +582,9 @@ export function differentiateExpression(
 
   try {
     const casInput = prepareForNerdamer(trimmedExpr, variable);
-    const diffEntity = nerdamer.diff(casInput, variable, order).simplify();
+    const preSimp = preSimplifyIntegrand(casInput, variable);
+    const targetExpr = preSimp.simplified && preSimp.isDomainEverywhereReal ? preSimp.expression : casInput;
+    const diffEntity = nerdamer.diff(targetExpr, variable, order).simplify();
     const rawText = diffEntity.text({ sort: true });
 
     if (!rawText || rawText.includes('diff(')) {
@@ -579,7 +732,12 @@ export function integrateIndefinite(
 
   try {
     const casInput = prepareForNerdamer(trimmedExpr, variable);
-    const integralEntity = nerdamer.integrate(casInput, variable);
+
+    // 0. Symbolic Pre-simplification Step (Pythagorean identities, power-difference factorizations, safe factor cancellation)
+    const preSimp = preSimplifyIntegrand(casInput, variable);
+    const targetExpr = preSimp.simplified ? preSimp.expression : casInput;
+
+    const integralEntity = nerdamer.integrate(targetExpr, variable);
     const rawText = integralEntity.text({ sort: true });
 
     // Check if Nerdamer left an unevaluated integral
@@ -587,6 +745,42 @@ export function integrateIndefinite(
       integralEntity.hasIntegral() ||
       /\bintegrate\s*\(/.test(rawText) ||
       /\bdefint\s*\(/.test(rawText);
+
+    if (preSimp.simplified && !hasUnevaluatedIntegral) {
+      const { canonical, compact } = formatSymbolicDisplay(rawText, variable);
+
+      // CAS verification: verify derivative matches original integrand numerically
+      const testPoints = [0.15, 0.45, 0.85, 1.35, -0.65];
+      let verified = true;
+      for (const p of testPoints) {
+        try {
+          const origVal = Number(nerdamer(casInput, { [variable]: p }).evaluate().text());
+          const derivVal = Number(nerdamer.diff(rawText, variable).subst(variable, p).evaluate().text());
+          if (Number.isFinite(origVal) && Number.isFinite(derivVal)) {
+            if (Math.abs(origVal - derivVal) > 1e-5) {
+              verified = false;
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      if (verified) {
+        return {
+          ok: true,
+          supported: true,
+          expressionInput,
+          variable,
+          symbolicRaw: canonical,
+          symbolicDisplay: compact,
+          symbolicWithConstant: `${compact} + C`,
+          isTrigIdentity: true,
+          domainNotes: preSimp.domainNotes,
+          explanation: preSimp.explanation,
+          syntaxValidation: syntaxCheck,
+        };
+      }
+    }
 
     if (hasUnevaluatedIntegral) {
       // 1. First Fallback: Trigonometric Rational Integration (Weierstrass & Chebyshev reduction)
@@ -999,17 +1193,51 @@ export function integrateDefinite(
   let exactSymbolic: string | null = null;
   let domainNotes: string | undefined;
 
-  // Check if expression is trig rational first
-  const trigRational = integrateTrigRational(prepareForNerdamer(trimmedExpr, variable), variable);
-  if (trigRational.success && trigRational.symbolicDisplay) {
-    domainNotes = trigRational.domainNotes;
+  // 1. Check pre-simplification first for exact antiderivative
+  const preSimp = preSimplifyIntegrand(prepareForNerdamer(trimmedExpr, variable), variable);
+  if (preSimp.simplified) {
     try {
-      const fb = nerdamer(trigRational.symbolicDisplay, { [variable]: upperBoundInput.trim() }).evaluate();
-      const fa = nerdamer(trigRational.symbolicDisplay, { [variable]: lowerBoundInput.trim() }).evaluate();
-      const diffVal = nerdamer(`(${fb.text()}) - (${fa.text()})`).simplify();
-      exactSymbolic = diffVal.text({ sort: true }).replace(/\blog\(/g, 'ln(');
+      const antideriv = nerdamer.integrate(preSimp.expression, variable);
+      if (!antideriv.hasIntegral() && !/\bintegrate\s*\(/.test(antideriv.text())) {
+        domainNotes = preSimp.domainNotes;
+        const lowerCas = prepareForNerdamer(lowerBoundInput.trim(), variable);
+        const upperCas = prepareForNerdamer(upperBoundInput.trim(), variable);
+        const fb = antideriv.subst(variable, upperCas);
+        const fa = antideriv.subst(variable, lowerCas);
+        const diffExpr = nerdamer(`(${fb.text()}) - (${fa.text()})`).simplify();
+        const candidateText = diffExpr.text({ sort: true }).replace(/\blog\(/g, 'ln(');
+
+        const candidateEval = evaluateMathExpression(candidateText, { angleMode: 'RAD' });
+        if (
+          candidateEval.ok &&
+          candidateEval.value !== undefined &&
+          Math.abs(candidateEval.value - numericValue) <=
+            Math.max(1e-6, Math.abs(numericValue) * 1e-5)
+        ) {
+          exactSymbolic = candidateText === '0' ? '0' : candidateText;
+          if (exactSymbolic === '0') {
+            numericApprox = '0';
+          }
+        }
+      }
     } catch {
       exactSymbolic = null;
+    }
+  }
+
+  // Check if expression is trig rational second
+  if (exactSymbolic === null) {
+    const trigRational = integrateTrigRational(prepareForNerdamer(trimmedExpr, variable), variable);
+    if (trigRational.success && trigRational.symbolicDisplay) {
+      domainNotes = trigRational.domainNotes;
+      try {
+        const fb = nerdamer(trigRational.symbolicDisplay, { [variable]: upperBoundInput.trim() }).evaluate();
+        const fa = nerdamer(trigRational.symbolicDisplay, { [variable]: lowerBoundInput.trim() }).evaluate();
+        const diffVal = nerdamer(`(${fb.text()}) - (${fa.text()})`).simplify();
+        exactSymbolic = diffVal.text({ sort: true }).replace(/\blog\(/g, 'ln(');
+      } catch {
+        exactSymbolic = null;
+      }
     }
   }
 

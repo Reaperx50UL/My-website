@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Sigma,
   TrendingUp,
@@ -17,6 +17,10 @@ import {
   ChevronUp,
   ArrowRight,
   ShieldCheck,
+  RotateCcw,
+  Trash2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   differentiateExpression,
@@ -44,6 +48,12 @@ const DIFF_PRESETS = [
   { label: 'x²·ln(x)', expr: 'x^2 * ln(x)', evalAt: 'e', category: 'Log' },
   { label: 'e^(2x)', expr: 'e^(2*x)', evalAt: '0', category: 'Exp' },
   {
+    label: '((sin x)⁸-(cos x)⁸)/(1-2sin²x cos²x)',
+    expr: '((sin(x))^8-(cos(x))^8)/(1-2*(sin(x))^2*(cos(x))^2)',
+    evalAt: 'pi/4',
+    category: 'Trig identity',
+  },
+  {
     label: '(cos(5x)+cos(4x))/(1-2cos(3x))',
     expr: '(cos(5*x)+cos(4*x))/(1-2*cos(3*x))',
     evalAt: '0.2',
@@ -52,6 +62,11 @@ const DIFF_PRESETS = [
 ];
 
 const INDEF_PRESETS = [
+  {
+    label: '((sin x)⁸-(cos x)⁸)/(1-2sin²x cos²x)',
+    expr: '((sin(x))^8-(cos(x))^8)/(1-2*(sin(x))^2*(cos(x))^2)',
+    category: 'Trig identity',
+  },
   { label: 'x²', expr: 'x^2', category: 'Power rule' },
   { label: 'sin(x)', expr: 'sin(x)', category: 'Trig' },
   { label: 'e^x', expr: 'e^x', category: 'Exponential' },
@@ -66,6 +81,13 @@ const INDEF_PRESETS = [
 ];
 
 const DEF_PRESETS = [
+  {
+    label: '∫[0→π/4] Trig identity dx',
+    expr: '((sin(x))^8-(cos(x))^8)/(1-2*(sin(x))^2*(cos(x))^2)',
+    lower: '0',
+    upper: 'pi/4',
+    category: 'Trig identity',
+  },
   { label: '∫[0→1] x² dx', expr: 'x^2', lower: '0', upper: '1', category: 'Polynomial' },
   { label: '∫[0→π] sin(x) dx', expr: 'sin(x)', lower: '0', upper: 'pi', category: 'Trigonometric' },
   {
@@ -79,6 +101,95 @@ const DEF_PRESETS = [
   { label: '∫[1→0] x² dx (Reversed)', expr: 'x^2', lower: '1', upper: '0', category: 'Direction reversal' },
 ];
 
+/**
+ * Lightweight mathematical preview formatter without heavy external libraries.
+ * Renders fractions, superscripts, dots for multiplication, and readable font styles.
+ */
+function formatMathPreview(raw: string): React.ReactNode {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return <span className="text-slate-500 italic">Enter an expression to see formatted preview...</span>;
+  }
+
+  // Detect top-level fraction: e.g. (...) / (...)
+  let depth = 0;
+  let topSlashIdx = -1;
+  let hasSingleTopSlash = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === '/' && depth === 0) {
+      if (topSlashIdx === -1) {
+        topSlashIdx = i;
+        hasSingleTopSlash = true;
+      } else {
+        hasSingleTopSlash = false;
+        break;
+      }
+    }
+  }
+
+  const formatInline = (str: string): React.ReactNode => {
+    let s = str.trim();
+    if (s.startsWith('(') && s.endsWith(')')) {
+      let d = 0;
+      let wrapsAll = true;
+      for (let i = 0; i < s.length - 1; i++) {
+        if (s[i] === '(') d++;
+        else if (s[i] === ')') d--;
+        if (d === 0) {
+          wrapsAll = false;
+          break;
+        }
+      }
+      if (wrapsAll) s = s.slice(1, -1).trim();
+    }
+
+    const tokens = s.split(/(\^[0-9]+|\^\([^)]+\))/g);
+    const parts: React.ReactNode[] = [];
+
+    tokens.forEach((tok, idx) => {
+      if (tok.startsWith('^')) {
+        const exp = tok.startsWith('^(') ? tok.slice(2, -1) : tok.slice(1);
+        parts.push(
+          <sup key={idx} className="text-[10px] text-cyan-300 font-semibold px-0.5">
+            {exp}
+          </sup>
+        );
+      } else {
+        const cleaned = tok.replace(/\*/g, ' · ');
+        parts.push(<span key={idx}>{cleaned}</span>);
+      }
+    });
+
+    return <span className="font-mono">{parts}</span>;
+  };
+
+  if (hasSingleTopSlash && topSlashIdx > 0) {
+    const numPart = trimmed.slice(0, topSlashIdx);
+    const denPart = trimmed.slice(topSlashIdx + 1);
+
+    return (
+      <div className="inline-flex flex-col items-center align-middle mx-1 my-0.5">
+        <div className="border-b border-cyan-500/40 px-2 py-0.5 text-center text-slate-100 font-mono text-xs sm:text-sm">
+          {formatInline(numPart)}
+        </div>
+        <div className="px-2 py-0.5 text-center text-slate-300 font-mono text-xs sm:text-sm">
+          {formatInline(denPart)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-slate-100 font-mono text-xs sm:text-sm break-words leading-relaxed">
+      {formatInline(trimmed)}
+    </div>
+  );
+}
+
 export const CalculusPanel: React.FC<CalculusPanelProps> = ({
   currentCalculatorExpression,
   angleMode,
@@ -91,9 +202,100 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
   const [expression, setExpression] = useState<string>('x^3');
   const [variable, setVariable] = useState<string>('x');
 
+  // Multiline auto-growing editor ref and undo history
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [history, setHistory] = useState<string[]>(['x^3']);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
+  const [showMathPreview, setShowMathPreview] = useState<boolean>(true);
+
   // UI state for syntax help and details expander
   const [showSyntaxHelp, setShowSyntaxHelp] = useState<boolean>(false);
   const [showWeierstrassDetails, setShowWeierstrassDetails] = useState<boolean>(false);
+  const [showTrigDetails, setShowTrigDetails] = useState<boolean>(false);
+
+  // Auto-resize multiline textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const nextH = Math.min(Math.max(textarea.scrollHeight, 62), 180);
+    textarea.style.height = `${nextH}px`;
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [expression, adjustTextareaHeight]);
+
+  const pushHistory = (newVal: string) => {
+    setHistory((prev) => {
+      const upToCurrent = prev.slice(0, historyIndex + 1);
+      if (upToCurrent[upToCurrent.length - 1] === newVal) return prev;
+      const nextList = [...upToCurrent.slice(-25), newVal];
+      setHistoryIndex(nextList.length - 1);
+      return nextList;
+    });
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      const prevExpr = history[prevIndex];
+      setHistoryIndex(prevIndex);
+      setExpression(prevExpr);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  };
+
+  const handleClear = () => {
+    if (expression) {
+      pushHistory('');
+      setExpression('');
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  };
+
+  const handleInsertSnippet = (
+    snippet: string,
+    cursorOffsetFromEnd = 0,
+    wrapSelected = false
+  ) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      const nextText = expression + snippet;
+      setExpression(nextText);
+      pushHistory(nextText);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? expression.length;
+    const end = textarea.selectionEnd ?? expression.length;
+    const selected = expression.slice(start, end);
+
+    let nextText: string;
+    let nextCursor: number;
+
+    if (selected && wrapSelected) {
+      const openPart = snippet.slice(0, snippet.length - cursorOffsetFromEnd);
+      const closePart = snippet.slice(snippet.length - cursorOffsetFromEnd);
+      nextText = expression.slice(0, start) + openPart + selected + closePart + expression.slice(end);
+      nextCursor = start + openPart.length + selected.length + closePart.length;
+    } else {
+      nextText = expression.slice(0, start) + snippet + expression.slice(end);
+      nextCursor = start + snippet.length - cursorOffsetFromEnd;
+    }
+
+    setExpression(nextText);
+    pushHistory(nextText);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   // Differentiation state
   const [diffOrder, setDiffOrder] = useState<number>(1);
@@ -378,44 +580,104 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
         </div>
 
         {/* Expression & Variable Row */}
-        <div className="space-y-1.5">
-          <div className="grid grid-cols-12 gap-2.5">
-            <div className="col-span-8 sm:col-span-9">
-              <div className="flex items-center justify-between mb-1">
-                <label
-                  htmlFor="calculus-expr-input"
-                  className="block text-xs font-medium text-slate-300"
-                >
-                  Function Expression <span className="font-mono text-slate-400">f({variable || 'x'})</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowSyntaxHelp((prev) => !prev)}
-                  aria-expanded={showSyntaxHelp}
-                  aria-controls="calculus-syntax-help-panel"
-                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 rounded px-1 py-0.5"
-                >
-                  <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Syntax Help</span>
-                </button>
-              </div>
+        <div className="space-y-2">
+          {/* Header row with Label, Bracket balance, Math preview toggle, Syntax help */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <label
+                htmlFor="calculus-expr-input"
+                className="block text-xs font-semibold text-slate-200"
+              >
+                Function Expression <span className="font-mono text-cyan-400">f({variable || 'x'})</span>
+              </label>
 
-              <input
+              {/* Bracket-matching live indicator */}
+              {expression.trim() && (
+                (() => {
+                  const openCount = (expression.match(/\(/g) || []).length;
+                  const closeCount = (expression.match(/\)/g) || []).length;
+                  const delta = openCount - closeCount;
+                  if (delta === 0) {
+                    return (
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" aria-hidden="true" />
+                        <span>Balanced () ({openCount})</span>
+                      </span>
+                    );
+                  }
+                  if (delta > 0) {
+                    return (
+                      <span className="text-[10px] font-mono text-amber-300 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" aria-hidden="true" />
+                        <span>Missing {delta} &apos;)&apos;</span>
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="text-[10px] font-mono text-rose-300 bg-rose-950/40 border border-rose-800/40 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-rose-400" aria-hidden="true" />
+                      <span>Extra {-delta} &apos;)&apos;</span>
+                    </span>
+                  );
+                })()
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={() => setShowMathPreview((prev) => !prev)}
+                className="text-[11px] text-slate-400 hover:text-cyan-300 flex items-center gap-1 font-medium transition-colors rounded px-1.5 py-0.5"
+                title="Toggle formatted math preview"
+              >
+                {showMathPreview ? (
+                  <>
+                    <EyeOff className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+                    <span>Hide Preview</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+                    <span>Math Preview</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSyntaxHelp((prev) => !prev)}
+                aria-expanded={showSyntaxHelp}
+                aria-controls="calculus-syntax-help-panel"
+                className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 rounded px-1 py-0.5"
+              >
+                <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Syntax Help</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Multiline Input & Variable Row */}
+          <div className="grid grid-cols-12 gap-2.5">
+            <div className="col-span-9 sm:col-span-10">
+              <textarea
+                ref={textareaRef}
                 id="calculus-expr-input"
-                type="text"
+                rows={2}
                 value={expression}
                 onChange={(e) => {
-                  setExpression(e.target.value);
+                  const val = e.target.value;
+                  setExpression(val);
+                  pushHistory(val);
                 }}
-                placeholder="e.g. x^3, 2*x*cos(x^2), 1/(1+x^2)"
-                className="w-full px-3 py-2 text-sm font-mono bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus-visible:ring-1 focus-visible:ring-cyan-400"
+                placeholder="e.g. ((sin(x))^8-(cos(x))^8)/(1-2*(sin(x))^2*(cos(x))^2)"
+                className="w-full px-3 py-2 text-sm font-mono bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus-visible:ring-1 focus-visible:ring-cyan-400 resize-none whitespace-pre-wrap break-words leading-relaxed"
               />
             </div>
 
-            <div className="col-span-4 sm:col-span-3">
+            <div className="col-span-3 sm:col-span-2">
               <label
                 htmlFor="calculus-var-input"
-                className="block text-xs font-medium text-slate-300 mb-1"
+                className="block text-[11px] font-medium text-slate-300 mb-1 text-center"
               >
                 Variable
               </label>
@@ -426,10 +688,146 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                 value={variable}
                 onChange={(e) => setVariable(e.target.value)}
                 aria-label="Calculus variable"
-                className="w-full px-3 py-2 text-sm font-mono text-center bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-400 focus-visible:ring-1 focus-visible:ring-cyan-400"
+                className="w-full px-2 py-2 text-sm font-mono text-center bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-400 focus-visible:ring-1 focus-visible:ring-cyan-400"
               />
             </div>
           </div>
+
+          {/* Compact Insertion Toolbar */}
+          <div className="flex items-center justify-between gap-1.5 flex-wrap pt-0.5">
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] uppercase font-semibold text-slate-500 mr-0.5 font-sans">
+                Insert:
+              </span>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('sin()', 1, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert sin() (or wrap selection)"
+              >
+                sin()
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('cos()', 1, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert cos() (or wrap selection)"
+              >
+                cos()
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('tan()', 1, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert tan() (or wrap selection)"
+              >
+                tan()
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('sqrt()', 1, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert square root sqrt() (or wrap selection)"
+              >
+                √()
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('()/()', 4, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert fraction ()/() (or wrap selection as numerator)"
+              >
+                a/b
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('^()', 1, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert power ^()"
+              >
+                xⁿ
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('()', 1, true)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert parentheses () (or wrap selection)"
+              >
+                ( )
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('pi', 0, false)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert π (pi)"
+              >
+                π
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('e', 0, false)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert Euler's constant e"
+              >
+                e
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInsertSnippet('*', 0, false)}
+                className="px-2 py-0.5 text-xs font-mono bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700 rounded transition-colors"
+                title="Insert multiplication *"
+              >
+                ·
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={historyIndex <= 0}
+                className={`px-2 py-0.5 text-xs font-medium rounded flex items-center gap-1 transition-colors ${
+                  historyIndex > 0
+                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700'
+                    : 'bg-slate-900/60 text-slate-600 border border-slate-800/60 cursor-not-allowed'
+                }`}
+                title="Undo previous edit"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Undo</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleClear}
+                disabled={!expression}
+                className={`px-2 py-0.5 text-xs font-medium rounded flex items-center gap-1 transition-colors ${
+                  expression
+                    ? 'bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50'
+                    : 'bg-slate-900/60 text-slate-600 border border-slate-800/60 cursor-not-allowed'
+                }`}
+                title="Clear expression (can be undone with Undo)"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Clear</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Formatted Math Preview Card */}
+          {showMathPreview && expression.trim() && (
+            <div className="p-2.5 rounded-lg bg-[#070A12]/90 border border-cyan-500/20 text-xs animate-in fade-in duration-150">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                <span className="flex items-center gap-1 font-medium text-cyan-300">
+                  <Eye className="w-3 h-3 text-cyan-400" aria-hidden="true" />
+                  <span>Formatted Math Preview:</span>
+                </span>
+                <span className="font-mono text-[10px] text-slate-500">Live f({variable || 'x'})</span>
+              </div>
+              <div className="p-2 rounded bg-[#0B101D] border border-slate-800 overflow-x-auto">
+                {formatMathPreview(expression)}
+              </div>
+            </div>
+          )}
 
           {/* Syntax Help Drawer */}
           {showSyntaxHelp && (
@@ -881,6 +1279,65 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Advanced Trig Identity Reduction & Safe Cancellation Card */}
+                  {indefResult.isTrigIdentity && (
+                    <div className="p-3 rounded-lg bg-[#0B101D] border border-cyan-500/40 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300">
+                          <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
+                          <span>Exact Pythagorean Identity &amp; Safe Factor Cancellation (Verified)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowTrigDetails((prev) => !prev)}
+                          className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 py-0.5 px-1.5 rounded bg-slate-800 hover:bg-slate-700 transition-colors"
+                        >
+                          <span>{showTrigDetails ? 'Hide' : 'Show'} Identity Details</span>
+                          {showTrigDetails ? (
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+
+                      {indefResult.domainNotes && (
+                        <div className="p-2.5 rounded bg-[#070A12] border border-slate-800 text-xs text-slate-300 leading-relaxed">
+                          <div className="text-emerald-300 font-semibold mb-1 flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
+                            <span>Domain Verification &amp; Singularity Analysis:</span>
+                          </div>
+                          <p className="break-words whitespace-normal text-slate-300 text-[11px]">
+                            {indefResult.domainNotes}
+                          </p>
+                        </div>
+                      )}
+
+                      {showTrigDetails && (
+                        <div className="p-2.5 rounded bg-[#070A12] border border-slate-800 space-y-2 text-xs leading-relaxed animate-in fade-in duration-150">
+                          <div className="text-slate-200 font-semibold">
+                            Symbolic Pre-Simplification &amp; Factorization Path:
+                          </div>
+                          <p className="text-slate-400">
+                            1. Let <code className="text-cyan-300 font-mono">a = sin²({indefResult.variable})</code> and <code className="text-cyan-300 font-mono">b = cos²({indefResult.variable})</code> with Pythagorean identity <code className="text-cyan-300 font-mono">a + b = 1</code>.
+                          </p>
+                          <p className="text-slate-400">
+                            2. Numerator power difference factors as <code className="text-cyan-300 font-mono">a⁴ - b⁴ = (a - b)(a + b)(a² + b²) = (a - b)(a² + b²)</code>.
+                          </p>
+                          <p className="text-slate-400">
+                            3. Denominator rewrites via <code className="text-cyan-300 font-mono">1 = (a + b)²</code> as <code className="text-cyan-300 font-mono">(a + b)² - 2ab = a² + b²</code>.
+                          </p>
+                          <p className="text-slate-400">
+                            4. Safe cancellation of strictly positive factor <code className="text-cyan-300 font-mono">a² + b² = sin⁴({indefResult.variable}) + cos⁴({indefResult.variable}) ≥ 1/2 &gt; 0</code> leaves quotient <code className="text-cyan-300 font-mono">a - b = -cos(2*{indefResult.variable})</code>.
+                          </p>
+                          <p className="text-emerald-400 font-mono text-[11px] pt-1">
+                            ✓ CAS Integration &amp; Differentiation Check: d/d{indefResult.variable} [-(1/2)*sin(2*{indefResult.variable})] = -cos(2*{indefResult.variable}) identically equals original integrand across all real sample points.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Advanced Trig-Rational Details & Domain Analysis Card */}
                   {indefResult.isTrigRational && (

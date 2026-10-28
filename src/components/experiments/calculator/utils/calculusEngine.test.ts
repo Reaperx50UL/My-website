@@ -273,6 +273,105 @@ assert(
   det3x3
 );
 
+// ==========================================
+// 6. REPORTED TRIG IDENTITY INTEGRAL & DOMAIN
+// ==========================================
+console.log('\n-- 6. Reported Trig Identity Integral & Domain Verification --');
+const reportedExpr = '((sin(x))^8-(cos(x))^8)/(1-2*(sin(x))^2*(cos(x))^2)';
+const reportedIndef = integrateIndefinite(reportedExpr, 'x');
+
+assert(
+  reportedIndef.ok && reportedIndef.supported,
+  'Reported integral successfully supported via pre-simplification',
+  reportedIndef
+);
+
+assert(
+  reportedIndef.symbolicWithConstant === '-(1/2)*sin(2*x) + C' ||
+    reportedIndef.symbolicWithConstant === '-(1/2)*sin(2x) + C',
+  'Antiderivative equals -(1/2)*sin(2*x) + C',
+  reportedIndef.symbolicWithConstant
+);
+
+assert(
+  reportedIndef.isTrigIdentity === true,
+  'Identified as trigonometric identity reduction',
+  reportedIndef
+);
+
+assert(
+  reportedIndef.domainNotes?.includes('no real zeros') &&
+    reportedIndef.domainNotes?.includes('1/2'),
+  'Domain note proves denominator 1-2sin²(x)cos²(x) has no real zeros (minimum 1/2)',
+  reportedIndef.domainNotes
+);
+
+// Differentiating the returned antiderivative simplifies to original integrand
+const returnedAntideriv = '-(1/2)*sin(2*x)';
+const diffAntideriv = nerdamer.diff(returnedAntideriv, 'x').simplify().text();
+assert(
+  diffAntideriv === '-cos(2*x)',
+  'Derivative of -(1/2)*sin(2*x) is -cos(2*x)',
+  diffAntideriv
+);
+
+// Algebraic equivalence of -cos(2x) and the reported integrand:
+// Factorization: a^4 - b^4 = (a - b)*(a + b)*(a^2 + b^2)
+// Since a + b = sin^2(x) + cos^2(x) = 1, this equals (a - b)*(a^2 + b^2).
+// Denominator 1 - 2ab = (a + b)^2 - 2ab = a^2 + b^2.
+// Cancellation yields a - b = sin^2(x) - cos^2(x) = -cos(2x).
+const factorCheck = nerdamer('(a - b)*(a + b)*(a^2 + b^2) - (a^4 - b^4)').expand().text();
+assert(
+  factorCheck === '0',
+  'Algebraic verification: (a - b)*(a + b)*(a^2 + b^2) identically equals a^4 - b^4',
+  factorCheck
+);
+const denomCheck = nerdamer('(a + b)^2 - 2*a*b - (a^2 + b^2)').expand().text();
+assert(
+  denomCheck === '0',
+  'Algebraic verification: (a + b)^2 - 2ab identically equals a^2 + b^2 (equals 1 - 2ab when a+b=1)',
+  denomCheck
+);
+
+// Numerical derivative checks at multiple real sample points
+const samplePoints = [0, 0.2, 0.5, 1.0, 1.5, 2.3, -0.7, Math.PI / 4, Math.PI / 6];
+let allSamplePointsMatch = true;
+for (const p of samplePoints) {
+  const sinP = Math.sin(p);
+  const cosP = Math.cos(p);
+  const origVal = (Math.pow(sinP, 8) - Math.pow(cosP, 8)) / (1 - 2 * Math.pow(sinP, 2) * Math.pow(cosP, 2));
+  const derivVal = -Math.cos(2 * p);
+  if (Math.abs(origVal - derivVal) > 1e-12) {
+    allSamplePointsMatch = false;
+    console.error(`Sample point mismatch at p=${p}: orig=${origVal}, deriv=${derivVal}`);
+  }
+}
+assert(
+  allSamplePointsMatch,
+  'Numerical derivative matches original integrand across all real sample points (< 1e-12)',
+  samplePoints
+);
+
+// Definite integral of reported expression on [0, pi/4]
+const defReported = integrateDefinite(reportedExpr, 'x', '0', 'pi/4');
+assert(
+  defReported.ok &&
+    defReported.exactSymbolic === '-1/2' &&
+    Math.abs((defReported.numericValue ?? 0) - (-0.5)) < 1e-8,
+  'Definite integral on [0, π/4] equals exact -1/2 (numeric -0.5)',
+  { exact: defReported.exactSymbolic, numeric: defReported.numericValue }
+);
+
+// Algebraic removable singularity check: (x^2 - 1)/(x - 1)
+const algRemovable = integrateIndefinite('(x^2 - 1)/(x - 1)', 'x');
+assert(
+  algRemovable.ok &&
+    algRemovable.symbolicDisplay?.includes('x') &&
+    algRemovable.domainNotes?.includes('root(s) at x ∈ {1}'),
+  'Algebraic cancellation preserves domain restriction note for x ∈ {1}',
+  algRemovable.domainNotes
+);
+
 console.log('\n========================================');
 console.log(`RESULTS: ${passedTests} / ${totalTests} passed`);
 if (passedTests === totalTests) {
