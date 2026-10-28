@@ -124,7 +124,7 @@ export function normalizeMathExpression(
   // Number followed by 'e' when 'e' is NOT followed by [+-]?\d (so 2e -> 2*e, 2e^x -> 2*e^x, while 2e-4 stays 2e-4)
   expr = expr.replace(/(\d+(?:\.\d+)?)\s*e(?![+-]?\d|[a-zA-Z_])/g, '$1*e');
 
-  // If custom variables are allowed (like x in graphing/calculus), handle 3x -> 3*x
+  // If custom variables are allowed (like x in graphing/calculus), handle 3x -> 3*x, )x -> )*x, x( -> x*(
   const vars = options.allowVariables ?? ['x'];
   for (const v of vars) {
     if (/^[a-zA-Z]$/.test(v) && v !== 'e' && v !== 'E') {
@@ -132,6 +132,13 @@ export function normalizeMathExpression(
       expr = expr.replace(numVarRegex, '$1*$2');
       const closeParenVarRegex = new RegExp(`\\)\\s*(${v})(?![a-zA-Z0-9_])`, 'g');
       expr = expr.replace(closeParenVarRegex, ')*$1');
+      const varOpenParenRegex = new RegExp(`\\b(${v})\\s*(?=\\()`, 'g');
+      expr = expr.replace(varOpenParenRegex, '$1*');
+      const varFuncRegex = new RegExp(
+        `\\b(${v})\\s*(?=(?:sin|cos|tan|sec|csc|cot|asin|acos|atan|sinh|cosh|tanh|log|ln|exp|sqrt|cbrt|abs|pi|tau|phi)\\b)`,
+        'g'
+      );
+      expr = expr.replace(varFuncRegex, '$1*');
     }
   }
 
