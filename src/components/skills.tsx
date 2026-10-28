@@ -15,7 +15,7 @@ export function SkillsSection() {
   };
 
   return (
-    <section id="skills" className="py-24 relative scroll-mt-20">
+    <section id="skills" className="py-16 sm:py-24 relative scroll-mt-20 sm:scroll-mt-24">
       <motion.div
         initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -45,7 +45,7 @@ export function SkillsSection() {
               delay: idx * 0.12,
               ease: [0.16, 1, 0.3, 1],
             }}
-            className="glass-panel rounded-2xl p-6 flex flex-col border border-white/5 hover:border-primary/40 hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.2)] transition-all duration-300 backdrop-blur-md group hover:-translate-y-1.5"
+            className="glass-panel rounded-2xl p-5 sm:p-6 flex flex-col border border-white/5 hover:border-primary/40 hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.2)] transition-all duration-300 backdrop-blur-md group hover:-translate-y-1.5"
           >
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-white/5">
               <div className="flex items-center gap-2.5">

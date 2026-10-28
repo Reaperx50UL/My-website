@@ -181,8 +181,8 @@ export const GraphPlotter: React.FC<GraphPlotterProps> = ({
         </div>
 
         {/* Function & Domain Bounds Inputs */}
-        <div className="grid grid-cols-12 gap-2">
-          <div className="col-span-6">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+          <div className="sm:col-span-6">
             <label
               htmlFor="graph-fn-input"
               className="block text-xs font-medium text-slate-300 mb-1"
@@ -199,36 +199,38 @@ export const GraphPlotter: React.FC<GraphPlotterProps> = ({
             />
           </div>
 
-          <div className="col-span-3">
-            <label
-              htmlFor="graph-xmin-input"
-              className="block text-xs font-medium text-slate-300 mb-1"
-            >
-              x Min
-            </label>
-            <input
-              id="graph-xmin-input"
-              type="text"
-              value={xMinInput}
-              onChange={(e) => setXMinInput(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-sm font-mono bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-400"
-            />
-          </div>
+          <div className="grid grid-cols-2 gap-2 sm:col-span-6">
+            <div>
+              <label
+                htmlFor="graph-xmin-input"
+                className="block text-xs font-medium text-slate-300 mb-1"
+              >
+                x Min
+              </label>
+              <input
+                id="graph-xmin-input"
+                type="text"
+                value={xMinInput}
+                onChange={(e) => setXMinInput(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-sm font-mono bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-400"
+              />
+            </div>
 
-          <div className="col-span-3">
-            <label
-              htmlFor="graph-xmax-input"
-              className="block text-xs font-medium text-slate-300 mb-1"
-            >
-              x Max
-            </label>
-            <input
-              id="graph-xmax-input"
-              type="text"
-              value={xMaxInput}
-              onChange={(e) => setXMaxInput(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-sm font-mono bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-400"
-            />
+            <div>
+              <label
+                htmlFor="graph-xmax-input"
+                className="block text-xs font-medium text-slate-300 mb-1"
+              >
+                x Max
+              </label>
+              <input
+                id="graph-xmax-input"
+                type="text"
+                value={xMaxInput}
+                onChange={(e) => setXMaxInput(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-sm font-mono bg-[#070A12] border border-slate-700/80 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-400"
+              />
+            </div>
           </div>
         </div>
 
@@ -269,6 +271,21 @@ export const GraphPlotter: React.FC<GraphPlotterProps> = ({
               className="w-full h-[240px] block cursor-crosshair select-none"
               onMouseMove={handlePointerMove}
               onMouseLeave={() => setHoverX(null)}
+              onTouchMove={(e) => {
+                if (!svgRef.current || !plotData.ok) return;
+                const touch = e.touches[0];
+                if (!touch) return;
+                const rect = svgRef.current.getBoundingClientRect();
+                const relX = ((touch.clientX - rect.left) / rect.width) * VIEW_W;
+                if (relX < PAD_LEFT || relX > VIEW_W - PAD_RIGHT) {
+                  setHoverX(null);
+                  return;
+                }
+                const ratio = (relX - PAD_LEFT) / PLOT_W;
+                const xVal = plotData.xMin + ratio * (plotData.xMax - plotData.xMin);
+                setHoverX(xVal);
+              }}
+              onTouchEnd={() => setHoverX(null)}
               role="img"
               aria-label={`Plot of y = ${plotData.expression} from x = ${plotData.xMin} to ${plotData.xMax}`}
             >

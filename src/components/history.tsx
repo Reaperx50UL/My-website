@@ -6,7 +6,7 @@ import { GraduationCap, Briefcase } from "lucide-react";
 
 export function HistorySection() {
   return (
-    <section id="history" className="py-24 relative scroll-mt-20">
+    <section id="history" className="py-16 sm:py-24 relative scroll-mt-20 sm:scroll-mt-24">
       <motion.div
         initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -26,7 +26,7 @@ export function HistorySection() {
 
       <div className="grid lg:grid-cols-2 gap-16">
         {/* Education Timeline */}
-        <div id="education" className="scroll-mt-20">
+        <div id="education" className="scroll-mt-20 sm:scroll-mt-24">
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary">
               <GraduationCap size={22} />
@@ -57,7 +57,7 @@ export function HistorySection() {
                     <div className="w-2.5 h-2.5 rounded-full bg-primary group-hover:scale-125 transition-transform" />
                   </div>
 
-                  <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] glass-panel p-6 rounded-xl border border-white/5 group-hover:border-primary/30 group-hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.15)] transition-all duration-300">
+                  <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] glass-panel p-4 sm:p-6 rounded-xl border border-white/5 group-hover:border-primary/30 group-hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.15)] transition-all duration-300">
                     <div className="flex flex-col mb-2">
                       <span className="text-primary text-xs font-semibold uppercase tracking-wider">
                         {item.date}
@@ -86,7 +86,7 @@ export function HistorySection() {
         </div>
 
         {/* Experience Timeline */}
-        <div id="experience" className="scroll-mt-20">
+        <div id="experience" className="scroll-mt-20 sm:scroll-mt-24">
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary">
               <Briefcase size={22} />
@@ -117,7 +117,7 @@ export function HistorySection() {
                     <div className="w-2.5 h-2.5 rounded-full bg-primary group-hover:scale-125 transition-transform" />
                   </div>
 
-                  <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] glass-panel p-6 rounded-xl border border-white/5 group-hover:border-primary/30 group-hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.15)] transition-all duration-300">
+                  <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] glass-panel p-4 sm:p-6 rounded-xl border border-white/5 group-hover:border-primary/30 group-hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.15)] transition-all duration-300">
                     <div className="flex flex-col mb-2">
                       <span className="text-primary text-xs font-semibold uppercase tracking-wider">
                         {item.date}

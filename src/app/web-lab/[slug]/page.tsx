@@ -52,8 +52,8 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
         />
       )}
       <div className={cn(
-        "py-24 mx-auto w-full",
-        isWideApp ? "max-w-[1536px] px-0 sm:px-2" : "max-w-4xl px-4 sm:px-6"
+        "py-8 sm:py-16 md:py-24 mx-auto w-full",
+        isWideApp ? "max-w-[1536px] px-2 sm:px-4 lg:px-6" : "max-w-4xl px-4 sm:px-6"
       )}>
       <Link 
         href="/web-lab" 
@@ -91,7 +91,7 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
           )}
         </div>
         
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4 text-white">{project.title}</h1>
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-4 text-white break-words">{project.title}</h1>
         
         <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
           {project.fullDescription || project.shortDescription}

@@ -117,7 +117,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     onClick={() => onReuseExpression(item.expression)}
                     aria-label={`Reuse expression ${item.expression}`}
                     title="Load expression"
-                    className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                   >
                     <CornerUpLeft className="w-3.5 h-3.5" />
                   </button>
@@ -126,7 +126,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     onClick={() => onInsertResult(item.result)}
                     aria-label={`Insert result ${item.result}`}
                     title="Insert result"
-                    className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                   >
                     <PlusCircle className="w-3.5 h-3.5" />
                   </button>
@@ -135,7 +135,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     onClick={() => handleCopy(item.result, item.id)}
                     aria-label={`Copy result ${item.result}`}
                     title="Copy result"
-                    className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                   >
                     {copiedId === item.id ? (
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -148,7 +148,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                     onClick={() => onDeleteItem(item.id)}
                     aria-label={`Delete calculation ${item.expression}`}
                     title="Remove entry"
-                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

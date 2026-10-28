@@ -18,7 +18,7 @@ export function ProjectsSection() {
   );
 
   return (
-    <section id="projects" className="py-24 relative scroll-mt-20">
+    <section id="projects" className="py-16 sm:py-24 relative scroll-mt-20 sm:scroll-mt-24">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 25 }}

@@ -380,7 +380,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
         {/* Expression & Variable Row */}
         <div className="space-y-1.5">
           <div className="grid grid-cols-12 gap-2.5">
-            <div className="col-span-9">
+            <div className="col-span-8 sm:col-span-9">
               <div className="flex items-center justify-between mb-1">
                 <label
                   htmlFor="calculus-expr-input"
@@ -412,7 +412,7 @@ export const CalculusPanel: React.FC<CalculusPanelProps> = ({
               />
             </div>
 
-            <div className="col-span-3">
+            <div className="col-span-4 sm:col-span-3">
               <label
                 htmlFor="calculus-var-input"
                 className="block text-xs font-medium text-slate-300 mb-1"

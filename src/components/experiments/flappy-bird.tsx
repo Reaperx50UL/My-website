@@ -562,7 +562,12 @@ export function FlappyBird() {
       {/* Main Canvas Container */}
       <div 
         onClick={triggerJump}
-        className="relative w-full aspect-[400/560] rounded-2xl overflow-hidden border border-cyan-500/40 shadow-[0_0_50px_rgba(6,182,212,0.15)] cursor-pointer bg-slate-950"
+        onTouchStart={(e) => {
+          // Prevent scroll or double triggers on mobile touch screens
+          if (e.cancelable) e.preventDefault();
+          triggerJump();
+        }}
+        className="relative w-full aspect-[400/560] rounded-2xl overflow-hidden border border-cyan-500/40 shadow-[0_0_50px_rgba(6,182,212,0.15)] cursor-pointer bg-slate-950 touch-none select-none"
       >
         <canvas
           ref={canvasRef}

@@ -634,14 +634,16 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2.5 min-w-0">
-                <output
-                  aria-label="Calculation result"
-                  data-testid="calculator-result"
-                  className="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-slate-50 tabular-nums truncate"
-                >
-                  {displayResult}
-                </output>
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-end">
+                <div className="overflow-x-auto max-w-[calc(100vw-140px)] sm:max-w-none text-right py-1">
+                  <output
+                    aria-label="Calculation result"
+                    data-testid="calculator-result"
+                    className="text-2xl sm:text-3xl md:text-4xl font-mono font-bold tracking-tight text-slate-50 tabular-nums whitespace-nowrap"
+                  >
+                    {displayResult}
+                  </output>
+                </div>
 
                 <button
                   type="button"
@@ -666,7 +668,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               type="button"
               onClick={handleMemoryClear}
               aria-label="Memory Clear (MC)"
-              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+              className="min-h-[44px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
             >
               MC
             </button>
@@ -674,7 +676,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               type="button"
               onClick={handleMemoryRecall}
               aria-label="Memory Recall (MR)"
-              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+              className="min-h-[44px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-slate-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
             >
               MR
             </button>
@@ -682,7 +684,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               type="button"
               onClick={handleMemoryAdd}
               aria-label="Memory Add (M+)"
-              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+              className="min-h-[44px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
             >
               M+
             </button>
@@ -690,7 +692,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               type="button"
               onClick={handleMemorySubtract}
               aria-label="Memory Subtract (M-)"
-              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+              className="min-h-[44px] py-1.5 px-2 text-xs font-mono font-semibold bg-slate-800/60 hover:bg-slate-800 text-cyan-300 border border-slate-700/70 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
             >
               M−
             </button>
@@ -698,7 +700,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               type="button"
               onClick={() => insertToken('Ans')}
               aria-label="Insert previous answer (Ans)"
-              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-violet-600/20 hover:bg-violet-600/30 text-violet-200 border border-violet-500/40 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+              className="min-h-[44px] py-1.5 px-2 text-xs font-mono font-semibold bg-violet-600/20 hover:bg-violet-600/30 text-violet-200 border border-violet-500/40 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
             >
               Ans
             </button>
@@ -706,7 +708,7 @@ export const ScientificCalculator: React.FC<ScientificCalculatorProps> = ({
               type="button"
               onClick={() => insertToken('x')}
               aria-label="Insert variable x"
-              className="min-h-[40px] py-1.5 px-2 text-xs font-mono font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
+              className="min-h-[44px] py-1.5 px-2 text-xs font-mono font-semibold bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 rounded-lg inline-flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-cyan-400 whitespace-nowrap shrink-0"
             >
               var x
             </button>

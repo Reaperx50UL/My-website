@@ -271,15 +271,15 @@ export const UnitConverterPanel: React.FC<UnitConverterPanelProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-baseline gap-2 min-w-0">
+              <div className="flex items-baseline gap-2 min-w-0 flex-1 overflow-x-auto py-1">
                 <output
                   data-testid="unit-converter-result"
                   aria-label="Converted unit value"
-                  className="text-2xl font-mono font-bold text-cyan-300 tabular-nums truncate"
+                  className="text-2xl font-mono font-bold text-cyan-300 tabular-nums whitespace-nowrap"
                 >
                   {conversion.formattedOutput}
                 </output>
-                <span className="text-sm font-mono font-semibold text-slate-300">
+                <span className="text-sm font-mono font-semibold text-slate-300 shrink-0">
                   {conversion.toUnit?.symbol}
                 </span>
               </div>

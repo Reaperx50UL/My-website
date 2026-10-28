@@ -35,7 +35,7 @@ export function ContactSection() {
   };
 
   return (
-    <section id="contact" className="py-24 relative scroll-mt-20">
+    <section id="contact" className="py-16 sm:py-24 relative scroll-mt-20 sm:scroll-mt-24">
       <motion.div
         initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -66,7 +66,7 @@ export function ContactSection() {
           transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
           className="lg:col-span-1 space-y-6"
         >
-          <div className="glass-panel p-6 rounded-2xl flex items-start gap-4 hover:border-primary/40 hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.2)] transition-all duration-300 group border border-white/5 backdrop-blur-md">
+          <div className="glass-panel p-5 sm:p-6 rounded-2xl flex items-start gap-4 hover:border-primary/40 hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.2)] transition-all duration-300 group border border-white/5 backdrop-blur-md">
             <div className="p-3.5 bg-primary/10 text-primary border border-primary/20 rounded-xl group-hover:scale-110 group-hover:bg-primary/20 group-hover:shadow-[0_0_15px_rgba(14,165,233,0.3)] transition-all duration-300">
               <Mail size={22} />
             </div>
@@ -87,7 +87,7 @@ export function ContactSection() {
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-2xl flex items-start gap-4 hover:border-primary/40 hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.2)] transition-all duration-300 group border border-white/5 backdrop-blur-md">
+          <div className="glass-panel p-5 sm:p-6 rounded-2xl flex items-start gap-4 hover:border-primary/40 hover:shadow-[0_8px_30px_-8px_rgba(14,165,233,0.2)] transition-all duration-300 group border border-white/5 backdrop-blur-md">
             <div className="p-3.5 bg-primary/10 text-primary border border-primary/20 rounded-xl group-hover:scale-110 group-hover:bg-primary/20 group-hover:shadow-[0_0_15px_rgba(14,165,233,0.3)] transition-all duration-300">
               <Phone size={22} />
             </div>

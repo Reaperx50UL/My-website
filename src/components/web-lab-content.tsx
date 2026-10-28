@@ -43,7 +43,7 @@ export function WebLabContent() {
             VOIDNOD / WEB LAB
           </div>
           
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-8">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-6 sm:mb-8 break-words">
             A SPACE TO BUILD <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-indigo-500">WHAT&apos;S NEXT.</span>
           </h1>
@@ -59,9 +59,9 @@ export function WebLabContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
             <div>
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">THE EXPERIMENTAL WORKSPACE</h2>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight mb-4 break-words">THE EXPERIMENTAL WORKSPACE</h2>
               <div className="w-16 h-1 bg-gradient-to-r from-primary to-violet-500 rounded-full mb-6"></div>
-              <p className="text-muted-foreground text-lg max-w-xl">
+              <p className="text-muted-foreground text-base sm:text-lg max-w-xl">
                 Web applications, digital experiences and technical experiments, organized in one place.
               </p>
             </div>
@@ -72,7 +72,7 @@ export function WebLabContent() {
                   key={cat}
                   onClick={() => setFilter(cat)}
                   className={cn(
-                    "px-5 py-2 rounded-full text-sm font-medium transition-all duration-300",
+                    "px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-300",
                     filter === cat 
                       ? "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(14,165,233,0.4)]" 
                       : "bg-secondary/40 text-muted-foreground hover:bg-secondary border border-white/5"
@@ -133,9 +133,9 @@ export function WebLabContent() {
                       )}
                     </div>
                     
-                    <div className="p-8 flex flex-col flex-1 relative bg-gradient-to-b from-transparent to-background/50">
+                    <div className="p-5 sm:p-8 flex flex-col flex-1 relative bg-gradient-to-b from-transparent to-background/50">
                       <div className="flex justify-between items-start mb-4">
-                        <h3 className="font-bold text-2xl group-hover:text-cyan-400 transition-colors">{project.title}</h3>
+                        <h3 className="font-bold text-xl sm:text-2xl group-hover:text-cyan-400 transition-colors break-words">{project.title}</h3>
                       </div>
                       
                       <div className="flex items-center gap-2 mb-6">

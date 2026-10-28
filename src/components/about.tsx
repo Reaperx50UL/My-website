@@ -8,7 +8,7 @@ export function AboutSection() {
   const icons = [Cpu, Code2, ShieldAlert];
 
   return (
-    <section id="about" className="py-24 relative scroll-mt-20">
+    <section id="about" className="py-16 sm:py-24 relative scroll-mt-20 sm:scroll-mt-24">
       <motion.div
         initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -33,7 +33,7 @@ export function AboutSection() {
           transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
           className="lg:col-span-7 prose prose-invert max-w-none"
         >
-          <div className="glass-panel p-8 rounded-2xl border border-white/5 relative overflow-hidden backdrop-blur-md">
+          <div className="glass-panel p-5 sm:p-8 rounded-2xl border border-white/5 relative overflow-hidden backdrop-blur-md">
             {/* Subtle cybernetic corner accent */}
             <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-bl-full pointer-events-none" />
             <p className="text-lg text-muted-foreground/95 leading-relaxed whitespace-pre-line">

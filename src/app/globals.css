@@ -69,9 +69,16 @@
   box-shadow: 0 0 40px -5px rgba(14, 165, 233, 0.3);
 }
 
-/* Smooth scrolling */
+/* Smooth scrolling & sticky header anchor offset */
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure touch manipulation is responsive without 300ms delay */
+button, a, input, select, textarea {
+  touch-action: manipulation;
 }
 
 /* Hide scrollbar for clean look but keep functionality */

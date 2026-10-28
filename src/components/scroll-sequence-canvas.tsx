@@ -138,7 +138,7 @@ export function ScrollSequenceCanvas({
       if (!canvas) return;
       const displayWidth = window.innerWidth;
       const displayHeight = window.innerHeight;
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const bufferWidth = Math.round(displayWidth * dpr);
       const bufferHeight = Math.round(displayHeight * dpr);
 
