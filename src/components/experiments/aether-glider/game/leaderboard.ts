@@ -40,14 +40,27 @@ export interface SubmitHighScoreInput {
 export interface SubmitHighScoreResult {
   ok: boolean;
   error?: string;
+  code?: string;
   entry?: LeaderboardEntry;
   entries: LeaderboardEntry[];
   globalRank: number | null;
   environmentRank: number | null;
+  updated?: boolean;
+  keptExistingBest?: boolean;
+  storageMode?: string;
+}
+
+export interface SharedLeaderboardResponse {
+  ok: boolean;
+  entries: LeaderboardEntry[];
+  storageMode?: string;
+  error?: string;
+  code?: string;
 }
 
 export const MAX_LEADERBOARD_ENTRIES_PER_VIEW = 10;
 export const MAX_STORED_LEADERBOARD_ENTRIES = 100;
+export const MAX_VALID_SCORE = 9999;
 
 /**
  * Deterministic seeded sky-trial records across all 5 environments so both
@@ -236,12 +249,26 @@ export function validatePilotName(rawName: string): {
   sanitized: string;
   error?: string;
 } {
+  if (typeof rawName !== 'string') {
+    return {
+      valid: false,
+      sanitized: '',
+      error: 'Please enter a pilot callsign before recording your score.',
+    };
+  }
   const collapsed = rawName.replace(/\s+/g, ' ').trim();
   if (!collapsed) {
     return {
       valid: false,
       sanitized: '',
       error: 'Please enter a pilot callsign before recording your score.',
+    };
+  }
+  if (/[<>\\/{}[\]\x00-\x1F\x7F]/.test(collapsed)) {
+    return {
+      valid: false,
+      sanitized: collapsed.replace(/[<>\\/{}[\]\x00-\x1F\x7F]/g, '').trim(),
+      error: 'Pilot callsign contains invalid characters.',
     };
   }
   if (collapsed.length < 2) {
@@ -258,18 +285,268 @@ export function validatePilotName(rawName: string): {
       error: 'Pilot callsign cannot exceed 18 characters.',
     };
   }
+  if (!/[A-Za-z0-9]/.test(collapsed)) {
+    return {
+      valid: false,
+      sanitized: collapsed,
+      error: 'Pilot callsign must include at least one letter or number.',
+    };
+  }
   return {
     valid: true,
     sanitized: collapsed,
   };
 }
 
+export function validateScoreSubmission(input: Partial<SubmitHighScoreInput>): {
+  valid: boolean;
+  error?: string;
+  sanitizedName: string;
+  cleanScore: number;
+  birdId: BirdId;
+  environmentId: EnvironmentId;
+  maxCombo: number;
+  peakComboMultiplier: number;
+} {
+  const nameCheck = validatePilotName(input.playerName ?? '');
+  if (!nameCheck.valid) {
+    return {
+      valid: false,
+      error: nameCheck.error,
+      sanitizedName: nameCheck.sanitized,
+      cleanScore: 0,
+      birdId: 'kora',
+      environmentId: 'clockwork',
+      maxCombo: 0,
+      peakComboMultiplier: 1,
+    };
+  }
+
+  if (
+    typeof input.score !== 'number' ||
+    !Number.isFinite(input.score) ||
+    Math.floor(input.score) < 1 ||
+    Math.floor(input.score) > MAX_VALID_SCORE
+  ) {
+    return {
+      valid: false,
+      error: 'Score must be at least 1 valid point to record on the leaderboard.',
+      sanitizedName: nameCheck.sanitized,
+      cleanScore: 0,
+      birdId: 'kora',
+      environmentId: 'clockwork',
+      maxCombo: 0,
+      peakComboMultiplier: 1,
+    };
+  }
+
+  const cleanScore = Math.floor(input.score);
+  const validBird = BIRD_PROFILES.find((b) => b.id === input.birdId);
+  const validEnv = ENVIRONMENT_PROFILES.find((e) => e.id === input.environmentId);
+
+  if (!validBird || !validEnv) {
+    return {
+      valid: false,
+      error: 'Invalid aviator or sky realm in score submission.',
+      sanitizedName: nameCheck.sanitized,
+      cleanScore,
+      birdId: 'kora',
+      environmentId: 'clockwork',
+      maxCombo: 0,
+      peakComboMultiplier: 1,
+    };
+  }
+
+  const rawCombo =
+    typeof input.maxCombo === 'number' && Number.isFinite(input.maxCombo)
+      ? Math.max(0, Math.min(MAX_VALID_SCORE, Math.floor(input.maxCombo)))
+      : 0;
+  const rawPeakMult =
+    typeof input.peakComboMultiplier === 'number' && Number.isFinite(input.peakComboMultiplier)
+      ? Math.max(1, Math.min(5, Math.floor(input.peakComboMultiplier)))
+      : 1;
+
+  return {
+    valid: true,
+    sanitizedName: nameCheck.sanitized,
+    cleanScore,
+    birdId: validBird.id,
+    environmentId: validEnv.id,
+    maxCombo: rawCombo,
+    peakComboMultiplier: rawPeakMult,
+  };
+}
+
+/**
+ * Deterministic ranking sort used identically on server and all clients:
+ * 1. Higher score first (descending)
+ * 2. Higher maxCombo streak first (descending)
+ * 3. Earlier achievement timestamp first (ascending — first pilot to set the score holds higher rank)
+ * 4. Lexical pilot name + ID tie-breaker for 100% deterministic ordering across all devices
+ */
 export function sortLeaderboardEntries(entries: LeaderboardEntry[]): LeaderboardEntry[] {
   return [...entries].sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     if (b.maxCombo !== a.maxCombo) return b.maxCombo - a.maxCombo;
-    return b.createdAt - a.createdAt;
+    if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+    const nameCmp = a.playerName.localeCompare(b.playerName, undefined, { sensitivity: 'base' });
+    if (nameCmp !== 0) return nameCmp;
+    return a.id.localeCompare(b.id);
   });
+}
+
+export function sanitizeLeaderboardEntriesArray(rawArray: unknown): LeaderboardEntry[] {
+  if (!Array.isArray(rawArray)) return [];
+  const validEntries: LeaderboardEntry[] = [];
+  for (const item of rawArray) {
+    if (
+      item &&
+      typeof item === 'object' &&
+      typeof item.id === 'string' &&
+      typeof item.playerName === 'string' &&
+      typeof item.score === 'number' &&
+      Number.isFinite(item.score) &&
+      item.score >= 1 &&
+      BIRD_PROFILES.some((b) => b.id === item.birdId) &&
+      ENVIRONMENT_PROFILES.some((e) => e.id === item.environmentId)
+    ) {
+      const nameCheck = validatePilotName(item.playerName);
+      if (!nameCheck.valid) continue;
+      const cleanScore = Math.max(1, Math.min(MAX_VALID_SCORE, Math.floor(item.score)));
+      validEntries.push({
+        id: item.id,
+        playerName: nameCheck.sanitized,
+        score: cleanScore,
+        birdId: item.birdId as BirdId,
+        environmentId: item.environmentId as EnvironmentId,
+        maxCombo:
+          typeof item.maxCombo === 'number' && Number.isFinite(item.maxCombo)
+            ? Math.max(0, Math.min(MAX_VALID_SCORE, Math.floor(item.maxCombo)))
+            : 0,
+        peakComboMultiplier:
+          typeof item.peakComboMultiplier === 'number' &&
+          Number.isFinite(item.peakComboMultiplier)
+            ? Math.max(1, Math.min(5, Math.floor(item.peakComboMultiplier)))
+            : 1,
+        medal: item.medal ?? getMedalForScore(cleanScore),
+        createdAt: typeof item.createdAt === 'number' && Number.isFinite(item.createdAt)
+          ? item.createdAt
+          : Date.now(),
+        isPlayerEntry: Boolean(item.isPlayerEntry),
+      });
+    }
+  }
+  return sortLeaderboardEntries(validEntries);
+}
+
+/**
+ * Pure reducer that applies a new score submission to an existing list of entries.
+ * - Prevents duplicate entries for the same (playerName, environmentId) pair.
+ * - Preserves "best score" behavior: only replaces an existing pilot's record in that
+ *   environment if the new score is strictly higher (or equal score with a higher combo).
+ */
+export function applyScoreSubmissionToEntries(
+  existingEntries: LeaderboardEntry[],
+  input: SubmitHighScoreInput
+): SubmitHighScoreResult {
+  const cleanExisting = sanitizeLeaderboardEntriesArray(existingEntries);
+  const check = validateScoreSubmission(input);
+  if (!check.valid) {
+    return {
+      ok: false,
+      error: check.error,
+      entries: cleanExisting,
+      globalRank: null,
+      environmentRank: null,
+    };
+  }
+
+  const normalizedPilotKey = check.sanitizedName.toLowerCase();
+  const existingIndex = cleanExisting.findIndex(
+    (e) =>
+      e.playerName.toLowerCase() === normalizedPilotKey &&
+      e.environmentId === check.environmentId
+  );
+
+  const now =
+    typeof input.createdAt === 'number' && Number.isFinite(input.createdAt)
+      ? input.createdAt
+      : Date.now();
+
+  let targetEntry: LeaderboardEntry;
+  let updated = true;
+  let keptExistingBest = false;
+  let nextList: LeaderboardEntry[];
+
+  if (existingIndex !== -1) {
+    const prev = cleanExisting[existingIndex];
+    const isBetterScore =
+      check.cleanScore > prev.score ||
+      (check.cleanScore === prev.score && check.maxCombo > prev.maxCombo);
+
+    if (!isBetterScore) {
+      // Preserve existing best record without duplicating
+      targetEntry = { ...prev, isPlayerEntry: true };
+      updated = false;
+      keptExistingBest = true;
+      nextList = cleanExisting.map((item, idx) =>
+        idx === existingIndex ? targetEntry : item
+      );
+    } else {
+      targetEntry = {
+        id: prev.id.startsWith('seed-')
+          ? `pilot-${now}-${Math.random().toString(36).slice(2, 7)}`
+          : prev.id,
+        playerName: check.sanitizedName,
+        score: check.cleanScore,
+        birdId: check.birdId,
+        environmentId: check.environmentId,
+        maxCombo: check.maxCombo,
+        peakComboMultiplier: check.peakComboMultiplier,
+        medal: input.medal ?? getMedalForScore(check.cleanScore),
+        createdAt: now,
+        isPlayerEntry: true,
+      };
+      nextList = cleanExisting.map((item, idx) =>
+        idx === existingIndex ? targetEntry : item
+      );
+    }
+  } else {
+    targetEntry = {
+      id: `pilot-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      playerName: check.sanitizedName,
+      score: check.cleanScore,
+      birdId: check.birdId,
+      environmentId: check.environmentId,
+      maxCombo: check.maxCombo,
+      peakComboMultiplier: check.peakComboMultiplier,
+      medal: input.medal ?? getMedalForScore(check.cleanScore),
+      createdAt: now,
+      isPlayerEntry: true,
+    };
+    nextList = [...cleanExisting, targetEntry];
+  }
+
+  const sortedAll = sortLeaderboardEntries(nextList).slice(0, MAX_STORED_LEADERBOARD_ENTRIES);
+
+  const globalIdx = sortedAll.findIndex((e) => e.id === targetEntry.id);
+  const globalRank = globalIdx !== -1 ? globalIdx + 1 : null;
+
+  const envSorted = sortLeaderboardEntries(
+    sortedAll.filter((e) => e.environmentId === check.environmentId)
+  );
+  const envIdx = envSorted.findIndex((e) => e.id === targetEntry.id);
+  const environmentRank = envIdx !== -1 ? envIdx + 1 : null;
+
+  return {
+    ok: true,
+    entry: targetEntry,
+    entries: sortedAll,
+    globalRank,
+    environmentRank,
+    updated,
+    keptExistingBest,
+  };
 }
 
 export function getGlobalLeaderboard(
@@ -289,6 +566,133 @@ export function getEnvironmentLeaderboard(
   ).slice(0, limit);
 }
 
+/**
+ * Marks entries matching the current device's pilotName with `isPlayerEntry: true`
+ * for visual highlighting without mutating server records.
+ */
+export function markPlayerEntriesForPilot(
+  entries: LeaderboardEntry[],
+  pilotName: string
+): LeaderboardEntry[] {
+  const cleanPilot = pilotName.trim().toLowerCase();
+  if (!cleanPilot) return entries;
+  return entries.map((entry) => ({
+    ...entry,
+    isPlayerEntry: entry.playerName.trim().toLowerCase() === cleanPilot,
+  }));
+}
+
+/**
+ * Fetches the shared leaderboard from the server API (`/api/leaderboard`).
+ * Never falls back to localStorage so visitors never see device-local data
+ * masquerading as the shared global leaderboard.
+ */
+export async function fetchSharedLeaderboard(
+  endpoint = '/api/leaderboard'
+): Promise<SharedLeaderboardResponse> {
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      return {
+        ok: false,
+        entries: [],
+        error:
+          data?.error ??
+          `Unable to load shared leaderboard (HTTP ${res.status}).`,
+        code: data?.code,
+      };
+    }
+    return {
+      ok: true,
+      entries: sanitizeLeaderboardEntriesArray(data.entries),
+      storageMode: data.storageMode,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      entries: [],
+      error:
+        err instanceof Error
+          ? `Failed to reach shared leaderboard server: ${err.message}`
+          : 'Failed to reach shared leaderboard server.',
+    };
+  }
+}
+
+/**
+ * Submits a high score to the shared server API (`POST /api/leaderboard`).
+ */
+export async function submitSharedLeaderboardScore(
+  input: SubmitHighScoreInput,
+  endpoint = '/api/leaderboard'
+): Promise<SubmitHighScoreResult> {
+  const precheck = validateScoreSubmission(input);
+  if (!precheck.valid) {
+    return {
+      ok: false,
+      error: precheck.error,
+      entries: [],
+      globalRank: null,
+      environmentRank: null,
+    };
+  }
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.ok) {
+      return {
+        ok: false,
+        error:
+          data?.error ??
+          `Failed to save score to shared leaderboard (HTTP ${res.status}).`,
+        code: data?.code,
+        entries: sanitizeLeaderboardEntriesArray(data?.entries ?? []),
+        globalRank: null,
+        environmentRank: null,
+      };
+    }
+
+    const entries = sanitizeLeaderboardEntriesArray(data.entries);
+    return {
+      ok: true,
+      entry: data.entry,
+      entries,
+      globalRank: typeof data.globalRank === 'number' ? data.globalRank : null,
+      environmentRank:
+        typeof data.environmentRank === 'number' ? data.environmentRank : null,
+      updated: Boolean(data.updated),
+      keptExistingBest: Boolean(data.keptExistingBest),
+      storageMode: data.storageMode,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? `Network error while saving score: ${err.message}`
+          : 'Network error while saving score.',
+      entries: [],
+      globalRank: null,
+      environmentRank: null,
+    };
+  }
+}
+
 export function loadLeaderboardEntries(
   storageKey = 'aether_glider_leaderboards'
 ): LeaderboardEntry[] {
@@ -298,45 +702,11 @@ export function loadLeaderboardEntries(
   }
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return sortLeaderboardEntries(DEFAULT_SEED_LEADERBOARD_ENTRIES);
-    }
-    const validEntries: LeaderboardEntry[] = [];
-    for (const item of parsed) {
-      if (
-        item &&
-        typeof item.id === 'string' &&
-        typeof item.playerName === 'string' &&
-        typeof item.score === 'number' &&
-        Number.isFinite(item.score) &&
-        BIRD_PROFILES.some((b) => b.id === item.birdId) &&
-        ENVIRONMENT_PROFILES.some((e) => e.id === item.environmentId)
-      ) {
-        validEntries.push({
-          id: item.id,
-          playerName: item.playerName,
-          score: Math.max(0, Math.floor(item.score)),
-          birdId: item.birdId as BirdId,
-          environmentId: item.environmentId as EnvironmentId,
-          maxCombo:
-            typeof item.maxCombo === 'number' && Number.isFinite(item.maxCombo)
-              ? Math.max(0, Math.floor(item.maxCombo))
-              : 0,
-          peakComboMultiplier:
-            typeof item.peakComboMultiplier === 'number' &&
-            Number.isFinite(item.peakComboMultiplier)
-              ? Math.max(1, Math.floor(item.peakComboMultiplier))
-              : 1,
-          medal: item.medal ?? getMedalForScore(item.score),
-          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-          isPlayerEntry: Boolean(item.isPlayerEntry),
-        });
-      }
-    }
+    const validEntries = sanitizeLeaderboardEntriesArray(parsed);
     if (validEntries.length === 0) {
       return sortLeaderboardEntries(DEFAULT_SEED_LEADERBOARD_ENTRIES);
     }
-    return sortLeaderboardEntries(validEntries);
+    return validEntries;
   } catch {
     return sortLeaderboardEntries(DEFAULT_SEED_LEADERBOARD_ENTRIES);
   }
@@ -469,51 +839,19 @@ export function submitLeaderboardScore(
   envBestStorageKey = 'aether_glider_env_best_scores'
 ): SubmitHighScoreResult {
   const existing = loadLeaderboardEntries(leaderboardStorageKey);
-  const validation = validatePilotName(input.playerName);
-  if (!validation.valid) {
-    return {
-      ok: false,
-      error: validation.error,
-      entries: existing,
-      globalRank: null,
-      environmentRank: null,
-    };
+  const res = applyScoreSubmissionToEntries(existing, input);
+  if (!res.ok) {
+    return res;
   }
 
-  const cleanScore = Math.max(0, Math.floor(input.score));
-  const now = input.createdAt ?? Date.now();
-  const newEntry: LeaderboardEntry = {
-    id: `pilot-${now}-${Math.random().toString(36).slice(2, 7)}`,
-    playerName: validation.sanitized,
-    score: cleanScore,
-    birdId: input.birdId,
-    environmentId: input.environmentId,
-    maxCombo: Math.max(0, Math.floor(input.maxCombo ?? 0)),
-    peakComboMultiplier: Math.max(1, Math.floor(input.peakComboMultiplier ?? 1)),
-    medal: input.medal ?? getMedalForScore(cleanScore),
-    createdAt: now,
-    isPlayerEntry: true,
-  };
-
-  const nextEntries = saveLeaderboardEntries([...existing, newEntry], leaderboardStorageKey);
-  saveLastPilotName(validation.sanitized, pilotNameStorageKey);
-  saveEnvironmentBestScore(input.environmentId, cleanScore, envBestStorageKey);
-
-  const globalSorted = sortLeaderboardEntries(nextEntries);
-  const globalIdx = globalSorted.findIndex((e) => e.id === newEntry.id);
-  const globalRank = globalIdx !== -1 ? globalIdx + 1 : null;
-
-  const envSorted = sortLeaderboardEntries(
-    nextEntries.filter((e) => e.environmentId === input.environmentId)
-  );
-  const envIdx = envSorted.findIndex((e) => e.id === newEntry.id);
-  const environmentRank = envIdx !== -1 ? envIdx + 1 : null;
+  const nextEntries = saveLeaderboardEntries(res.entries, leaderboardStorageKey);
+  if (res.entry) {
+    saveLastPilotName(res.entry.playerName, pilotNameStorageKey);
+    saveEnvironmentBestScore(res.entry.environmentId, res.entry.score, envBestStorageKey);
+  }
 
   return {
-    ok: true,
-    entry: newEntry,
+    ...res,
     entries: nextEntries,
-    globalRank,
-    environmentRank,
   };
 }

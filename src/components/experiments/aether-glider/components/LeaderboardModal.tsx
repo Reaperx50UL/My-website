@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState } from 'react';
 import {
   ENVIRONMENT_PROFILES,
@@ -14,6 +12,7 @@ import {
   SubmitHighScoreResult,
   getEnvironmentLeaderboard,
   getGlobalLeaderboard,
+  markPlayerEntriesForPilot,
 } from '../game/leaderboard';
 import {
   BirdAvatarSvg,
@@ -31,6 +30,7 @@ export interface HighScoreNameEntryPanelProps {
   validationError: string | null;
   submittedResult: SubmitHighScoreResult | null;
   onOpenLeaderboard: (tab: LeaderboardTabId) => void;
+  isSubmitting?: boolean;
   isCompactHeight?: boolean;
 }
 
@@ -44,6 +44,7 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
   validationError,
   submittedResult,
   onOpenLeaderboard,
+  isSubmitting = false,
   isCompactHeight = false,
 }) => {
   const env = getEnvironmentProfile(environmentId);
@@ -66,7 +67,9 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
             <div className="flex items-center gap-1.5">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
               <span className="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-emerald-300">
-                High Score Recorded to Hall of Fame
+                {submittedResult.keptExistingBest
+                  ? 'Higher Personal Best Preserved on Shared Leaderboard'
+                  : 'High Score Recorded to Shared Hall of Fame'}
               </span>
             </div>
             <div className="mt-0.5 text-xs sm:text-sm font-bold text-amber-50">
@@ -123,7 +126,9 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
       onSubmit={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        onSubmit(e);
+        if (!isSubmitting) {
+          onSubmit(e);
+        }
       }}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
@@ -149,7 +154,7 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
           >
             {qualification.qualifies
               ? 'New High Score! Enter Pilot Callsign'
-              : 'Record Run on Leaderboard'}
+              : 'Record Run on Shared Leaderboard'}
           </span>
         </div>
 
@@ -194,17 +199,20 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
           data-testid="highscore-name-input"
           type="text"
           maxLength={18}
+          disabled={isSubmitting}
           value={pilotName}
           onChange={(e) => onPilotNameChange(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter') {
               e.preventDefault();
-              onSubmit();
+              if (!isSubmitting) {
+                onSubmit();
+              }
             }
           }}
           placeholder="Enter Pilot Name (e.g. Sky Captain)"
-          className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-bold text-amber-50 placeholder:text-amber-200/40 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-bold text-amber-50 placeholder:text-amber-200/40 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
           style={{
             backgroundColor: '#1E162B',
             border: validationError
@@ -214,8 +222,9 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
         />
         <button
           type="submit"
+          disabled={isSubmitting}
           data-testid="highscore-submit-button"
-          className="shrink-0 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-extrabold text-amber-950 transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
+          className="shrink-0 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-extrabold text-amber-950 transition-transform active:scale-95 cursor-pointer whitespace-nowrap disabled:opacity-60"
           style={{
             fontFamily: '"Bricolage Grotesque", sans-serif',
             backgroundColor: '#FBBF24',
@@ -223,7 +232,7 @@ export const HighScoreNameEntryPanel: React.FC<HighScoreNameEntryPanelProps> = (
             boxShadow: '0 2px 0 #92400E',
           }}
         >
-          Save Score ({score})
+          {isSubmitting ? 'Saving...' : `Save Score (${score})`}
         </button>
       </div>
 
@@ -255,6 +264,10 @@ export interface LeaderboardModalProps {
   onQuickSubmitScore: (targetEnvId: EnvironmentId) => void;
   quickSubmitError: string | null;
   quickSubmitSuccess: string | null;
+  isLoading?: boolean;
+  loadError?: string | null;
+  isSubmitting?: boolean;
+  onRefresh?: () => void;
   isCompactHeight?: boolean;
 }
 
@@ -273,6 +286,10 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onQuickSubmitScore,
   quickSubmitError,
   quickSubmitSuccess,
+  isLoading = false,
+  loadError = null,
+  isSubmitting = false,
+  onRefresh,
   isCompactHeight = false,
 }) => {
   const [showCallsignForm, setShowCallsignForm] = useState<boolean>(false);
@@ -284,9 +301,11 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
     ? getEnvironmentProfile(activeTab as EnvironmentId)
     : getEnvironmentProfile(selectedEnvironmentId);
 
+  const markedEntries = markPlayerEntriesForPilot(entries, pilotName);
+
   const visibleEntries = isGlobal
-    ? getGlobalLeaderboard(entries, 10)
-    : getEnvironmentLeaderboard(entries, activeTab as EnvironmentId, 10);
+    ? getGlobalLeaderboard(markedEntries, 10)
+    : getEnvironmentLeaderboard(markedEntries, activeTab as EnvironmentId, 10);
 
   const topChampion = visibleEntries[0] ?? null;
   const personalBestForScope = isGlobal
@@ -335,7 +354,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] sm:text-xs font-extrabold uppercase tracking-widest text-amber-400">
-                Aether Glider Hall of Fame
+                Aether Glider Shared Hall of Fame
               </div>
               <h2
                 id="leaderboard-modal-title"
@@ -350,18 +369,36 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            data-testid="close-leaderboard-button"
-            onClick={onClose}
-            className="px-3 py-1.5 rounded-xl text-xs font-extrabold text-amber-200 hover:bg-amber-900/40 cursor-pointer shrink-0"
-            style={{
-              backgroundColor: '#120D1D',
-              border: '1.5px solid #92400E',
-            }}
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onRefresh && (
+              <button
+                type="button"
+                data-testid="refresh-leaderboard-button"
+                disabled={isLoading}
+                onClick={onRefresh}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-extrabold text-amber-200 hover:bg-amber-900/40 cursor-pointer disabled:opacity-50"
+                style={{
+                  backgroundColor: '#120D1D',
+                  border: '1.5px solid #B45309',
+                }}
+              >
+                {isLoading ? 'Syncing...' : 'Refresh'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              data-testid="close-leaderboard-button"
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-xl text-xs font-extrabold text-amber-200 hover:bg-amber-900/40 cursor-pointer shrink-0"
+              style={{
+                backgroundColor: '#120D1D',
+                border: '1.5px solid #92400E',
+              }}
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         {/* Scope Switcher Tabs: Global + 5 Environments */}
@@ -485,7 +522,9 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             data-testid="modal-register-score-form"
             onSubmit={(e) => {
               e.preventDefault();
-              onQuickSubmitScore(targetEnvForQuickRecord);
+              if (!isSubmitting) {
+                onQuickSubmitScore(targetEnvForQuickRecord);
+              }
             }}
             className="mt-2 rounded-xl p-2.5 shrink-0"
             style={{
@@ -494,7 +533,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             }}
           >
             <div className="text-[10px] sm:text-xs font-bold text-amber-200">
-              Register your pilot name & best run on the{' '}
+              Register your pilot name & best run on the shared{' '}
               <span className="font-extrabold text-amber-300">
                 {getEnvironmentProfile(targetEnvForQuickRecord).name}
               </span>{' '}
@@ -505,11 +544,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 data-testid="modal-pilot-name-input"
                 type="text"
                 maxLength={18}
+                disabled={isSubmitting}
                 value={pilotName}
                 onChange={(e) => onPilotNameChange(e.target.value)}
                 onKeyDown={(e) => e.stopPropagation()}
                 placeholder="Enter Pilot Callsign (2-18 chars)"
-                className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-bold text-amber-50 placeholder:text-amber-200/40 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-bold text-amber-50 placeholder:text-amber-200/40 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-60"
                 style={{
                   backgroundColor: '#1E162B',
                   border: quickSubmitError
@@ -519,14 +559,15 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
               />
               <button
                 type="submit"
+                disabled={isSubmitting}
                 data-testid="modal-pilot-submit-button"
-                className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-extrabold text-amber-950 cursor-pointer whitespace-nowrap"
+                className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-extrabold text-amber-950 cursor-pointer whitespace-nowrap disabled:opacity-60"
                 style={{
                   backgroundColor: '#34D399',
                   border: '1.5px solid #D1FAE5',
                 }}
               >
-                Post to Board
+                {isSubmitting ? 'Saving...' : 'Post to Board'}
               </button>
             </div>
             {quickSubmitError && (
@@ -549,119 +590,187 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </form>
         )}
 
-        {/* Leaderboard Standings List */}
-        <div
-          data-testid="leaderboard-entries-list"
-          className="mt-2.5 flex-1 overflow-y-auto space-y-1.5 pr-1"
-        >
-          {visibleEntries.map((entry, idx) => {
-            const rank = idx + 1;
-            const bird = getBirdProfile(entry.birdId);
-            const env = getEnvironmentProfile(entry.environmentId);
-            const isHighlighted =
-              entry.id === highlightedEntryId || Boolean(entry.isPlayerEntry);
-
-            const rankColors =
-              rank === 1
-                ? { bg: '#FBBF24', text: '#1C120C', border: '#FEF3C7' }
-                : rank === 2
-                ? { bg: '#E2E8F0', text: '#0F172A', border: '#F8FAFC' }
-                : rank === 3
-                ? { bg: '#D97706', text: '#FEF3C7', border: '#FBBF24' }
-                : { bg: '#1E162B', text: '#FDE68A', border: '#78350F' };
-
-            return (
-              <div
-                key={entry.id}
-                data-testid={`leaderboard-row-${idx}`}
-                data-pilot-name={entry.playerName}
-                data-environment={entry.environmentId}
-                className="flex items-center justify-between gap-2 rounded-xl px-2.5 sm:px-3.5 py-2 transition-colors"
-                style={{
-                  backgroundColor: isHighlighted
-                    ? 'rgba(41, 30, 58, 0.95)'
-                    : 'rgba(18, 13, 29, 0.9)',
-                  border:
-                    entry.id === highlightedEntryId
-                      ? '2px solid #34D399'
-                      : entry.isPlayerEntry
-                      ? '1.5px solid #FBBF24'
-                      : '1px solid rgba(146, 64, 14, 0.38)',
-                }}
+        {/* Shared Leaderboard Error State */}
+        {loadError && (
+          <div
+            data-testid="leaderboard-error-state"
+            role="alert"
+            className="mt-2.5 rounded-xl p-3 text-left flex items-center justify-between gap-3 shrink-0"
+            style={{
+              backgroundColor: 'rgba(127, 29, 29, 0.35)',
+              border: '1.5px solid #F43F5E',
+            }}
+          >
+            <div className="text-xs font-bold text-rose-200">{loadError}</div>
+            {onRefresh && (
+              <button
+                type="button"
+                data-testid="retry-leaderboard-button"
+                onClick={onRefresh}
+                className="px-3 py-1 rounded-lg text-xs font-extrabold text-amber-950 bg-amber-400 hover:bg-amber-300 cursor-pointer shrink-0"
               >
-                {/* Left: Rank + Pilot Name + Bird & Environment Badges */}
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div
-                    className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-extrabold text-xs sm:text-sm shrink-0"
-                    style={{
-                      backgroundColor: rankColors.bg,
-                      color: rankColors.text,
-                      border: `1.5px solid ${rankColors.border}`,
-                      fontFamily: '"JetBrains Mono", monospace',
-                    }}
-                  >
-                    #{rank}
-                  </div>
+                Retry
+              </button>
+            )}
+          </div>
+        )}
 
-                  <BirdAvatarSvg
-                    birdId={entry.birdId}
-                    className="w-6 h-6 sm:w-7 sm:h-7 shrink-0"
-                  />
+        {/* Shared Leaderboard Loading State */}
+        {isLoading && visibleEntries.length === 0 && !loadError && (
+          <div
+            data-testid="leaderboard-loading-state"
+            className="mt-2.5 rounded-xl p-6 text-center text-xs sm:text-sm font-bold text-amber-200/80"
+            style={{
+              backgroundColor: 'rgba(18, 13, 29, 0.9)',
+              border: '1px solid rgba(146, 64, 14, 0.38)',
+            }}
+          >
+            Loading shared leaderboard standings...
+          </div>
+        )}
 
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs sm:text-sm font-extrabold text-amber-100 truncate">
-                        {entry.playerName}
-                      </span>
-                      {entry.isPlayerEntry && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-emerald-500/25 text-emerald-300 border border-emerald-400/60 shrink-0">
-                          YOU
+        {/* Shared Leaderboard Empty State */}
+        {!isLoading && !loadError && visibleEntries.length === 0 && (
+          <div
+            data-testid="leaderboard-empty-state"
+            className="mt-2.5 rounded-xl p-6 text-center text-xs sm:text-sm font-bold text-amber-200/80"
+            style={{
+              backgroundColor: 'rgba(18, 13, 29, 0.9)',
+              border: '1px solid rgba(146, 64, 14, 0.38)',
+            }}
+          >
+            No flight records logged for this realm yet. Launch a run and claim #1!
+          </div>
+        )}
+
+        {/* Leaderboard Standings List */}
+        {visibleEntries.length > 0 && (
+          <div
+            data-testid="leaderboard-entries-list"
+            className="mt-2.5 flex-1 overflow-y-auto space-y-1.5 pr-1"
+          >
+            {visibleEntries.map((entry, idx) => {
+              const rank = idx + 1;
+              const bird = getBirdProfile(entry.birdId);
+              const env = getEnvironmentProfile(entry.environmentId);
+              const isHighlighted =
+                entry.id === highlightedEntryId || Boolean(entry.isPlayerEntry);
+
+              const isTiedWithPrev =
+                idx > 0 && visibleEntries[idx - 1].score === entry.score;
+              const isTiedWithNext =
+                idx < visibleEntries.length - 1 &&
+                visibleEntries[idx + 1].score === entry.score;
+              const isTiedScore = isTiedWithPrev || isTiedWithNext;
+
+              const rankColors =
+                rank === 1
+                  ? { bg: '#FBBF24', text: '#1C120C', border: '#FEF3C7' }
+                  : rank === 2
+                  ? { bg: '#E2E8F0', text: '#0F172A', border: '#F8FAFC' }
+                  : rank === 3
+                  ? { bg: '#D97706', text: '#FEF3C7', border: '#FBBF24' }
+                  : { bg: '#1E162B', text: '#FDE68A', border: '#78350F' };
+
+              return (
+                <div
+                  key={entry.id}
+                  data-testid={`leaderboard-row-${idx}`}
+                  data-pilot-name={entry.playerName}
+                  data-environment={entry.environmentId}
+                  data-score={entry.score}
+                  className="flex items-center justify-between gap-2 rounded-xl px-2.5 sm:px-3.5 py-2 transition-colors"
+                  style={{
+                    backgroundColor: isHighlighted
+                      ? 'rgba(41, 30, 58, 0.95)'
+                      : 'rgba(18, 13, 29, 0.9)',
+                    border:
+                      entry.id === highlightedEntryId
+                        ? '2px solid #34D399'
+                        : entry.isPlayerEntry
+                        ? '1.5px solid #FBBF24'
+                        : '1px solid rgba(146, 64, 14, 0.38)',
+                  }}
+                >
+                  {/* Left: Rank + Pilot Name + Bird & Environment Badges */}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-extrabold text-xs sm:text-sm shrink-0"
+                      style={{
+                        backgroundColor: rankColors.bg,
+                        color: rankColors.text,
+                        border: `1.5px solid ${rankColors.border}`,
+                        fontFamily: '"JetBrains Mono", monospace',
+                      }}
+                    >
+                      #{rank}
+                    </div>
+
+                    <BirdAvatarSvg
+                      birdId={entry.birdId}
+                      className="w-6 h-6 sm:w-7 sm:h-7 shrink-0"
+                    />
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs sm:text-sm font-extrabold text-amber-100 truncate">
+                          {entry.playerName}
                         </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-200/75 flex-wrap">
-                      <span style={{ color: bird.colors.auraHex }}>{bird.name}</span>
-                      <span>·</span>
-                      <span
-                        className="inline-flex items-center gap-1 font-bold"
-                        style={{ color: env.colors.accentHex }}
-                      >
-                        <EnvironmentIconSvg envId={env.id} className="w-3 h-3 shrink-0" />
-                        {env.shortName}
-                      </span>
-                      {entry.maxCombo > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="text-emerald-300/90">
-                            {entry.maxCombo}x Streak ({entry.peakComboMultiplier}x)
+                        {entry.isPlayerEntry && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-emerald-500/25 text-emerald-300 border border-emerald-400/60 shrink-0">
+                            YOU
                           </span>
-                        </>
-                      )}
+                        )}
+                        {isTiedScore && (
+                          <span className="px-1 py-0.2 rounded text-[9px] font-bold uppercase bg-amber-500/15 text-amber-300/90 border border-amber-400/40 shrink-0">
+                            TIE
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-200/75 flex-wrap">
+                        <span style={{ color: bird.colors.auraHex }}>{bird.name}</span>
+                        <span>·</span>
+                        <span
+                          className="inline-flex items-center gap-1 font-bold"
+                          style={{ color: env.colors.accentHex }}
+                        >
+                          <EnvironmentIconSvg envId={env.id} className="w-3 h-3 shrink-0" />
+                          {env.shortName}
+                        </span>
+                        {entry.maxCombo > 0 && (
+                          <>
+                            <span>·</span>
+                            <span className="text-emerald-300/90">
+                              {entry.maxCombo}x Streak ({entry.peakComboMultiplier}x)
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Score */}
+                  <div className="text-right shrink-0">
+                    <div
+                      data-testid={`leaderboard-score-${idx}`}
+                      className="text-base sm:text-xl font-extrabold text-amber-300 leading-none"
+                      style={{
+                        fontFamily: '"JetBrains Mono", monospace',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {entry.score}
+                    </div>
+                    <div className="text-[9px] font-bold uppercase tracking-wider text-amber-200/60 mt-0.5">
+                      Points
                     </div>
                   </div>
                 </div>
-
-                {/* Right: Score */}
-                <div className="text-right shrink-0">
-                  <div
-                    data-testid={`leaderboard-score-${idx}`}
-                    className="text-base sm:text-xl font-extrabold text-amber-300 leading-none"
-                    style={{
-                      fontFamily: '"JetBrains Mono", monospace',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {entry.score}
-                  </div>
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-amber-200/60 mt-0.5">
-                    Points
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

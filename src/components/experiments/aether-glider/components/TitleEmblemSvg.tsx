@@ -114,6 +114,20 @@ export const BirdAvatarSvg: React.FC<{ birdId: BirdId; className?: string }> = (
         stroke="#140D0B"
         strokeWidth="1.8"
       />
+      {(birdId === 'ignis' || birdId === 'valkyrie' || birdId === 'volt') && (
+        <path
+          d={
+            birdId === 'valkyrie'
+              ? 'M16 11 L10 5 L20 10 Z'
+              : birdId === 'volt'
+              ? 'M18 11 L15 4 L21 10 Z'
+              : 'M17 11 L12 6 L20 10 Z'
+          }
+          fill={bird.colors.beak}
+          stroke="#140D0B"
+          strokeWidth="1.4"
+        />
+      )}
       <ellipse
         cx="18"
         cy="18"
@@ -125,7 +139,7 @@ export const BirdAvatarSvg: React.FC<{ birdId: BirdId; className?: string }> = (
       />
       <path
         d={
-          birdId === 'chronos'
+          birdId === 'chronos' || birdId === 'volt'
             ? 'M26 16 L35 18 L26 20 Z'
             : 'M26 15.5 L32.5 18.2 L26 20.8 Z'
         }
@@ -274,6 +288,34 @@ export const AbilityIconSvg: React.FC<{ birdId: BirdId; className?: string }> = 
             stroke="#FEF3C7"
             strokeWidth="2.2"
             strokeLinecap="round"
+          />
+        </>
+      )}
+      {birdId === 'valkyrie' && (
+        <polygon
+          points="12,2 15,9 22,12 15,15 12,22 9,15 2,12 9,9"
+          fill={bird.colors.auraHex}
+          stroke="#FEF3C7"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      )}
+      {birdId === 'volt' && (
+        <>
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+            fill="#083344"
+            stroke={bird.colors.auraHex}
+            strokeWidth="2.2"
+          />
+          <path
+            d="M13 5L7.5 13h4.2l-1 6L16.5 11h-4.2L13 5z"
+            fill="#FACC15"
+            stroke="#140D0B"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
           />
         </>
       )}

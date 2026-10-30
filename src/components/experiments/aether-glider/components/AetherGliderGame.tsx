@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioController } from '../game/audio';
 import {
@@ -32,11 +30,12 @@ import {
   LeaderboardTabId,
   SubmitHighScoreResult,
   evaluateHighScoreQualification,
+  fetchSharedLeaderboard,
   loadEnvironmentBestScores,
   loadLastPilotName,
-  loadLeaderboardEntries,
   saveEnvironmentBestScore,
-  submitLeaderboardScore,
+  saveLastPilotName,
+  submitSharedLeaderboardScore,
 } from '../game/leaderboard';
 import {
   loadBestScore,
@@ -104,7 +103,6 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   const mutedKey = `${storageKeyPrefix}_muted`;
   const birdStorageKey = `${storageKeyPrefix}_bird`;
   const envStorageKey = `${storageKeyPrefix}_env`;
-  const leaderboardStorageKey = `${storageKeyPrefix}_leaderboards`;
   const envBestStorageKey = `${storageKeyPrefix}_env_best_scores`;
   const pilotNameStorageKey = `${storageKeyPrefix}_pilot_name`;
 
@@ -131,9 +129,11 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   const [showTuningModal, setShowTuningModal] = useState<boolean>(false);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
   const [activeLeaderboardTab, setActiveLeaderboardTab] = useState<LeaderboardTabId>('global');
-  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>(() =>
-    loadLeaderboardEntries(leaderboardStorageKey)
-  );
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const leaderboardEntriesRef = useRef<LeaderboardEntry[]>([]);
+  const [isLeaderboardLoading, setIsLeaderboardLoading] = useState<boolean>(true);
+  const [leaderboardLoadError, setLeaderboardLoadError] = useState<string | null>(null);
+  const [isSubmittingScore, setIsSubmittingScore] = useState<boolean>(false);
   const [envBestScores, setEnvBestScores] = useState<Record<EnvironmentId, number>>(() =>
     loadEnvironmentBestScores(envBestStorageKey)
   );
@@ -191,6 +191,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   const [abilityStatusText, setAbilityStatusText] = useState<string>('READY');
   const [abilityReady, setAbilityReady] = useState<boolean>(true);
   const [abilityActive, setAbilityActive] = useState<boolean>(false);
+  const [loadoutTab, setLoadoutTab] = useState<'aviator' | 'realm'>('aviator');
   const [isCompactHeight, setIsCompactHeight] = useState<boolean>(false);
   const [isMobileOrTablet, setIsMobileOrTablet] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -371,6 +372,37 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     [syncPhaseAttr]
   );
 
+  const getLeaderboardApiEndpoint = useCallback((): string => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('simulateLeaderboardError') === '1') {
+        return '/api/leaderboard?simulateError=1';
+      }
+    }
+    return '/api/leaderboard';
+  }, []);
+
+  const refreshSharedLeaderboard = useCallback(async () => {
+    setIsLeaderboardLoading(true);
+    const res = await fetchSharedLeaderboard(getLeaderboardApiEndpoint());
+    setIsLeaderboardLoading(false);
+    if (res.ok) {
+      setLeaderboardLoadError(null);
+      setLeaderboardEntries(res.entries);
+      leaderboardEntriesRef.current = res.entries;
+    } else {
+      setLeaderboardLoadError(
+        res.error ?? 'Unable to load shared leaderboard from server.'
+      );
+      setLeaderboardEntries([]);
+      leaderboardEntriesRef.current = [];
+    }
+  }, [getLeaderboardApiEndpoint]);
+
+  useEffect(() => {
+    void refreshSharedLeaderboard();
+  }, [refreshSharedLeaderboard]);
+
   const handleOpenLeaderboard = useCallback(
     (tab?: LeaderboardTabId, e?: React.MouseEvent<HTMLElement>) => {
       if (e) {
@@ -392,16 +424,21 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         setActiveLeaderboardTab(tab);
       }
       setShowLeaderboardModal(true);
+      void refreshSharedLeaderboard();
       audioRef.current?.playClick();
     },
-    [syncPhaseAttr]
+    [refreshSharedLeaderboard, syncPhaseAttr]
   );
 
-  const handleSubmitRunHighScore = useCallback(() => {
+  const handleSubmitRunHighScore = useCallback(async () => {
+    if (isSubmittingScore) return;
     const finalScore = runStats?.score ?? score;
     const targetBird = runStats?.birdId ?? selectedBirdId;
     const targetEnv = runStats?.environmentId ?? selectedEnvId;
-    const res = submitLeaderboardScore(
+
+    setIsSubmittingScore(true);
+    setNameValidationError(null);
+    const res = await submitSharedLeaderboardScore(
       {
         playerName: pilotName,
         score: finalScore,
@@ -411,30 +448,40 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         peakComboMultiplier: runStats?.peakComboMultiplier ?? comboMultiplier,
         medal: runStats?.medal,
       },
-      leaderboardStorageKey,
-      pilotNameStorageKey,
-      envBestStorageKey
+      getLeaderboardApiEndpoint()
     );
+    setIsSubmittingScore(false);
 
     if (!res.ok) {
-      setNameValidationError(res.error ?? 'Please enter a valid pilot callsign.');
+      setNameValidationError(
+        res.error ?? 'Unable to record score to shared leaderboard.'
+      );
       return;
     }
 
     setNameValidationError(null);
+    setLeaderboardLoadError(null);
     setLeaderboardEntries(res.entries);
+    leaderboardEntriesRef.current = res.entries;
     setSubmittedRunResult(res);
     setHighlightedEntryId(res.entry?.id ?? null);
-    setEnvBestScores(loadEnvironmentBestScores(envBestStorageKey));
+    const updatedEnvBests = saveEnvironmentBestScore(
+      targetEnv,
+      finalScore,
+      envBestStorageKey
+    );
+    setEnvBestScores(updatedEnvBests);
     if (res.entry) {
       setPilotName(res.entry.playerName);
+      saveLastPilotName(res.entry.playerName, pilotNameStorageKey);
     }
     audioRef.current?.playMilestone();
   }, [
     comboCount,
     comboMultiplier,
     envBestStorageKey,
-    leaderboardStorageKey,
+    getLeaderboardApiEndpoint,
+    isSubmittingScore,
     pilotName,
     pilotNameStorageKey,
     runStats,
@@ -444,10 +491,15 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   ]);
 
   const handleQuickSubmitScore = useCallback(
-    (targetEnvId: EnvironmentId) => {
+    async (targetEnvId: EnvironmentId) => {
+      if (isSubmittingScore) return;
       const envBest = envBestScores[targetEnvId] ?? 0;
       const candidateScore = Math.max(score, envBest, bestScore);
-      const res = submitLeaderboardScore(
+
+      setIsSubmittingScore(true);
+      setQuickSubmitError(null);
+      setQuickSubmitSuccess(null);
+      const res = await submitSharedLeaderboardScore(
         {
           playerName: pilotName,
           score: candidateScore,
@@ -456,26 +508,42 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           maxCombo: runStats?.maxCombo ?? comboCount,
           peakComboMultiplier: runStats?.peakComboMultiplier ?? comboMultiplier,
         },
-        leaderboardStorageKey,
-        pilotNameStorageKey,
-        envBestStorageKey
+        getLeaderboardApiEndpoint()
       );
+      setIsSubmittingScore(false);
 
       if (!res.ok) {
-        setQuickSubmitError(res.error ?? 'Please enter a valid pilot callsign.');
+        setQuickSubmitError(
+          res.error ?? 'Unable to record score to shared leaderboard.'
+        );
         setQuickSubmitSuccess(null);
         return;
       }
 
       setQuickSubmitError(null);
+      setLeaderboardLoadError(null);
       setLeaderboardEntries(res.entries);
+      leaderboardEntriesRef.current = res.entries;
       setHighlightedEntryId(res.entry?.id ?? null);
-      setEnvBestScores(loadEnvironmentBestScores(envBestStorageKey));
+      const updatedEnvBests = saveEnvironmentBestScore(
+        targetEnvId,
+        candidateScore,
+        envBestStorageKey
+      );
+      setEnvBestScores(updatedEnvBests);
       if (res.entry) {
         setPilotName(res.entry.playerName);
-        setQuickSubmitSuccess(
-          `Recorded ${res.entry.playerName} (${res.entry.score} pts) — Global #${res.globalRank} · ${getEnvironmentProfile(targetEnvId).shortName} #${res.environmentRank}`
-        );
+        saveLastPilotName(res.entry.playerName, pilotNameStorageKey);
+        const realmShort = getEnvironmentProfile(targetEnvId).shortName;
+        if (res.keptExistingBest) {
+          setQuickSubmitSuccess(
+            `Kept higher shared record for ${res.entry.playerName} (${res.entry.score} pts) — Global #${res.globalRank} · ${realmShort} #${res.environmentRank}`
+          );
+        } else {
+          setQuickSubmitSuccess(
+            `Recorded ${res.entry.playerName} (${res.entry.score} pts) — Global #${res.globalRank} · ${realmShort} #${res.environmentRank}`
+          );
+        }
       }
       audioRef.current?.playMilestone();
     },
@@ -485,7 +553,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       comboMultiplier,
       envBestScores,
       envBestStorageKey,
-      leaderboardStorageKey,
+      getLeaderboardApiEndpoint,
+      isSubmittingScore,
       pilotName,
       pilotNameStorageKey,
       runStats,
@@ -676,8 +745,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         );
         setEnvBestScores(updatedEnvBests);
 
-        const currentEntries = loadLeaderboardEntries(leaderboardStorageKey);
-        setLeaderboardEntries(currentEntries);
+        const currentEntries = leaderboardEntriesRef.current;
         const qual = evaluateHighScoreQualification(
           currentEntries,
           sim.score,
@@ -686,6 +754,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           preRunEnvBestRef.current
         );
         setHighScoreQualification(qual);
+        void refreshSharedLeaderboard();
 
         audioRef.current?.setMusicPhase('gameover');
         audioRef.current?.playCollision(sim.causeOfDefeat);
@@ -716,7 +785,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [bestScoreKey, envBestStorageKey, leaderboardStorageKey, syncPhaseAttr]);
+  }, [bestScoreKey, envBestStorageKey, refreshSharedLeaderboard, syncPhaseAttr]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -772,24 +841,41 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       if (code === 'KeyQ' && !showLeaderboardModal) {
         const idx = ENVIRONMENT_PROFILES.findIndex((env) => env.id === sim.environmentId);
         const nextEnv = ENVIRONMENT_PROFILES[(idx + 1) % ENVIRONMENT_PROFILES.length];
+        if (sim.phase === 'title' || sim.phase === 'gameover') {
+          setLoadoutTab('realm');
+        }
         handleSelectEnvironment(nextEnv.id);
         return;
       }
 
       if (code === 'Digit1' && sim.phase === 'title' && !showLeaderboardModal) {
+        setLoadoutTab('aviator');
         handleSelectBird('kora');
         return;
       }
       if (code === 'Digit2' && sim.phase === 'title' && !showLeaderboardModal) {
+        setLoadoutTab('aviator');
         handleSelectBird('zephyr');
         return;
       }
       if (code === 'Digit3' && sim.phase === 'title' && !showLeaderboardModal) {
+        setLoadoutTab('aviator');
         handleSelectBird('ignis');
         return;
       }
       if (code === 'Digit4' && sim.phase === 'title' && !showLeaderboardModal) {
+        setLoadoutTab('aviator');
         handleSelectBird('chronos');
+        return;
+      }
+      if (code === 'Digit5' && sim.phase === 'title' && !showLeaderboardModal) {
+        setLoadoutTab('aviator');
+        handleSelectBird('valkyrie');
+        return;
+      }
+      if (code === 'Digit6' && sim.phase === 'title' && !showLeaderboardModal) {
+        setLoadoutTab('aviator');
+        handleSelectBird('volt');
         return;
       }
 
@@ -939,8 +1025,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           <div className={`flex ${isCompactHeight ? 'flex-row items-center gap-2' : 'flex-col items-start gap-2'}`}>
             {/* Top-Left Telemetry Plaque (Global Best + Realm Best) */}
             <div
-              className={`pointer-events-auto flex items-center gap-2.5 rounded-xl ${
-                isCompactHeight ? 'px-2.5 py-1' : 'px-3 sm:px-3.5 py-1.5 sm:py-2'
+              className={`pointer-events-auto flex items-center gap-2 sm:gap-2.5 rounded-xl ${
+                isCompactHeight ? 'px-2.5 py-1' : 'px-2.5 sm:px-3.5 py-1.5 sm:py-2'
               }`}
               style={{
                 backgroundColor: 'rgba(20, 14, 30, 0.88)',
@@ -950,7 +1036,14 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             >
               <div>
                 <div className="text-[9px] sm:text-[10px] font-bold tracking-widest text-amber-300/80 uppercase whitespace-nowrap">
-                  Global Best
+                  {phase === 'playing' ? (
+                    <>
+                      <span className="sm:hidden">Best</span>
+                      <span className="hidden sm:inline">Global Best</span>
+                    </>
+                  ) : (
+                    'Global Best'
+                  )}
                 </div>
                 <div
                   data-testid="hud-best-score"
@@ -966,9 +1059,14 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 </div>
               </div>
 
-              <div className="h-6 w-[1px] bg-amber-700/50" aria-hidden="true" />
+              <div
+                className={`${
+                  phase === 'playing' ? 'hidden sm:block' : 'block'
+                } h-6 w-[1px] bg-amber-700/50`}
+                aria-hidden="true"
+              />
 
-              <div>
+              <div className={phase === 'playing' ? 'hidden sm:block' : 'block'}>
                 <div
                   className="text-[9px] sm:text-[10px] font-bold tracking-widest uppercase whitespace-nowrap"
                   style={{ color: selectedEnv.colors.accentHex }}
@@ -1013,8 +1111,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               )}
             </div>
 
-            {/* In-Flight Special Ability Button [E] */}
-            {phase === 'playing' && (
+            {/* In-Flight Special Ability Button [E] (Desktop only; Mobile/Tablet use dedicated bottom-right ability button) */}
+            {phase === 'playing' && !isMobileOrTablet && (
               <button
                 type="button"
                 tabIndex={-1}
@@ -1156,7 +1254,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               onClick={(e) => handleOpenLeaderboard(selectedEnvId, e)}
               aria-label="Open Global and Environment Leaderboards (L)"
               title="Hall of Fame Leaderboards [L]"
-              className="flex h-9 sm:h-11 px-2.5 sm:px-3 items-center justify-center gap-1.5 rounded-xl transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+              className={`${
+                phase === 'playing' ? 'hidden sm:flex' : 'flex'
+              } h-9 sm:h-11 px-2.5 sm:px-3 items-center justify-center gap-1.5 rounded-xl transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400`}
               style={{
                 backgroundColor: showLeaderboardModal
                   ? 'rgba(180, 83, 9, 0.92)'
@@ -1203,7 +1303,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               }}
               aria-label="Gameplay tuning and accessibility settings"
               title="Tuning & Settings"
-              className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+              className={`${
+                phase === 'playing' ? 'hidden sm:flex' : 'flex'
+              } h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400`}
               style={{
                 backgroundColor: showTuningModal
                   ? 'rgba(180, 83, 9, 0.92)'
@@ -1376,7 +1478,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       {phase === 'title' && !showTuningModal && !showLeaderboardModal && (
         <div
           className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-between ${
-            isCompactHeight ? 'pt-1 pb-1.5 px-4' : 'py-6 sm:py-12 px-3 sm:px-4'
+            isCompactHeight ? 'pt-1 pb-1.5 px-4' : 'py-5 sm:py-10 px-3 sm:px-4'
           }`}
         >
           {/* Upper Negative-Space Emblem Lockup */}
@@ -1386,7 +1488,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             }`}
           >
             <TitleEmblemSvg
-              className={isCompactHeight ? '!max-w-[175px]' : '!max-w-[255px] sm:!max-w-[390px]'}
+              className={isCompactHeight ? '!max-w-[175px]' : '!max-w-[245px] sm:!max-w-[380px]'}
             />
             {!isCompactHeight && (
               <p
@@ -1396,152 +1498,333 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   textWrap: 'balance',
                 }}
               >
-                Select your Aviator and Sky Realm. Each realm features its own signature trap hazard.
+                Choose your Aviator or Sky Realm below, then launch into the brass-and-sky horizon.
               </p>
             )}
           </div>
 
-          {/* Lower Aviator + Environment Selector & Launch CTA Cluster */}
+          {/* Lower Tabbed Loadout Selector & Launch CTA Cluster */}
           <div
             className={`pointer-events-auto flex flex-col items-center w-full ${
               isCompactHeight
-                ? 'gap-1 mb-7 max-w-xl'
-                : 'gap-1.5 sm:gap-2 mb-5 sm:mb-7 max-w-xl'
+                ? 'gap-1 mb-6 max-w-xl'
+                : 'gap-1.5 sm:gap-2 mb-5 sm:mb-6 max-w-xl'
             }`}
           >
-            {/* Row 1: 4 Bird Selection Tabs (2x2 on narrow mobile portrait, 4-col on sm/landscape/desktop) */}
+            {/* Segmented Loadout Switcher: [ Aviator & Ability ] vs [ Sky Realm ] */}
             <div
-              role="group"
-              aria-label="Choose Clockwork Bird"
-              className={`grid ${
-                isCompactHeight ? 'grid-cols-4 gap-1.5' : 'grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2'
-              } w-full`}
+              role="tablist"
+              aria-label="Flight Loadout Category"
+              className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl w-full"
+              style={{
+                backgroundColor: 'rgba(13, 9, 22, 0.92)',
+                border: '1.5px solid rgba(180, 83, 9, 0.6)',
+                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.45)',
+              }}
             >
-              {BIRD_PROFILES.map((bird) => {
-                const isSelected = bird.id === selectedBirdId;
-                return (
-                  <button
-                    key={bird.id}
-                    type="button"
-                    data-testid={`select-bird-${bird.id}`}
-                    aria-pressed={isSelected}
-                    onClick={(e) => handleSelectBird(bird.id, e)}
-                    className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl overflow-hidden min-w-0 ${
-                      isCompactHeight ? 'py-1 px-2' : 'py-1.5 px-2'
-                    } transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-300`}
-                    style={{
-                      backgroundColor: isSelected
-                        ? 'rgba(30, 22, 46, 0.96)'
-                        : 'rgba(17, 13, 28, 0.84)',
-                      border: isSelected
-                        ? `2px solid ${bird.colors.auraHex}`
-                        : '1.5px solid rgba(146, 64, 14, 0.5)',
-                    }}
-                  >
-                    <BirdAvatarSvg
-                      birdId={bird.id}
-                      className={isCompactHeight ? 'w-5 h-5 shrink-0' : 'w-6 h-6 sm:w-7 sm:h-7 shrink-0'}
-                    />
-                    <div className="text-left min-w-0 overflow-hidden">
-                      <div className="text-[11px] sm:text-xs font-extrabold text-amber-100 whitespace-nowrap truncate leading-tight">
-                        {bird.name}
-                      </div>
-                      <div
-                        className="text-[9px] sm:text-[10px] font-semibold whitespace-nowrap truncate"
-                        style={{ color: bird.colors.auraHex }}
-                      >
-                        {bird.abilityName}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Row 2: 5 Environment Selection Tabs (3-col on narrow mobile portrait, 5-col on sm/landscape/desktop) */}
-            <div
-              role="group"
-              aria-label="Choose Sky Environment"
-              className={`grid ${
-                isCompactHeight ? 'grid-cols-5 gap-1.5' : 'grid-cols-3 sm:grid-cols-5 gap-1.5'
-              } w-full`}
-            >
-              {ENVIRONMENT_PROFILES.map((env) => {
-                const isSelected = env.id === selectedEnvId;
-                return (
-                  <button
-                    key={env.id}
-                    type="button"
-                    data-testid={`select-env-${env.id}`}
-                    aria-pressed={isSelected}
-                    onClick={(e) => handleSelectEnvironment(env.id, e)}
-                    className={`flex flex-col items-center justify-center rounded-xl overflow-hidden min-w-0 ${
-                      isCompactHeight ? 'py-1 px-1.5' : 'py-1.5 px-2'
-                    } transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-300`}
-                    style={{
-                      backgroundColor: isSelected
-                        ? 'rgba(28, 22, 44, 0.96)'
-                        : 'rgba(15, 11, 24, 0.84)',
-                      border: isSelected
-                        ? `2px solid ${env.colors.accentHex}`
-                        : '1.5px solid rgba(146, 64, 14, 0.45)',
-                    }}
-                  >
-                    <div className="flex items-center justify-center gap-1 max-w-full overflow-hidden">
-                      <EnvironmentIconSvg envId={env.id} className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                      <span className="text-[10px] sm:text-[11px] font-extrabold text-amber-100 whitespace-nowrap truncate">
-                        {env.shortName}
-                      </span>
-                    </div>
-                    <span
-                      className="text-[9px] font-bold whitespace-nowrap truncate max-w-full"
-                      style={{ color: env.colors.accentHex }}
-                    >
-                      {env.trapName}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Combined Bird Ability & Environment Trap Info Plaque */}
-            {!isCompactHeight && (
-              <div
-                data-testid="selected-loadout-card"
-                className="w-full rounded-xl px-3 py-1.5 sm:px-3.5 sm:py-2 text-left grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2"
+              <button
+                type="button"
+                role="tab"
+                data-testid="loadout-tab-aviator"
+                aria-selected={loadoutTab === 'aviator'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLoadoutTab('aviator');
+                  audioRef.current?.playClick();
+                }}
+                className={`flex items-center justify-start gap-2 rounded-xl ${
+                  isCompactHeight ? 'py-1 px-2' : 'py-1.5 sm:py-2 px-2.5 sm:px-3'
+                } transition-all cursor-pointer min-w-0 focus-visible:outline-2 focus-visible:outline-amber-300`}
                 style={{
-                  backgroundColor: 'rgba(18, 13, 28, 0.94)',
-                  border: `1.5px solid ${selectedEnv.colors.accentHex}`,
-                  boxShadow: '0 8px 20px rgba(0, 0, 0, 0.45)',
+                  backgroundColor:
+                    loadoutTab === 'aviator'
+                      ? 'rgba(38, 27, 58, 0.98)'
+                      : 'rgba(18, 13, 28, 0.45)',
+                  border:
+                    loadoutTab === 'aviator'
+                      ? `2px solid ${selectedBird.colors.auraHex}`
+                      : '1.5px solid transparent',
+                  boxShadow:
+                    loadoutTab === 'aviator'
+                      ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+                      : 'none',
                 }}
               >
-                <div className="min-w-0">
-                  <div className="text-[11px] font-extrabold text-amber-100 whitespace-nowrap truncate">
-                    {selectedBird.name} ·{' '}
-                    <span style={{ color: selectedBird.colors.auraHex }}>
-                      {isMobileOrTablet ? '[Ability Button]' : '[E]'} {selectedBird.abilityName}
-                    </span>
+                <BirdAvatarSvg
+                  birdId={selectedBirdId}
+                  className={isCompactHeight ? 'w-5 h-5 shrink-0' : 'w-6 h-6 sm:w-7 sm:h-7 shrink-0'}
+                />
+                <div className="text-left min-w-0 flex-1 overflow-hidden">
+                  <div className="text-[11px] sm:text-xs font-extrabold text-amber-50 whitespace-nowrap truncate leading-tight">
+                    Aviator: {selectedBird.name}
                   </div>
-                  <p className="text-[10px] sm:text-[11px] text-amber-100/80 leading-snug line-clamp-2">
-                    {selectedBird.abilityDesc}
-                  </p>
+                  <div
+                    className="text-[10px] sm:text-[11px] font-bold whitespace-nowrap truncate leading-tight"
+                    style={{ color: selectedBird.colors.auraHex }}
+                  >
+                    {selectedBird.abilityName}
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                data-testid="loadout-tab-realm"
+                aria-selected={loadoutTab === 'realm'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLoadoutTab('realm');
+                  audioRef.current?.playClick();
+                }}
+                className={`flex items-center justify-start gap-2 rounded-xl ${
+                  isCompactHeight ? 'py-1 px-2' : 'py-1.5 sm:py-2 px-2.5 sm:px-3'
+                } transition-all cursor-pointer min-w-0 focus-visible:outline-2 focus-visible:outline-amber-300`}
+                style={{
+                  backgroundColor:
+                    loadoutTab === 'realm'
+                      ? 'rgba(38, 27, 58, 0.98)'
+                      : 'rgba(18, 13, 28, 0.45)',
+                  border:
+                    loadoutTab === 'realm'
+                      ? `2px solid ${selectedEnv.colors.accentHex}`
+                      : '1.5px solid transparent',
+                  boxShadow:
+                    loadoutTab === 'realm'
+                      ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+                      : 'none',
+                }}
+              >
+                <div
+                  className={`flex items-center justify-center rounded-lg ${
+                    isCompactHeight ? 'w-5 h-5' : 'w-6 h-6 sm:w-7 sm:h-7'
+                  } shrink-0`}
+                  style={{
+                    backgroundColor: 'rgba(15, 11, 24, 0.75)',
+                    border: `1px solid ${selectedEnv.colors.accentHex}66`,
+                  }}
+                >
+                  <EnvironmentIconSvg
+                    envId={selectedEnvId}
+                    className={isCompactHeight ? 'w-3.5 h-3.5' : 'w-4 h-4 sm:w-4.5 sm:h-4.5'}
+                  />
+                </div>
+                <div className="text-left min-w-0 flex-1 overflow-hidden">
+                  <div className="text-[11px] sm:text-xs font-extrabold text-amber-50 whitespace-nowrap truncate leading-tight">
+                    Realm: {selectedEnv.shortName}
+                  </div>
+                  <div
+                    className="text-[10px] sm:text-[11px] font-bold whitespace-nowrap truncate leading-tight"
+                    style={{ color: selectedEnv.colors.accentHex }}
+                  >
+                    {selectedEnv.trapName}
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Active Tab Panel 1: 6 Clockwork Birds & Focused Ability Plaque */}
+            {loadoutTab === 'aviator' && (
+              <>
+                <div
+                  role="group"
+                  aria-label="Choose Clockwork Bird"
+                  className={`grid ${
+                    isCompactHeight
+                      ? 'grid-cols-6 gap-1.5'
+                      : 'grid-cols-3 sm:grid-cols-3 gap-1.5 sm:gap-2'
+                  } w-full`}
+                >
+                  {BIRD_PROFILES.map((bird) => {
+                    const isSelected = bird.id === selectedBirdId;
+                    return (
+                      <button
+                        key={bird.id}
+                        type="button"
+                        data-testid={`select-bird-${bird.id}`}
+                        aria-pressed={isSelected}
+                        onClick={(e) => handleSelectBird(bird.id, e)}
+                        className={`flex items-center justify-start gap-1.5 sm:gap-2 rounded-xl overflow-hidden min-w-0 ${
+                          isCompactHeight ? 'py-1 px-1.5' : 'py-1.5 sm:py-2 px-2 sm:px-2.5'
+                        } transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-300`}
+                        style={{
+                          backgroundColor: isSelected
+                            ? 'rgba(30, 22, 46, 0.96)'
+                            : 'rgba(17, 13, 28, 0.86)',
+                          border: isSelected
+                            ? `2px solid ${bird.colors.auraHex}`
+                            : '1.5px solid rgba(146, 64, 14, 0.5)',
+                        }}
+                      >
+                        <BirdAvatarSvg
+                          birdId={bird.id}
+                          className={
+                            isCompactHeight
+                              ? 'w-5 h-5 shrink-0'
+                              : 'w-6 h-6 sm:w-7 sm:h-7 shrink-0'
+                          }
+                        />
+                        <div className="text-left min-w-0 overflow-hidden">
+                          <div className="text-[11px] sm:text-xs font-extrabold text-amber-100 whitespace-nowrap truncate leading-tight">
+                            {bird.name}
+                          </div>
+                          <div
+                            className="text-[9px] sm:text-[10px] font-semibold whitespace-nowrap truncate"
+                            style={{ color: bird.colors.auraHex }}
+                          >
+                            {bird.abilityName}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div className="min-w-0 border-t border-amber-800/30 pt-1 sm:border-t-0 sm:pt-0 sm:border-l sm:border-amber-800/40 sm:pl-3">
-                  <div className="text-[11px] font-extrabold text-amber-100 whitespace-nowrap truncate">
-                    {selectedEnv.name} ·{' '}
-                    <span style={{ color: selectedEnv.colors.accentHex }}>
-                      Trap: {selectedEnv.trapName}
-                    </span>
+                {!isCompactHeight && (
+                  <div
+                    data-testid="selected-loadout-card"
+                    className="w-full rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-left flex items-center gap-2.5 sm:gap-3"
+                    style={{
+                      backgroundColor: 'rgba(18, 13, 28, 0.94)',
+                      border: `1.5px solid ${selectedBird.colors.auraHex}`,
+                      boxShadow: '0 8px 20px rgba(0, 0, 0, 0.45)',
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl shrink-0"
+                      style={{
+                        backgroundColor: 'rgba(30, 22, 46, 0.95)',
+                        border: `1.5px solid ${selectedBird.colors.auraHex}`,
+                      }}
+                    >
+                      <AbilityIconSvg
+                        birdId={selectedBirdId}
+                        className="w-5 h-5 sm:w-6 sm:h-6"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] sm:text-xs font-extrabold text-amber-100">
+                        <span>{selectedBird.name}</span>
+                        <span aria-hidden="true" className="text-amber-500/60">·</span>
+                        <span style={{ color: selectedBird.colors.auraHex }}>
+                          {isMobileOrTablet ? 'Ability' : '[E]'}: {selectedBird.abilityName} ({selectedBird.abilityCooldownSec}s CD)
+                        </span>
+                        <span aria-hidden="true" className="text-amber-500/60">·</span>
+                        <span className="text-amber-300/90 font-semibold">
+                          Passive: {selectedBird.passiveName}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[10px] sm:text-[11px] text-amber-100/85 leading-snug line-clamp-2">
+                        {selectedBird.abilityDesc} {selectedBird.passiveDesc}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] text-amber-100/80 leading-snug line-clamp-2">
-                    {selectedEnv.trapDesc}
-                  </p>
-                </div>
-              </div>
+                )}
+              </>
             )}
 
-            {/* Primary Launch CTA + Leaderboard Button + Speed Presets Row */}
+            {/* Active Tab Panel 2: 5 Sky Environments & Focused Hazard Plaque */}
+            {loadoutTab === 'realm' && (
+              <>
+                <div
+                  role="group"
+                  aria-label="Choose Sky Environment"
+                  className={`grid ${
+                    isCompactHeight
+                      ? 'grid-cols-5 gap-1.5'
+                      : 'grid-cols-6 sm:grid-cols-5 gap-1.5 sm:gap-2'
+                  } w-full`}
+                >
+                  {ENVIRONMENT_PROFILES.map((env, index) => {
+                    const isSelected = env.id === selectedEnvId;
+                    const mobileSpanClass = isCompactHeight
+                      ? ''
+                      : index < 3
+                      ? 'col-span-2 sm:col-span-1'
+                      : 'col-span-3 sm:col-span-1';
+                    return (
+                      <button
+                        key={env.id}
+                        type="button"
+                        data-testid={`select-env-${env.id}`}
+                        aria-pressed={isSelected}
+                        onClick={(e) => handleSelectEnvironment(env.id, e)}
+                        className={`${mobileSpanClass} flex flex-col items-center justify-center rounded-xl overflow-hidden min-w-0 ${
+                          isCompactHeight ? 'py-1 px-1.5' : 'py-1.5 sm:py-2 px-2'
+                        } transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-amber-300`}
+                        style={{
+                          backgroundColor: isSelected
+                            ? 'rgba(28, 22, 44, 0.96)'
+                            : 'rgba(15, 11, 24, 0.86)',
+                          border: isSelected
+                            ? `2px solid ${env.colors.accentHex}`
+                            : '1.5px solid rgba(146, 64, 14, 0.45)',
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1 max-w-full overflow-hidden">
+                          <EnvironmentIconSvg
+                            envId={env.id}
+                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0"
+                          />
+                          <span className="text-[11px] sm:text-xs font-extrabold text-amber-100 whitespace-nowrap truncate">
+                            {env.shortName}
+                          </span>
+                        </div>
+                        <span
+                          className="text-[9px] sm:text-[10px] font-bold whitespace-nowrap truncate max-w-full"
+                          style={{ color: env.colors.accentHex }}
+                        >
+                          {env.trapName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {!isCompactHeight && (
+                  <div
+                    data-testid="selected-loadout-card"
+                    className="w-full rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-left flex items-center gap-2.5 sm:gap-3"
+                    style={{
+                      backgroundColor: 'rgba(18, 13, 28, 0.94)',
+                      border: `1.5px solid ${selectedEnv.colors.accentHex}`,
+                      boxShadow: '0 8px 20px rgba(0, 0, 0, 0.45)',
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl shrink-0"
+                      style={{
+                        backgroundColor: 'rgba(28, 22, 44, 0.95)',
+                        border: `1.5px solid ${selectedEnv.colors.accentHex}`,
+                      }}
+                    >
+                      <EnvironmentIconSvg
+                        envId={selectedEnvId}
+                        className="w-5 h-5 sm:w-6 sm:h-6"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] sm:text-xs font-extrabold text-amber-100">
+                        <span>{selectedEnv.name}</span>
+                        <span aria-hidden="true" className="text-amber-500/60">·</span>
+                        <span style={{ color: selectedEnv.colors.accentHex }}>
+                          Hazard: {selectedEnv.trapName}
+                        </span>
+                        <span aria-hidden="true" className="text-amber-500/60">·</span>
+                        <span className="text-amber-300/90 font-semibold">
+                          Realm Best: {envBestScores[selectedEnvId] ?? 0}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[10px] sm:text-[11px] text-amber-100/85 leading-snug line-clamp-2">
+                        {selectedEnv.trapDesc}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Primary Launch CTA + Unified Leaderboard & Speed Presets Row */}
             <div
               className={`flex ${
                 isCompactHeight
@@ -1586,58 +1869,69 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 Launch Flight
               </button>
 
-              <button
-                type="button"
-                data-testid="title-leaderboard-button"
-                onClick={(e) => handleOpenLeaderboard('global', e)}
-                className={`flex items-center justify-center gap-1.5 ${
-                  isCompactHeight ? 'py-1.5 px-3 text-xs' : 'py-2 sm:py-2.5 px-3.5 text-xs sm:text-sm'
-                } rounded-xl font-extrabold text-amber-100 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0`}
-                style={{
-                  backgroundColor: 'rgba(28, 20, 44, 0.94)',
-                  border: '2px solid #FBBF24',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
-                }}
-              >
-                <TrophyIconSvg className="w-4 h-4 shrink-0" />
-                <span>Leaderboards</span>
-              </button>
+              {/* Unified Secondary Bar on Mobile Portrait; Inline on Tablet/Desktop */}
+              <div className="flex items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto shrink-0">
+                <button
+                  type="button"
+                  data-testid="title-leaderboard-button"
+                  onClick={(e) => handleOpenLeaderboard('global', e)}
+                  className={`flex items-center justify-center gap-1.5 ${
+                    isCompactHeight ? 'py-1.5 px-2.5 text-xs' : 'py-2 sm:py-2.5 px-2.5 sm:px-3.5 text-xs sm:text-sm'
+                  } rounded-xl font-extrabold text-amber-100 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0`}
+                  style={{
+                    backgroundColor: 'rgba(28, 20, 44, 0.94)',
+                    border: '2px solid #FBBF24',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+                  }}
+                >
+                  <TrophyIconSvg className="w-4 h-4 shrink-0" />
+                  <span className="sm:hidden">Ranks</span>
+                  <span className="hidden sm:inline">Leaderboards</span>
+                </button>
 
-              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                {TUNING_PRESETS.map((preset) => {
-                  const isSelected = activePresetId === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyPreset(preset.id)}
-                      className={`flex-1 sm:flex-initial ${
-                        isCompactHeight ? 'py-1.5 px-2 text-[10px]' : 'py-2 sm:py-2.5 px-2.5 text-xs'
-                      } rounded-xl font-bold transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-amber-300`}
-                      style={{
-                        backgroundColor: isSelected
-                          ? 'rgba(245, 158, 11, 0.92)'
-                          : 'rgba(20, 14, 30, 0.88)',
-                        color: isSelected ? '#1C120C' : '#FDE68A',
-                        border: isSelected ? '1.5px solid #FEF3C7' : '1.5px solid #78350F',
-                      }}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
+                <div className="grid grid-cols-3 sm:flex items-center gap-1 sm:gap-1.5 flex-1 sm:flex-initial">
+                  {TUNING_PRESETS.map((preset) => {
+                    const isSelected = activePresetId === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyPreset(preset.id)}
+                        className={`${
+                          isCompactHeight ? 'py-1.5 px-2 text-[10px]' : 'py-2 sm:py-2.5 px-2 sm:px-2.5 text-[11px] sm:text-xs'
+                        } rounded-xl font-bold transition-colors cursor-pointer whitespace-nowrap truncate focus-visible:outline-2 focus-visible:outline-amber-300`}
+                        style={{
+                          backgroundColor: isSelected
+                            ? 'rgba(245, 158, 11, 0.92)'
+                            : 'rgba(20, 14, 30, 0.88)',
+                          color: isSelected ? '#1C120C' : '#FDE68A',
+                          border: isSelected ? '1.5px solid #FEF3C7' : '1.5px solid #78350F',
+                        }}
+                      >
+                        {preset.label === 'Gentle Breeze' ? (
+                          <>
+                            <span className="sm:hidden">Gentle</span>
+                            <span className="hidden sm:inline">{preset.label}</span>
+                          </>
+                        ) : (
+                          preset.label
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <a
+                  href="/web-lab"
+                  className="py-1.5 px-3 rounded-xl text-xs font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap self-center sm:self-auto"
+                  style={{
+                    backgroundColor: '#1E162B',
+                    border: '1px solid rgba(146, 64, 14, 0.4)',
+                  }}
+                >
+                  Exit to Web Lab
+                </a>
               </div>
-
-              <a
-                href="/web-lab"
-                className="py-1.5 px-4 rounded-xl text-xs font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap"
-                style={{
-                  backgroundColor: '#1E162B',
-                  border: '1px solid rgba(146, 64, 14, 0.4)',
-                }}
-              >
-                Exit to Web Lab
-              </a>
             </div>
           </div>
         </div>
@@ -1758,9 +2052,20 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                     border: '1.5px solid #92400E',
                   }}
                 >
-                  Change Realm
+                  Change Loadout
                 </button>
               </div>
+
+              <a
+                href="/web-lab"
+                className="w-full py-1.5 px-3 rounded-xl text-xs font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap block"
+                style={{
+                  backgroundColor: '#1E162B',
+                  border: '1px solid rgba(146, 64, 14, 0.4)',
+                }}
+              >
+                Exit to Web Lab
+              </a>
             </div>
           </div>
         </div>
@@ -1777,7 +2082,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         >
           <div
             className={`w-full max-w-md rounded-2xl ${
-              isCompactHeight ? 'p-3' : 'p-4 sm:p-5'
+              isCompactHeight ? 'p-3' : 'p-3.5 sm:p-5'
             } text-center my-auto`}
             style={{
               backgroundColor: '#1B1429',
@@ -1804,7 +2109,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             {/* Medal Recognition Row */}
             {!isCompactHeight && (
               <div
-                className="mt-2.5 flex items-center justify-between rounded-xl px-4 py-1.5"
+                className="mt-2 flex items-center justify-between rounded-xl px-3.5 py-1.5"
                 style={{
                   backgroundColor: '#120D1D',
                   border: '1.5px solid rgba(217, 119, 6, 0.45)',
@@ -1818,7 +2123,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             )}
 
             {/* 4 Tabular Stat Tiles (Score, Best Run, Max Combo, Flight Time) */}
-            <div className={`${isCompactHeight ? 'mt-2' : 'mt-2.5'} grid grid-cols-2 sm:grid-cols-4 gap-2`}>
+            <div className={`${isCompactHeight ? 'mt-2' : 'mt-2'} grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2`}>
               <div
                 className="flex flex-col justify-between rounded-xl p-2"
                 style={{
@@ -1936,66 +2241,136 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 setPilotName(val);
                 if (nameValidationError) setNameValidationError(null);
               }}
-              onSubmit={handleSubmitRunHighScore}
+              onSubmit={() => void handleSubmitRunHighScore()}
+              isSubmitting={isSubmittingScore}
               validationError={nameValidationError}
               submittedResult={submittedRunResult}
               onOpenLeaderboard={(tab) => handleOpenLeaderboard(tab)}
               isCompactHeight={isCompactHeight}
             />
 
-            {/* Quick Bird & Environment Switchers inside Game Over */}
-            <div className={`${isCompactHeight ? 'mt-2 space-y-1.5' : 'mt-2.5 space-y-1.5'}`}>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                {BIRD_PROFILES.map((bird) => {
-                  const isSelected = bird.id === selectedBirdId;
-                  return (
-                    <button
-                      key={bird.id}
-                      type="button"
-                      onClick={(e) => handleSelectBird(bird.id, e)}
-                      className="flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg overflow-hidden min-w-0 cursor-pointer transition-colors"
-                      style={{
-                        backgroundColor: isSelected ? '#291E3A' : '#120D1D',
-                        border: isSelected
-                          ? `1.5px solid ${bird.colors.auraHex}`
-                          : '1px solid rgba(146, 64, 14, 0.35)',
-                      }}
-                    >
-                      <BirdAvatarSvg birdId={bird.id} className="w-4 h-4 shrink-0" />
-                      <span className="text-[11px] font-bold text-amber-100 whitespace-nowrap truncate">
-                        {bird.name}
-                      </span>
-                    </button>
-                  );
-                })}
+            {/* Tabbed Quick Loadout Switcher inside Game Over (Aviator vs Sky Realm) */}
+            <div className={`${isCompactHeight ? 'mt-1.5 space-y-1' : 'mt-2 space-y-1.5'}`}>
+              <div
+                role="tablist"
+                aria-label="Switch Loadout for Next Run"
+                className="grid grid-cols-2 gap-1 p-1 rounded-xl"
+                style={{
+                  backgroundColor: '#120D1D',
+                  border: '1px solid rgba(180, 83, 9, 0.45)',
+                }}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  data-testid="gameover-tab-aviator"
+                  aria-selected={loadoutTab === 'aviator'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLoadoutTab('aviator');
+                    audioRef.current?.playClick();
+                  }}
+                  className="flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap truncate"
+                  style={{
+                    backgroundColor: loadoutTab === 'aviator' ? '#291E3A' : 'transparent',
+                    color: loadoutTab === 'aviator' ? '#FEF3C7' : '#D97706',
+                    border:
+                      loadoutTab === 'aviator'
+                        ? `1.5px solid ${selectedBird.colors.auraHex}`
+                        : '1.5px solid transparent',
+                  }}
+                >
+                  <BirdAvatarSvg birdId={selectedBirdId} className="w-4 h-4 shrink-0" />
+                  <span className="truncate">
+                    Aviator: {selectedBird.name}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  data-testid="gameover-tab-realm"
+                  aria-selected={loadoutTab === 'realm'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLoadoutTab('realm');
+                    audioRef.current?.playClick();
+                  }}
+                  className="flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap truncate"
+                  style={{
+                    backgroundColor: loadoutTab === 'realm' ? '#291E3A' : 'transparent',
+                    color: loadoutTab === 'realm' ? '#FEF3C7' : '#D97706',
+                    border:
+                      loadoutTab === 'realm'
+                        ? `1.5px solid ${selectedEnv.colors.accentHex}`
+                        : '1.5px solid transparent',
+                  }}
+                >
+                  <EnvironmentIconSvg envId={selectedEnvId} className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
+                    Realm: {selectedEnv.shortName}
+                  </span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
-                {ENVIRONMENT_PROFILES.map((env) => {
-                  const isSelected = env.id === selectedEnvId;
-                  return (
-                    <button
-                      key={env.id}
-                      type="button"
-                      onClick={(e) => handleSelectEnvironment(env.id, e)}
-                      className="flex flex-col items-center py-1 px-1 rounded-lg overflow-hidden min-w-0 cursor-pointer transition-colors"
-                      style={{
-                        backgroundColor: isSelected ? '#291E3A' : '#120D1D',
-                        border: isSelected
-                          ? `1.5px solid ${env.colors.accentHex}`
-                          : '1px solid rgba(146, 64, 14, 0.35)',
-                      }}
-                    >
-                      <span className="text-[10px] font-bold text-amber-100 whitespace-nowrap truncate max-w-full">
-                        {env.shortName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              {loadoutTab === 'aviator' ? (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+                  {BIRD_PROFILES.map((bird) => {
+                    const isSelected = bird.id === selectedBirdId;
+                    return (
+                      <button
+                        key={bird.id}
+                        type="button"
+                        data-testid={`gameover-select-bird-${bird.id}`}
+                        onClick={(e) => handleSelectBird(bird.id, e)}
+                        className="flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg overflow-hidden min-w-0 cursor-pointer transition-colors"
+                        style={{
+                          backgroundColor: isSelected ? '#291E3A' : '#120D1D',
+                          border: isSelected
+                            ? `1.5px solid ${bird.colors.auraHex}`
+                            : '1px solid rgba(146, 64, 14, 0.35)',
+                        }}
+                      >
+                        <BirdAvatarSvg birdId={bird.id} className="w-4 h-4 shrink-0" />
+                        <span className="text-[10px] sm:text-[11px] font-bold text-amber-100 whitespace-nowrap truncate">
+                          {bird.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-6 sm:grid-cols-5 gap-1">
+                  {ENVIRONMENT_PROFILES.map((env, index) => {
+                    const isSelected = env.id === selectedEnvId;
+                    const mobileSpan =
+                      index < 3 ? 'col-span-2 sm:col-span-1' : 'col-span-3 sm:col-span-1';
+                    return (
+                      <button
+                        key={env.id}
+                        type="button"
+                        data-testid={`gameover-select-env-${env.id}`}
+                        onClick={(e) => handleSelectEnvironment(env.id, e)}
+                        className={`${mobileSpan} flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg overflow-hidden min-w-0 cursor-pointer transition-colors`}
+                        style={{
+                          backgroundColor: isSelected ? '#291E3A' : '#120D1D',
+                          border: isSelected
+                            ? `1.5px solid ${env.colors.accentHex}`
+                            : '1px solid rgba(146, 64, 14, 0.35)',
+                        }}
+                      >
+                        <EnvironmentIconSvg envId={env.id} className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[10px] font-bold text-amber-100 whitespace-nowrap truncate max-w-full">
+                          {env.shortName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className={`${isCompactHeight ? 'mt-2 flex-row' : 'mt-3 flex-col'} flex gap-2`}>
+            <div className={`${isCompactHeight ? 'mt-2 flex-row' : 'mt-2.5 flex-col'} flex gap-1.5 sm:gap-2`}>
               <button
                 type="button"
                 data-start="true"
@@ -2013,7 +2388,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 Play Again
               </button>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   data-testid="gameover-leaderboard-button"
@@ -2045,7 +2420,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
               <a
                 href="/web-lab"
-                className="w-full py-2 px-4 rounded-xl text-xs sm:text-sm font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap"
+                className="w-full py-2 px-4 rounded-xl text-xs sm:text-sm font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap block"
                 style={{
                   backgroundColor: '#1E162B',
                   border: '1px solid rgba(146, 64, 14, 0.4)',
@@ -2252,6 +2627,10 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           audioRef.current?.playClick();
         }}
         entries={leaderboardEntries}
+        isLoading={isLeaderboardLoading}
+        loadError={leaderboardLoadError}
+        isSubmitting={isSubmittingScore}
+        onRefresh={() => void refreshSharedLeaderboard()}
         globalBestScore={bestScore}
         envBestScores={envBestScores}
         selectedEnvironmentId={selectedEnvId}
@@ -2261,7 +2640,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           setPilotName(val);
           if (quickSubmitError) setQuickSubmitError(null);
         }}
-        onQuickSubmitScore={handleQuickSubmitScore}
+        onQuickSubmitScore={(targetEnvId) => void handleQuickSubmitScore(targetEnvId)}
         quickSubmitError={quickSubmitError}
         quickSubmitSuccess={quickSubmitSuccess}
         isCompactHeight={isCompactHeight}

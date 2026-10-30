@@ -542,6 +542,75 @@ export function triggerSpecialAbility(
       'CHRONO FIELD',
       '#34D399'
     );
+  } else if (bird.id === 'valkyrie') {
+    // Astral Blink: Locks onto the next unpassed conduit gap center, disarms nearby traps, and awards +1
+    let targetGapY =
+      state.ceilingHeight +
+      (state.worldHeight - state.groundHeight - state.ceilingHeight) * 0.5;
+    let foundNext = false;
+    for (let i = 0; i < state.obstacles.length; i++) {
+      const obs = state.obstacles[i];
+      if (!obs.passed && obs.x + obs.width >= state.player.x - 16) {
+        if (!foundNext) {
+          targetGapY = obs.gapCenterY;
+          foundNext = true;
+        }
+        if (obs.x - state.player.x <= 420) {
+          obs.trapDisarmed = true;
+          obs.geyserHeight = 0;
+          obs.laserActive = false;
+        }
+      }
+    }
+    state.player.y = state.player.y * 0.25 + targetGapY * 0.75;
+    state.player.vy = 0;
+    state.player.rotation = 0;
+    state.player.scaleX = 1.22;
+    state.player.scaleY = 0.84;
+    state.score += 1;
+    if (state.score > state.bestScore) {
+      state.bestScore = state.score;
+      state.isNewBest = true;
+    }
+    spawnFloatingPopup(
+      state,
+      state.player.x + 14,
+      Math.max(58, state.player.y - 30),
+      '+1 ASTRAL BLINK',
+      'GAP LOCK & PHASE',
+      '#C084FC'
+    );
+  } else if (bird.id === 'volt') {
+    // Tesla Overload: Deploys an EMP shock-shield, neutralizes all active traps, widens gaps +28px, and awards +2
+    state.shieldActive = true;
+    const minTop = 18;
+    const maxBottom = state.worldHeight - state.groundHeight - 18;
+    for (let i = 0; i < state.obstacles.length; i++) {
+      const obs = state.obstacles[i];
+      if (obs.x + obs.width > state.player.x - 24) {
+        obs.trapDisarmed = true;
+        obs.geyserHeight = 0;
+        obs.laserActive = false;
+        obs.icicleTriggered = false;
+        obs.gapHeight += 28;
+        const half = obs.gapHeight / 2;
+        obs.topHeight = Math.max(minTop, obs.gapCenterY - half);
+        obs.bottomY = Math.min(maxBottom, obs.gapCenterY + half);
+      }
+    }
+    state.score += 2;
+    if (state.score > state.bestScore) {
+      state.bestScore = state.score;
+      state.isNewBest = true;
+    }
+    spawnFloatingPopup(
+      state,
+      state.player.x + 14,
+      Math.max(58, state.player.y - 30),
+      '+2 TESLA NOVA',
+      'EMP SHIELD & TRAP ZAP',
+      '#22D3EE'
+    );
   }
 
   // Multi-layered Brass-and-Sky Ability Activation Particle Burst
@@ -797,6 +866,40 @@ export function emitActiveAbilityParticles(
       gravityScale: -0.1,
     });
     spawned++;
+  } else if (bird.id === 'valkyrie') {
+    // Astral Blink: Shimmering starlight prisms & clockwork astrolabe rings
+    const isPrism = nextRandom(state) > 0.4;
+    spawnPooledParticle(state, {
+      x: state.player.x - 6 + (nextRandom(state) - 0.5) * 18,
+      y: state.player.y + (nextRandom(state) - 0.5) * 18,
+      vx: -140 - nextRandom(state) * 70,
+      vy: (nextRandom(state) - 0.5) * 35,
+      size: isPrism ? 4.6 : 5.2,
+      maxLife: 0.34,
+      color: isPrism ? '#C084FC' : '#FDE68A',
+      shape: isPrism ? 'prism' : 'ring',
+      rotation: angle,
+      vRot: 8,
+      gravityScale: 0,
+    });
+    spawned++;
+  } else if (bird.id === 'volt') {
+    // Tesla Overload: High-voltage cyan sparks & spinning dynamo brass gears
+    const isGear = nextRandom(state) > 0.5;
+    spawnPooledParticle(state, {
+      x: state.player.x + Math.cos(angle) * 24,
+      y: state.player.y + Math.sin(angle) * 24,
+      vx: Math.cos(angle) * 55 - 45,
+      vy: Math.sin(angle) * 55,
+      size: isGear ? 4.8 : 4.2,
+      maxLife: 0.32,
+      color: isGear ? '#FACC15' : '#22D3EE',
+      shape: isGear ? 'gear' : 'spark',
+      rotation: angle,
+      vRot: 12,
+      gravityScale: 0.1,
+    });
+    spawned++;
   }
 
   return spawned;
@@ -890,8 +993,8 @@ export function detectCollision(
     return { cause: 'stratosphere', obstacleIndex: -1 };
   }
 
-  // Zephyr's Gale Dash phases invulnerably through conduit pillars and traps while active
-  if (state.birdId === 'zephyr' && state.abilityActiveTimer > 0) {
+  // Zephyr's Gale Dash and Valkyrie's Astral Blink phase invulnerably through conduit pillars and traps while active
+  if ((state.birdId === 'zephyr' || state.birdId === 'valkyrie') && state.abilityActiveTimer > 0) {
     return { cause: 'none', obstacleIndex: -1 };
   }
 
@@ -1121,7 +1224,10 @@ export function stepSimulation(
 
   if (state.abilityActiveTimer > 0) {
     state.abilityActiveTimer = Math.max(0, state.abilityActiveTimer - dt);
-    if (state.abilityActiveTimer === 0 && state.birdId === 'kora') {
+    if (
+      state.abilityActiveTimer === 0 &&
+      (state.birdId === 'kora' || state.birdId === 'volt')
+    ) {
       state.shieldActive = false;
     }
   }
@@ -1135,7 +1241,7 @@ export function stepSimulation(
   state.player.scaleX = 1 + (state.player.scaleX - 1) * damp;
   state.player.scaleY = 1 + (state.player.scaleY - 1) * damp;
 
-  const baseWingRate = bird.id === 'chronos' ? 12 : 5.2;
+  const baseWingRate = bird.id === 'chronos' ? 12 : bird.id === 'volt' ? 9.5 : 5.2;
   if (state.player.flapImpulseTimer > 0) {
     state.player.flapImpulseTimer = Math.max(0, state.player.flapImpulseTimer - dt);
     state.player.wingPhase = (state.player.wingPhase + dt * 18) % (Math.PI * 2);
@@ -1148,6 +1254,7 @@ export function stepSimulation(
   }
 
   const isZephyrDashing = state.birdId === 'zephyr' && state.abilityActiveTimer > 0;
+  const isValkyrieWarping = state.birdId === 'valkyrie' && state.abilityActiveTimer > 0;
   const isChronosSlowing = state.birdId === 'chronos' && state.abilityActiveTimer > 0;
   const trapDt = isChronosSlowing ? dt * 0.45 : dt;
 
@@ -1157,10 +1264,25 @@ export function stepSimulation(
   }
   if (isChronosSlowing) {
     gravityMultiplier *= 0.55;
+  } else if (isValkyrieWarping) {
+    gravityMultiplier *= 0.25;
   }
 
   if (isZephyrDashing) {
     state.player.vy = 0;
+  } else if (isValkyrieWarping) {
+    // Gently guide Valkyrie toward the next unpassed conduit gap center while warping
+    let targetGapY = state.player.y;
+    for (let i = 0; i < state.obstacles.length; i++) {
+      const obs = state.obstacles[i];
+      if (!obs.passed && obs.x + obs.width >= state.player.x - 10) {
+        targetGapY = obs.gapCenterY;
+        break;
+      }
+    }
+    const dy = targetGapY - state.player.y;
+    state.player.vy += dy * 6.5 * dt + config.gravity * gravityMultiplier * dt;
+    state.player.vy *= Math.pow(0.18, dt);
   } else {
     state.player.vy += config.gravity * gravityMultiplier * dt;
   }
@@ -1311,12 +1433,22 @@ export function stepSimulation(
 
       const prevMultiplier = state.comboMultiplier;
       state.comboCount += 1;
-      state.comboMultiplier = computeComboMultiplier(state.comboCount);
+      // Valkyrie's Astral Lock passive reaches combo tiers 1 dodge earlier
+      const effectiveComboCount =
+        state.birdId === 'valkyrie' ? state.comboCount + 1 : state.comboCount;
+      state.comboMultiplier = computeComboMultiplier(effectiveComboCount);
       state.maxCombo = Math.max(state.maxCombo, state.comboCount);
       state.peakComboMultiplier = Math.max(
         state.peakComboMultiplier,
         state.comboMultiplier
       );
+
+      // Volt's Static Dynamo passive recharges 1.5s of ability cooldown on every gate cleared
+      let didVoltRecharge = false;
+      if (state.birdId === 'volt' && state.abilityCooldownTimer > 0) {
+        state.abilityCooldownTimer = Math.max(0, state.abilityCooldownTimer - 1.5);
+        didVoltRecharge = true;
+      }
 
       const didComboTierUp = state.comboMultiplier > prevMultiplier;
       if (didComboTierUp) {
@@ -1341,16 +1473,20 @@ export function stepSimulation(
         events.milestoneReached = true;
       }
 
-      const comboTier = getComboTierInfo(state.comboCount);
+      const comboTier = getComboTierInfo(effectiveComboCount);
       let popupSubtext = '';
       if (isChronosHarmonic && state.comboMultiplier > 1) {
         popupSubtext = `HARMONIC x${state.comboMultiplier} • ${state.comboCount} STREAK`;
       } else if (didComboTierUp) {
         popupSubtext = `COMBO x${state.comboMultiplier}! • ${state.comboCount} STREAK`;
+      } else if (didVoltRecharge && state.comboMultiplier > 1) {
+        popupSubtext = `x${state.comboMultiplier} COMBO • -1.5s CD`;
       } else if (state.comboMultiplier > 1) {
         popupSubtext = `x${state.comboMultiplier} COMBO • ${state.comboCount} STREAK`;
       } else if (isChronosHarmonic) {
         popupSubtext = 'HARMONIC!';
+      } else if (didVoltRecharge) {
+        popupSubtext = 'DYNAMO -1.5s CD';
       } else if (isMilestone) {
         popupSubtext = `${state.gatesClearedCount} GATES!`;
       }

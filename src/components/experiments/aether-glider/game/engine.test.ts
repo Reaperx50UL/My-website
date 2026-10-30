@@ -410,8 +410,8 @@ test('particle system emits brass-and-sky particles during high-speed maneuvers 
     'Spawns clockwork brass gear or exhaust spark particle'
   );
 
-  // 2. Ability activation and sustained active ability emit brass-and-sky particles across birds
-  for (const birdId of ['kora', 'zephyr', 'ignis', 'chronos'] as const) {
+  // 2. Ability activation and sustained active ability emit brass-and-sky particles across all 6 birds
+  for (const birdId of ['kora', 'zephyr', 'ignis', 'chronos', 'valkyrie', 'volt'] as const) {
     selectBird(state, birdId);
     for (const p of state.particles) p.active = false;
     state.abilityCooldownTimer = 0;
@@ -432,19 +432,94 @@ test('particle system emits brass-and-sky particles during high-speed maneuvers 
   }
 });
 
-test('global and per-environment leaderboards sort, filter, validate pilot names, and record high scores', async () => {
+test('Valkyrie Astral Blink & Astral Lock passive and Volt Tesla Overload & Static Dynamo passive work accurately', () => {
+  // 1. Valkyrie: Astral Blink warps toward next conduit gap center, phases through hazards, scores +1, and reaches 2x combo on 1st gate
+  const valkState = createInitialState(DEFAULT_GAME_CONFIG, 0, 480, 640, 404, 'valkyrie', 'cyber');
+  resetForNewRun(valkState, DEFAULT_GAME_CONFIG, 404);
+  valkState.obstacles = [];
+  valkState.launchGraceTimer = 0;
+
+  const vObs = spawnObstaclePair(valkState, DEFAULT_GAME_CONFIG, valkState.player.x + 80);
+  vObs.gapCenterY = 210;
+  vObs.laserActive = true;
+  valkState.player.y = 420;
+
+  const blinked = triggerSpecialAbility(valkState, DEFAULT_GAME_CONFIG, true);
+  assert.equal(blinked, true);
+  assert.equal(valkState.score, 1, 'Astral Blink awards +1 warp point');
+  assert.equal(vObs.trapDisarmed, true, 'Astral Blink disarms upcoming trap');
+  assert.ok(
+    Math.abs(valkState.player.y - vObs.gapCenterY) < 60,
+    'Astral Blink warps Valkyrie toward the next conduit gap center'
+  );
+
+  // While abilityActiveTimer > 0, Valkyrie phases safely through conduit pillars
+  vObs.x = valkState.player.x - 10;
+  valkState.player.y = Math.max(20, vObs.topHeight - 5);
+  assert.equal(detectCollision(valkState, DEFAULT_GAME_CONFIG).cause, 'none');
+
+  // Valkyrie passive (Astral Lock): 1st gate cleared already grants 2x combo multiplier!
+  valkState.obstacles = [];
+  const gate1 = spawnObstaclePair(
+    valkState,
+    DEFAULT_GAME_CONFIG,
+    valkState.player.x - DEFAULT_GAME_CONFIG.obstacleWidth * 0.5 + 1
+  );
+  valkState.player.y = gate1.gapCenterY;
+  stepSimulation(valkState, 0.03, DEFAULT_GAME_CONFIG, true);
+  assert.equal(valkState.comboCount, 1);
+  assert.equal(valkState.comboMultiplier, 2, 'Valkyrie reaches 2x combo on 1st dodge');
+
+  // 2. Volt: Tesla Overload deploys shock-shield, disarms traps, widens gaps, scores +2, and Static Dynamo recharges 1.5s cooldown per gate
+  const voltState = createInitialState(DEFAULT_GAME_CONFIG, 0, 480, 640, 505, 'volt', 'volcano');
+  resetForNewRun(voltState, DEFAULT_GAME_CONFIG, 505);
+  voltState.obstacles = [];
+  voltState.launchGraceTimer = 0;
+
+  const voltObs = spawnObstaclePair(voltState, DEFAULT_GAME_CONFIG, voltState.player.x + 90);
+  const startGap = voltObs.gapHeight;
+  voltObs.geyserHeight = 38;
+
+  const overloaded = triggerSpecialAbility(voltState, DEFAULT_GAME_CONFIG, true);
+  assert.equal(overloaded, true);
+  assert.equal(voltState.shieldActive, true, 'Tesla Overload activates shock-shield');
+  assert.equal(voltState.score, 2, 'Tesla Overload awards +2 score');
+  assert.equal(voltObs.trapDisarmed, true, 'Tesla Overload disarms active magma geyser');
+  assert.ok(voltObs.gapHeight > startGap, 'Tesla Overload widens conduit gap by +28px');
+
+  // Clearing a gate reduces Volt's abilityCooldownTimer by 1.5s (plus dt)
+  voltState.obstacles = [];
+  const cdBefore = voltState.abilityCooldownTimer;
+  const voltGate = spawnObstaclePair(
+    voltState,
+    DEFAULT_GAME_CONFIG,
+    voltState.player.x - DEFAULT_GAME_CONFIG.obstacleWidth * 0.5 + 1
+  );
+  voltState.player.y = voltGate.gapCenterY;
+  stepSimulation(voltState, 0.03, DEFAULT_GAME_CONFIG, true);
+  assert.ok(
+    cdBefore - voltState.abilityCooldownTimer >= 1.5,
+    'Static Dynamo passive recharges 1.5s of ability cooldown on gate clear'
+  );
+});
+
+test('leaderboard validates names/scores, breaks ties deterministically, and preserves best score per pilot & realm', async () => {
   const {
+    DEFAULT_SEED_LEADERBOARD_ENTRIES,
+    applyScoreSubmissionToEntries,
     evaluateHighScoreQualification,
     getEnvironmentLeaderboard,
     getGlobalLeaderboard,
     loadEnvironmentBestScores,
     loadLastPilotName,
-    loadLeaderboardEntries,
-    submitLeaderboardScore,
+    saveEnvironmentBestScore,
+    saveLastPilotName,
+    sortLeaderboardEntries,
     validatePilotName,
+    validateScoreSubmission,
   } = await import('./leaderboard');
 
-  // 1. Pilot name validation
+  // 1. Pilot name & score validation (rejects malformed names, HTML tags, punctuation-only, out-of-range scores)
   assert.equal(validatePilotName('   ').valid, false, 'Rejects empty/whitespace pilot name');
   assert.equal(validatePilotName('A').valid, false, 'Rejects 1-character pilot name');
   assert.equal(
@@ -452,16 +527,86 @@ test('global and per-environment leaderboards sort, filter, validate pilot names
     false,
     'Rejects > 18 character pilot name'
   );
-  const validCheck = validatePilotName('  Sky Captain  ');
+  assert.equal(
+    validatePilotName('<script>alert(1)</script>').valid,
+    false,
+    'Rejects HTML/angle brackets'
+  );
+  assert.equal(
+    validatePilotName('---___...').valid,
+    false,
+    'Rejects names without letters or numbers'
+  );
+
+  const validCheck = validatePilotName('  Sky   Captain  ');
   assert.equal(validCheck.valid, true);
   assert.equal(validCheck.sanitized, 'Sky Captain');
 
-  // 2. Seeded entries populate both Global and all 5 Environment leaderboards
-  const lbKey = 'test_leaderboard_storage_key';
-  const pilotKey = 'test_pilot_name_key';
-  const envBestKey = 'test_env_best_key';
+  assert.equal(
+    validateScoreSubmission({
+      playerName: 'Sky Captain',
+      score: 0,
+      birdId: 'kora',
+      environmentId: 'clockwork',
+    }).valid,
+    false,
+    'Rejects score <= 0'
+  );
+  assert.equal(
+    validateScoreSubmission({
+      playerName: 'Sky Captain',
+      score: 999999,
+      birdId: 'kora',
+      environmentId: 'clockwork',
+    }).valid,
+    false,
+    'Rejects implausible score > 9999'
+  );
 
-  const initialEntries = loadLeaderboardEntries(lbKey);
+  // 2. Deterministic tie-breaking: score DESC -> maxCombo DESC -> createdAt ASC -> playerName ASC -> id ASC
+  const tiedEntries = sortLeaderboardEntries([
+    {
+      id: 'tie-late',
+      playerName: 'Zara',
+      score: 30,
+      birdId: 'kora',
+      environmentId: 'clockwork',
+      maxCombo: 5,
+      peakComboMultiplier: 3,
+      medal: 'gold',
+      createdAt: 2000,
+    },
+    {
+      id: 'tie-early',
+      playerName: 'Bram',
+      score: 30,
+      birdId: 'zephyr',
+      environmentId: 'clockwork',
+      maxCombo: 5,
+      peakComboMultiplier: 3,
+      medal: 'gold',
+      createdAt: 1000,
+    },
+    {
+      id: 'tie-higher-combo',
+      playerName: 'Aria',
+      score: 30,
+      birdId: 'valkyrie',
+      environmentId: 'clockwork',
+      maxCombo: 7,
+      peakComboMultiplier: 4,
+      medal: 'gold',
+      createdAt: 3000,
+    },
+  ]);
+  assert.deepEqual(
+    tiedEntries.map((e) => e.id),
+    ['tie-higher-combo', 'tie-early', 'tie-late'],
+    'Higher maxCombo wins first tie-breaker, earlier createdAt wins second tie-breaker'
+  );
+
+  // 3. Seeded entries populate both Global and all 5 Environment leaderboards
+  const initialEntries = sortLeaderboardEntries(DEFAULT_SEED_LEADERBOARD_ENTRIES);
   assert.ok(initialEntries.length >= 15, 'Seeds initial entries across all 5 environments');
 
   const globalTop = getGlobalLeaderboard(initialEntries, 10);
@@ -478,61 +623,134 @@ test('global and per-environment leaderboards sort, filter, validate pilot names
       envTop.every((e) => e.environmentId === envId),
       `${envId} leaderboard only contains entries from ${envId}`
     );
-    assert.ok(envTop[0].score >= envTop[1].score, `${envId} leaderboard sorts descending`);
   }
 
-  // 3. High-score qualification & submitting player name after achieving a high score
+  // 4. High-score qualification, duplicate prevention, and best-score preservation
   const qual = evaluateHighScoreQualification(initialEntries, 35, 'bamboo', 10, 8);
   assert.equal(qual.qualifies, true);
-  assert.equal(qual.isNewGlobalPersonalBest, true);
-  assert.equal(qual.isNewEnvironmentPersonalBest, true);
   assert.equal(qual.projectedGlobalRank, 1);
   assert.equal(qual.projectedEnvironmentRank, 1);
 
-  const failedSubmit = submitLeaderboardScore(
-    {
-      playerName: ' ',
-      score: 35,
-      birdId: 'zephyr',
-      environmentId: 'bamboo',
-      maxCombo: 9,
-      peakComboMultiplier: 5,
-    },
-    lbKey,
-    pilotKey,
-    envBestKey
-  );
-  assert.equal(failedSubmit.ok, false);
+  const firstSubmit = applyScoreSubmissionToEntries(initialEntries, {
+    playerName: 'Commander Ruma',
+    score: 35,
+    birdId: 'zephyr',
+    environmentId: 'bamboo',
+    maxCombo: 9,
+    peakComboMultiplier: 5,
+    createdAt: 1710000100000,
+  });
+  assert.equal(firstSubmit.ok, true);
+  assert.equal(firstSubmit.updated, true);
+  assert.equal(firstSubmit.keptExistingBest, false);
+  assert.equal(firstSubmit.globalRank, 1);
+  assert.equal(firstSubmit.environmentRank, 1);
 
-  const successSubmit = submitLeaderboardScore(
-    {
-      playerName: 'Commander Ruma',
-      score: 35,
-      birdId: 'zephyr',
-      environmentId: 'bamboo',
-      maxCombo: 9,
-      peakComboMultiplier: 5,
-    },
-    lbKey,
-    pilotKey,
-    envBestKey
+  // Submitting a lower or equal score under the same pilot name & realm keeps existing best without duplicating
+  const lowerSubmit = applyScoreSubmissionToEntries(firstSubmit.entries, {
+    playerName: 'commander ruma',
+    score: 22,
+    birdId: 'kora',
+    environmentId: 'bamboo',
+    maxCombo: 4,
+    peakComboMultiplier: 2,
+    createdAt: 1710000200000,
+  });
+  assert.equal(lowerSubmit.ok, true);
+  assert.equal(lowerSubmit.updated, false);
+  assert.equal(lowerSubmit.keptExistingBest, true);
+  assert.equal(lowerSubmit.entry?.score, 35, 'Preserves higher 35-pt record');
+  assert.equal(
+    lowerSubmit.entries.filter(
+      (e) => e.playerName.toLowerCase() === 'commander ruma' && e.environmentId === 'bamboo'
+    ).length,
+    1,
+    'Does not create duplicate entries for the same pilot and environment'
   );
-  assert.equal(successSubmit.ok, true);
-  assert.equal(successSubmit.globalRank, 1);
-  assert.equal(successSubmit.environmentRank, 1);
+
+  // Submitting a higher score updates the pilot's record in place
+  const higherSubmit = applyScoreSubmissionToEntries(lowerSubmit.entries, {
+    playerName: 'Commander Ruma',
+    score: 42,
+    birdId: 'valkyrie',
+    environmentId: 'bamboo',
+    maxCombo: 11,
+    peakComboMultiplier: 5,
+    createdAt: 1710000300000,
+  });
+  assert.equal(higherSubmit.ok, true);
+  assert.equal(higherSubmit.updated, true);
+  assert.equal(higherSubmit.entry?.score, 42);
+
+  // Local pilot callsign convenience storage
+  const pilotKey = 'test_pilot_name_key';
+  const envBestKey = 'test_env_best_key';
+  saveLastPilotName('Commander Ruma', pilotKey);
+  saveEnvironmentBestScore('bamboo', 42, envBestKey);
   assert.equal(loadLastPilotName(pilotKey), 'Commander Ruma');
-  assert.equal(loadEnvironmentBestScores(envBestKey).bamboo, 35);
-
-  const updatedGlobal = getGlobalLeaderboard(successSubmit.entries, 10);
-  assert.equal(updatedGlobal[0].playerName, 'Commander Ruma');
-  assert.equal(updatedGlobal[0].score, 35);
-  assert.equal(updatedGlobal[0].isPlayerEntry, true);
-
-  const updatedBamboo = getEnvironmentLeaderboard(successSubmit.entries, 'bamboo', 10);
-  assert.equal(updatedBamboo[0].playerName, 'Commander Ruma');
-  assert.equal(updatedBamboo[0].environmentId, 'bamboo');
+  assert.equal(loadEnvironmentBestScores(envBestKey).bamboo, 42);
 });
 
+test('shared server leaderboard store persists across visitors, handles empty state, and reports unconfigured errors', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const {
+    getSharedLeaderboardEntries,
+    resetSharedLeaderboardForAdminOrTest,
+    submitSharedScore,
+  } = await import('../server/leaderboardStore');
 
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aether-glider-lb-test-'));
+  const tmpFile = path.join(tmpDir, 'shared-leaderboard.json');
+  const prevPath = process.env.LEADERBOARD_DATA_PATH;
+  process.env.LEADERBOARD_DATA_PATH = tmpFile;
 
+  try {
+    // 1. Visitor A loads initial seeded leaderboard
+    const initialLoad = await getSharedLeaderboardEntries();
+    assert.equal(initialLoad.ok, true);
+    assert.ok(initialLoad.entries.length >= 15);
 
+    // 2. Visitor A submits a high score
+    const saved = await submitSharedScore({
+      playerName: 'DeviceOnePilot',
+      score: 48,
+      birdId: 'volt',
+      environmentId: 'cyber',
+      maxCombo: 12,
+      peakComboMultiplier: 5,
+    });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.globalRank, 1);
+    assert.equal(saved.environmentRank, 1);
+
+    // 3. Visitor B (separate read from persistent file store) sees Visitor A's score at Rank #1
+    const visitorBLoad = await getSharedLeaderboardEntries();
+    assert.equal(visitorBLoad.ok, true);
+    assert.equal(visitorBLoad.entries[0].playerName, 'DeviceOnePilot');
+    assert.equal(visitorBLoad.entries[0].score, 48);
+
+    // 4. Empty leaderboard state works cleanly without re-seeding unexpectedly
+    const emptyReset = await resetSharedLeaderboardForAdminOrTest('empty');
+    assert.equal(emptyReset.ok, true);
+    assert.equal(emptyReset.entries.length, 0);
+    const afterEmptyLoad = await getSharedLeaderboardEntries();
+    assert.equal(afterEmptyLoad.ok, true);
+    assert.equal(afterEmptyLoad.entries.length, 0);
+
+    // 5. Unconfigured backend state returns explicit BACKEND_NOT_CONFIGURED error
+    process.env.LEADERBOARD_FORCE_UNCONFIGURED = 'true';
+    const unconfLoad = await getSharedLeaderboardEntries();
+    assert.equal(unconfLoad.ok, false);
+    assert.equal(unconfLoad.code, 'BACKEND_NOT_CONFIGURED');
+    delete process.env.LEADERBOARD_FORCE_UNCONFIGURED;
+  } finally {
+    if (prevPath === undefined) {
+      delete process.env.LEADERBOARD_DATA_PATH;
+    } else {
+      process.env.LEADERBOARD_DATA_PATH = prevPath;
+    }
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});

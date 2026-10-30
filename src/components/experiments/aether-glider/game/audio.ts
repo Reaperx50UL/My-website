@@ -528,6 +528,31 @@ export class AudioController {
         osc.stop(now + 0.13);
 
         this.playFilteredNoise(ctx, now, 0.08, 'bandpass', 1200, 620, 1.8, 0.055);
+      } else if (birdId === 'valkyrie') {
+        // Valkyrie (Astral Hawk): Shimmering starlight chime-sweep + crisp wing snap
+        this.scheduleBellNote(ctx, now, 659.25 * pitchShift, 0.09, 0.065);
+        this.scheduleTone(ctx, now + 0.015, 987.77 * pitchShift, 'sine', 0.08, 0.055);
+      } else if (birdId === 'volt') {
+        // Volt (Tesla Shrike): Snappy high-voltage electric wing-zip
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(340 * pitchShift, now);
+        osc.frequency.exponentialRampToValueAtTime(860 * pitchShift, now + 0.075);
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1600, now);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.075, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.09);
       } else {
         // Chronos (Hummingbird): High-speed crystalline hum-flutter
         const osc = ctx.createOscillator();
@@ -587,6 +612,17 @@ export class AudioController {
         this.scheduleTone(ctx, now, 587.33, 'sawtooth', 0.14, 0.06, 1400);
         this.scheduleTone(ctx, now + 0.05, 739.99, 'sawtooth', 0.16, 0.065, 1600);
         this.scheduleTone(ctx, now + 0.1, 880.0, 'triangle', 0.2, 0.085);
+      } else if (birdId === 'valkyrie') {
+        // Astral starlight fifths chime (A5 -> E6 -> A6)
+        this.scheduleBellNote(ctx, now, 880.0, 0.16, 0.085);
+        this.scheduleBellNote(ctx, now + 0.05, 1318.51, 0.18, 0.085);
+        this.scheduleBellNote(ctx, now + 0.1, 1760.0, 0.22, 0.09);
+      } else if (birdId === 'volt') {
+        // High-voltage Tesla spark arpeggio (C5 -> G5 -> C6 -> E6)
+        const freqs = [523.25, 783.99, 1046.5, 1318.51];
+        freqs.forEach((f, idx) => {
+          this.scheduleTone(ctx, now + idx * 0.035, f, 'square', 0.09, 0.055, 2200);
+        });
       } else {
         // Shimmering temporal crystal bell arpeggio (G5 -> B5 -> D6 -> G6)
         const notes = [783.99, 987.77, 1174.66, 1567.98];
@@ -666,6 +702,21 @@ export class AudioController {
         this.playFilteredNoise(ctx, now, 0.26, 'lowpass', 1800, 240, 1.4, 0.12);
         this.scheduleBellNote(ctx, now + 0.04, 880.0, 0.28, 0.09);
         this.scheduleBellNote(ctx, now + 0.09, 1318.51, 0.3, 0.085);
+      } else if (birdId === 'valkyrie') {
+        // Astral Blink: Celestial warp shimmer + ascending starlight chord
+        this.playFilteredNoise(ctx, now, 0.2, 'bandpass', 1200, 3400, 3.0, 0.08);
+        const notes = [587.33, 880.0, 1174.66, 1760.0];
+        notes.forEach((f, idx) => {
+          this.scheduleBellNote(ctx, now + idx * 0.032, f, 0.26, 0.09);
+        });
+      } else if (birdId === 'volt') {
+        // Tesla Overload: High-voltage EMP thunderclap + electric synth cascade
+        this.scheduleDrumKick(ctx, now, 195, 50, 0.24, 0.15);
+        this.playFilteredNoise(ctx, now, 0.22, 'bandpass', 2200, 900, 2.2, 0.1);
+        const zaps = [659.25, 987.77, 1318.51, 1975.53];
+        zaps.forEach((f, idx) => {
+          this.scheduleTone(ctx, now + idx * 0.03, f, 'sawtooth', 0.12, 0.065, 2400);
+        });
       } else {
         // Chronos Time Dilation: Pitch-bending clockwork warp down-sweep + decelerating ticks
         const osc = ctx.createOscillator();

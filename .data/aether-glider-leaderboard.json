@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "updatedAt": 1793356388011,
+  "entries": [
+    {
+      "id": "seed-cy-1",
+      "playerName": "Nova Pulse",
+      "score": 29,
+      "birdId": "chronos",
+      "environmentId": "cyber",
+      "maxCombo": 9,
+      "peakComboMultiplier": 5,
+      "medal": "gold",
+      "createdAt": 1730000030000
+    },
+    {
+      "id": "seed-vc-1",
+      "playerName": "Pyra Ashborn",
+      "score": 26,
+      "birdId": "ignis",
+      "environmentId": "volcano",
+      "maxCombo": 8,
+      "peakComboMultiplier": 4,
+      "medal": "gold",
+      "createdAt": 1730000060000
+    },
+    {
+      "id": "seed-cw-1",
+      "playerName": "Captain Vance",
+      "score": 24,
+      "birdId": "kora",
+      "environmentId": "clockwork",
+      "maxCombo": 7,
+      "peakComboMultiplier": 4,
+      "medal": "silver",
+      "createdAt": 1730000100000
+    },
+    {
+      "id": "seed-bm-1",
+      "playerName": "Master Shen",
+      "score": 22,
+      "birdId": "zephyr",
+      "environmentId": "bamboo",
+      "maxCombo": 6,
+      "peakComboMultiplier": 4,
+      "medal": "silver",
+      "createdAt": 1730000075000
+    },
+    {
+      "id": "seed-ic-1",
+      "playerName": "Freya Borealis",
+      "score": 20,
+      "birdId": "zephyr",
+      "environmentId": "ice",
+      "maxCombo": 6,
+      "peakComboMultiplier": 4,
+      "medal": "silver",
+      "createdAt": 1730000045000
+    },
+    {
+      "id": "seed-cy-2",
+      "playerName": "Zero Vector",
+      "score": 16,
+      "birdId": "ignis",
+      "environmentId": "cyber",
+      "maxCombo": 5,
+      "peakComboMultiplier": 3,
+      "medal": "silver",
+      "createdAt": 1730000025000
+    },
+    {
+      "id": "seed-vc-2",
+      "playerName": "Forge Warden",
+      "score": 15,
+      "birdId": "kora",
+      "environmentId": "volcano",
+      "maxCombo": 4,
+      "peakComboMultiplier": 3,
+      "medal": "silver",
+      "createdAt": 1730000055000
+    },
+    {
+      "id": "seed-cw-2",
+      "playerName": "Aria Gearwright",
+      "score": 14,
+      "birdId": "chronos",
+      "environmentId": "clockwork",
+      "maxCombo": 5,
+      "peakComboMultiplier": 3,
+      "medal": "silver",
+      "createdAt": 1730000090000
+    },
+    {
+      "id": "seed-bm-2",
+      "playerName": "Lin Windrunner",
+      "score": 12,
+      "birdId": "chronos",
+      "environmentId": "bamboo",
+      "maxCombo": 4,
+      "peakComboMultiplier": 3,
+      "medal": "silver",
+      "createdAt": 1730000070000
+    },
+    {
+      "id": "seed-ic-2",
+      "playerName": "Glacier Hawk",
+      "score": 11,
+      "birdId": "kora",
+      "environmentId": "ice",
+      "maxCombo": 4,
+      "peakComboMultiplier": 3,
+      "medal": "bronze",
+      "createdAt": 1730000040000
+    },
+    {
+      "id": "seed-cy-3",
+      "playerName": "Neon Valkyrie",
+      "score": 8,
+      "birdId": "zephyr",
+      "environmentId": "cyber",
+      "maxCombo": 3,
+      "peakComboMultiplier": 2,
+      "medal": "bronze",
+      "createdAt": 1730000020000
+    },
+    {
+      "id": "seed-vc-3",
+      "playerName": "Cinder Scout",
+      "score": 7,
+      "birdId": "ignis",
+      "environmentId": "volcano",
+      "maxCombo": 3,
+      "peakComboMultiplier": 2,
+      "medal": "bronze",
+      "createdAt": 1730000050000
+    },
+    {
+      "id": "seed-cw-3",
+      "playerName": "Bram Copperwing",
+      "score": 6,
+      "birdId": "zephyr",
+      "environmentId": "clockwork",
+      "maxCombo": 3,
+      "peakComboMultiplier": 2,
+      "medal": "bronze",
+      "createdAt": 1730000080000
+    },
+    {
+      "id": "seed-bm-3",
+      "playerName": "Sora Jade",
+      "score": 5,
+      "birdId": "kora",
+      "environmentId": "bamboo",
+      "maxCombo": 2,
+      "peakComboMultiplier": 2,
+      "medal": "bronze",
+      "createdAt": 1730000065000
+    },
+    {
+      "id": "seed-ic-3",
+      "playerName": "Rime Drifter",
+      "score": 4,
+      "birdId": "chronos",
+      "environmentId": "ice",
+      "maxCombo": 2,
+      "peakComboMultiplier": 2,
+      "medal": "none",
+      "createdAt": 1730000035000
+    }
+  ]
+}

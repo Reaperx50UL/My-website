@@ -1448,6 +1448,52 @@ function drawPlayerGlider(
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
+    } else if (bird.id === 'valkyrie') {
+      // Astral Blink: Rotating starlight astrolabe diamond & phase aura
+      ctx.save();
+      ctx.rotate(-state.flightTimeSec * 3.6);
+      const portalR = visualRadius * 1.72;
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.88)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(portalR, 0);
+      ctx.lineTo(0, portalR);
+      ctx.lineTo(-portalR, 0);
+      ctx.lineTo(0, -portalR);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(253, 230, 138, 0.72)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, visualRadius * 1.48, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else if (bird.id === 'volt') {
+      // Tesla Overload: Crackling electromagnetic shock-shield & high-voltage lightning arcs
+      const empRadius = visualRadius * 1.7;
+      const grad = ctx.createRadialGradient(0, 0, empRadius * 0.25, 0, 0, empRadius);
+      grad.addColorStop(0, 'rgba(34, 211, 238, 0.08)');
+      grad.addColorStop(0.75, 'rgba(34, 211, 238, 0.3)');
+      grad.addColorStop(1, 'rgba(250, 204, 21, 0.78)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, empRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#22D3EE';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let a = 0; a < 8; a++) {
+        const ang1 = (Math.PI * 2 * a) / 8 + state.flightTimeSec * 4;
+        const ang2 = ang1 + Math.PI / 8;
+        const r1 = empRadius * 0.88;
+        const r2 = empRadius * 1.12;
+        if (a === 0) ctx.moveTo(Math.cos(ang1) * r1, Math.sin(ang1) * r1);
+        else ctx.lineTo(Math.cos(ang1) * r1, Math.sin(ang1) * r1);
+        ctx.lineTo(Math.cos(ang2) * r2, Math.sin(ang2) * r2);
+      }
+      ctx.closePath();
+      ctx.stroke();
     }
   }
 
@@ -1457,20 +1503,22 @@ function drawPlayerGlider(
   const r =
     bird.id === 'ignis'
       ? visualRadius * 0.9
-      : bird.id === 'chronos'
+      : bird.id === 'chronos' || bird.id === 'volt'
       ? visualRadius * 0.92
+      : bird.id === 'valkyrie'
+      ? visualRadius * 0.95
       : visualRadius;
 
   ctx.fillStyle = bird.colors.tail;
   ctx.strokeStyle = '#1E1310';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  if (bird.id === 'zephyr') {
+  if (bird.id === 'zephyr' || bird.id === 'valkyrie') {
     ctx.moveTo(-r * 0.65, 0);
     ctx.lineTo(-r * 1.65, -r * 0.55);
     ctx.lineTo(-r * 1.15, 0);
     ctx.lineTo(-r * 1.65, r * 0.45);
-  } else if (bird.id === 'ignis') {
+  } else if (bird.id === 'ignis' || bird.id === 'volt') {
     ctx.moveTo(-r * 0.6, -r * 0.15);
     ctx.lineTo(-r * 1.55, -r * 0.5);
     ctx.lineTo(-r * 1.25, 0);
@@ -1502,8 +1550,10 @@ function drawPlayerGlider(
   ctx.strokeStyle = '#1E1310';
   ctx.lineWidth = 2.2;
   ctx.beginPath();
-  const rx = bird.id === 'zephyr' ? r * 1.22 : r * 1.08;
-  const ry = bird.id === 'zephyr' ? r * 0.74 : r * 0.84;
+  const rx =
+    bird.id === 'zephyr' || bird.id === 'valkyrie' ? r * 1.22 : r * 1.08;
+  const ry =
+    bird.id === 'zephyr' || bird.id === 'valkyrie' ? r * 0.74 : r * 0.84;
   ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
@@ -1517,6 +1567,26 @@ function drawPlayerGlider(
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+  } else if (bird.id === 'valkyrie') {
+    // Swept astral valkyrie wing-crown crest
+    ctx.fillStyle = '#FDE047';
+    ctx.beginPath();
+    ctx.moveTo(r * 0.05, -ry * 0.88);
+    ctx.lineTo(-r * 0.78, -ry * 1.52);
+    ctx.lineTo(-r * 0.32, -ry * 0.92);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (bird.id === 'volt') {
+    // High-voltage brass lightning-rod antenna crest
+    ctx.fillStyle = '#FACC15';
+    ctx.beginPath();
+    ctx.moveTo(r * 0.1, -ry * 0.85);
+    ctx.lineTo(-r * 0.25, -ry * 1.55);
+    ctx.lineTo(r * 0.38, -ry * 0.82);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   ctx.fillStyle = bird.colors.beak;
@@ -1527,6 +1597,10 @@ function drawPlayerGlider(
     ctx.moveTo(rx * 0.85, -r * 0.14);
     ctx.lineTo(rx * 1.75, 0);
     ctx.lineTo(rx * 0.85, r * 0.16);
+  } else if (bird.id === 'volt') {
+    ctx.moveTo(rx * 0.84, -r * 0.18);
+    ctx.lineTo(rx * 1.55, -0.02 * r);
+    ctx.lineTo(rx * 0.84, r * 0.22);
   } else {
     ctx.moveTo(rx * 0.84, -r * 0.22);
     ctx.lineTo(rx * 1.38, 0.04 * r);
@@ -1561,7 +1635,8 @@ function drawPlayerGlider(
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(r * 0.25, 0);
-  const wingSpanX = bird.id === 'zephyr' ? -r * 1.05 : -r * 0.82;
+  const wingSpanX =
+    bird.id === 'zephyr' || bird.id === 'valkyrie' ? -r * 1.05 : -r * 0.82;
   ctx.quadraticCurveTo(
     -r * 0.25,
     -r * 0.68 - wingLift,

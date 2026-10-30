@@ -1,4 +1,4 @@
-export { AetherGliderGame } from './components/AetherGliderGame';
+export { AetherGliderGame, AetherGliderGame as AetherGlider } from './components/AetherGliderGame';
 export type { AetherGliderGameProps } from './components/AetherGliderGame';
 export { LeaderboardModal } from './components/LeaderboardModal';
 export type { LeaderboardModalProps } from './components/LeaderboardModal';
@@ -22,6 +22,8 @@ export {
   getEnvironmentLeaderboard,
   submitLeaderboardScore,
   validatePilotName,
+  fetchSharedLeaderboard,
+  submitSharedLeaderboardScore,
 } from './game/leaderboard';
 export type {
   LeaderboardEntry,
@@ -29,4 +31,5 @@ export type {
   HighScoreQualification,
   SubmitHighScoreInput,
   SubmitHighScoreResult,
+  SharedLeaderboardResponse,
 } from './game/leaderboard';
