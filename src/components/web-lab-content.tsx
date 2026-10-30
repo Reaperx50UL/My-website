@@ -15,6 +15,7 @@ import {
   Calculator,
   Gamepad2,
   Compass,
+  Crown,
   Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -119,13 +120,19 @@ export function WebLabContent() {
                             <Compass className="w-8 h-8" />
                           </div>
                         </div>
+                      ) : project.slug === "ludo-royale" ? (
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 via-rose-500/15 to-sky-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 group-hover:scale-110 group-hover:border-amber-400 transition-all duration-500 shadow-[0_0_35px_rgba(245,158,11,0.25)]">
+                            <Crown className="w-8 h-8 text-amber-400" />
+                          </div>
+                        </div>
                       ) : (
                         <Terminal className="w-16 h-16 text-muted-foreground/20 group-hover:scale-110 transition-transform duration-500 group-hover:text-primary/30" />
                       )}
                       
                       <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent opacity-80 pointer-events-none"></div>
 
-                      {(project.slug === "scientific-calculator" || project.slug === "flappy-bird" || project.slug === "aether-glider") && (
+                      {(project.slug === "scientific-calculator" || project.slug === "flappy-bird" || project.slug === "aether-glider" || project.slug === "ludo-royale") && (
                         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-950/70 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-md backdrop-blur-md">
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                           <span>INTERACTIVE</span>
@@ -169,6 +176,8 @@ export function WebLabContent() {
                             ? "Play Flappy Bird" 
                             : project.slug === "aether-glider"
                             ? "Launch Flight" 
+                            : project.slug === "ludo-royale"
+                            ? "Play Ludo Royale"
                             : "View Experiment"}
                           <ArrowRight size={16} className="group-hover/link:translate-x-1 text-cyan-400 transition-transform" />
                         </Link>

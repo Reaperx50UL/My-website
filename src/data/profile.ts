@@ -239,5 +239,31 @@ export const webLabData: WebLabProject[] = [
     date: "2026-10",
     tags: ["Game", "Canvas", "Physics", "Arcade", "Audio"],
     featured: true
+  },
+  {
+    slug: "ludo-royale",
+    title: "Ludo Royale — Grandmaster Tabletop Edition",
+    category: "Web Apps",
+    shortDescription: "A competitive tabletop strategy web app featuring official 52-track rules, tactical AI bots, local pass-and-play, and online multiplayer.",
+    fullDescription: "An authoritative grandmaster tabletop edition of classic Ludo. Features 15x15 board geometry, 52-square perimeter, exact-roll home stretch, safe zones, customizable house rules, 6 board themes, 6 3D dice styles, procedural audio synthesis, AI difficulty tiers (Easy, Medium, Hard), local pass-and-play, and live online multiplayer with room codes and matchmaking.",
+    problem: "Traditional online Ludo web apps often suffer from intrusive ads, clunky animations, client-side outcome manipulation, and poor mobile/desktop responsive scaling.",
+    solution: "Engineered a responsive, high-performance tabletop experience with deterministic game mechanics, server-authoritative turn validation, procedural Web Audio, 3D dice physics, and flexible local and online multiplayer modes.",
+    features: [
+      "Official 52-track ruleset with safe squares and exact-roll home stretch",
+      "Play Against AI with 3 tactical difficulty tiers (Easy, Medium, Hard)",
+      "Local pass-and-play for 2–4 players with customizable seat names and bots",
+      "Online multiplayer with private room codes and public matchmaking",
+      "Server-authoritative dice generation, move validation, and turn timer loops",
+      "6 customizable board themes with unique 3D token styling and lighting",
+      "6 physical 3D dice styles with custom pip geometries and rolling physics",
+      "Procedural Web Audio API sound effects and ambient soundtrack",
+      "Grandmaster progression system with XP, level progression, and stats tracking",
+      "Color-blind token symbols, reduced motion mode, and keyboard shortcuts"
+    ],
+    technologies: ["React", "TypeScript", "Tailwind CSS", "Web Audio API", "WebSockets", "Vercel Serverless"],
+    status: "Completed",
+    date: "2026-10",
+    tags: ["Game", "Strategy", "Tabletop", "Multiplayer", "AI", "WebSocket"],
+    featured: true
   }
 ];
