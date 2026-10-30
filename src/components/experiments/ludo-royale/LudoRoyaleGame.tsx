@@ -159,6 +159,9 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const [matchmakingStatus, setMatchmakingStatus] = useState<
     'idle' | 'searching' | 'matched'
   >('idle');
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connected' | 'connecting' | 'offline'
+  >(() => multiplayerClient.getConnectionStatus());
 
   const recordedMatchIdRef = useRef<string | null>(null);
 
@@ -168,6 +171,14 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       document.body.dataset.state = shellState;
     }
   }, [shellState]);
+
+  // Restore active online session on page load/reconnect
+  useEffect(() => {
+    const savedRoom = multiplayerClient.getCurrentRoomCode();
+    if (savedRoom && shellState === 'title') {
+      multiplayerClient.connect(savedRoom);
+    }
+  }, []);
 
   // Configure sound & haptics engine whenever sound/music/haptic settings change
   useEffect(() => {
@@ -212,10 +223,12 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
     }
   }, [gameState, shellState, assignedColor]);
 
-  // Subscribe to WebSocket multiplayer events
+  // Subscribe to WebSocket & realtime multiplayer events
   useEffect(() => {
     const unsubscribe = multiplayerClient.subscribe((msg: ServerMessage) => {
-      if (msg.type === 'ROOM_UPDATED') {
+      if (msg.type === 'CONNECTION_STATUS') {
+        setConnectionStatus(msg.status);
+      } else if (msg.type === 'ROOM_UPDATED') {
         setOnlineRoom(msg.room);
         setAssignedColor(msg.assignedColor);
         setOnlineError(null);
@@ -232,6 +245,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         }
       } else if (msg.type === 'MATCHMAKING_STATUS') {
         setMatchmakingStatus(msg.status);
+        if (msg.status === 'matched' && msg.room) {
+          setOnlineRoom(msg.room);
+          if (msg.assignedColor) setAssignedColor(msg.assignedColor);
+          if (msg.room.gameState) setGameState(msg.room.gameState);
+          setActiveModal(null);
+          setShellState('playing');
+        }
       } else if (msg.type === 'ERROR') {
         setOnlineError(msg.message);
       }
@@ -433,6 +453,24 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
 
     return () => clearTimeout(timer);
   }, [shellState, gameState.turnPhase, gameState.mode, gameState.players]);
+
+  // Automatic Turn Transition for Online Matches
+  useEffect(() => {
+    if (
+      shellState !== 'playing' ||
+      gameState.turnPhase !== 'TURN_TRANSITION' ||
+      (gameState.mode !== 'friends' && gameState.mode !== 'matchmaking') ||
+      !gameState.roomCode
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (gameState.roomCode) {
+        multiplayerClient.requestAdvanceTurn(gameState.roomCode);
+      }
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [shellState, gameState.turnPhase, gameState.mode, gameState.roomCode]);
 
   // Automatic AI Opponent Turn Loop (Offline AI & Local Multiplayer with AI Bots)
   useEffect(() => {
@@ -808,16 +846,20 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           assignedColor={assignedColor}
           errorMessage={onlineError}
           matchmakingStatus={matchmakingStatus}
-          onCreateRoom={() =>
+          connectionStatus={connectionStatus}
+          backendStatus={multiplayerClient.getBackendStatus()}
+          onCreateRoom={() => {
+            setOnlineError(null);
             multiplayerClient.createRoom(
               profile.nickname,
               profile.avatar,
               rules
-            )
-          }
-          onJoinRoom={(code) =>
-            multiplayerClient.joinRoom(code, profile.nickname, profile.avatar)
-          }
+            );
+          }}
+          onJoinRoom={(code) => {
+            setOnlineError(null);
+            multiplayerClient.joinRoom(code, profile.nickname, profile.avatar);
+          }}
           onAddBot={() => {
             if (onlineRoom) {
               multiplayerClient.addBotToRoom(onlineRoom.roomCode);
@@ -833,9 +875,25 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
               multiplayerClient.startOnlineMatch(onlineRoom.roomCode);
             }
           }}
+          onLeaveRoom={() => {
+            multiplayerClient.leaveRoom();
+            setOnlineRoom(null);
+            setOnlineError(null);
+          }}
+          onCancelMatchmaking={() => {
+            multiplayerClient.leaveMatchmaking();
+            setMatchmakingStatus('idle');
+            setActiveModal(null);
+          }}
+          onRetryMatchmaking={() => {
+            setOnlineError(null);
+            setMatchmakingStatus('searching');
+            multiplayerClient.joinMatchmaking(profile.nickname, profile.avatar);
+          }}
           onClose={() => {
             if (activeModal === 'online_matchmaking') {
               multiplayerClient.leaveMatchmaking();
+              setMatchmakingStatus('idle');
             }
             setActiveModal(null);
           }}

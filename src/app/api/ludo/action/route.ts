@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   handleAddBot,
+  handleAdvanceTurn,
   handleCreateRoom,
   handleJoinMatchmaking,
   handleJoinRoom,
   handleLeaveMatchmaking,
+  handleLeaveRoom,
   handleMoveToken,
   handleRollDice,
   handleStartMatch,
@@ -49,6 +51,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result);
       }
 
+      case 'LEAVE_ROOM': {
+        const result = await handleLeaveRoom(body.roomCode, clientId);
+        return NextResponse.json(result);
+      }
+
       case 'TOGGLE_READY': {
         const result = await handleToggleReady(body.roomCode, clientId);
         return NextResponse.json(result);
@@ -75,6 +82,11 @@ export async function POST(req: NextRequest) {
           clientId,
           body.tokenId
         );
+        return NextResponse.json(result);
+      }
+
+      case 'ADVANCE_TURN': {
+        const result = await handleAdvanceTurn(body.roomCode);
         return NextResponse.json(result);
       }
 

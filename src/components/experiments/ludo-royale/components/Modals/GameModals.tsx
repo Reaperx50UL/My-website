@@ -1,19 +1,26 @@
 import {
+  AlertCircle,
   Award,
   Bot,
   Check,
+  Clock,
   Copy,
   Crown,
   Globe,
+  Loader2,
   Lock,
+  LogOut,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   Shield,
+  Signal,
   Sparkles,
   Trophy,
   Unlock,
   Users,
+  Wifi,
   X,
 } from 'lucide-react';
 import React, { useState } from 'react';
@@ -52,7 +59,7 @@ import {
   getColorsForPlayerCount,
   getDefaultSeatName,
 } from '../../game/rules';
-import { OnlineRoomInfo } from '../../services/multiplayer';
+import { BackendStatusInfo, OnlineRoomInfo } from '../../services/multiplayer';
 import { soundManager } from '../../services/sound';
 
 /* ============================================================================
@@ -624,11 +631,16 @@ interface OnlineModalProps {
   assignedColor: PlayerColor | null;
   errorMessage: string | null;
   matchmakingStatus: 'idle' | 'searching' | 'matched';
+  connectionStatus?: 'connected' | 'connecting' | 'offline';
+  backendStatus?: BackendStatusInfo | null;
   onCreateRoom: () => void;
   onJoinRoom: (code: string) => void;
   onAddBot: () => void;
   onToggleReady: () => void;
   onStartOnlineMatch: () => void;
+  onLeaveRoom?: () => void;
+  onCancelMatchmaking?: () => void;
+  onRetryMatchmaking?: () => void;
   onClose: () => void;
 }
 
@@ -638,15 +650,35 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
   assignedColor,
   errorMessage,
   matchmakingStatus,
+  connectionStatus = 'connected',
+  backendStatus,
   onCreateRoom,
   onJoinRoom,
   onAddBot,
   onToggleReady,
   onStartOnlineMatch,
+  onLeaveRoom,
+  onCancelMatchmaking,
+  onRetryMatchmaking,
   onClose,
 }) => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [searchSeconds, setSearchSeconds] = useState(0);
+
+  // Timer for searching state
+  React.useEffect(() => {
+    let timer: any = null;
+    if (mode === 'matchmaking' && matchmakingStatus === 'searching') {
+      setSearchSeconds(0);
+      timer = setInterval(() => {
+        setSearchSeconds((s) => s + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [mode, matchmakingStatus]);
 
   const handleCopyCode = () => {
     if (!room) return;
@@ -655,64 +687,166 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
     setTimeout(() => setCopied(false), 1800);
   };
 
+  const normalizedJoinCode = joinCodeInput.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
+  const isJoinCodeValid = normalizedJoinCode.length === 6;
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="online-modal-title"
     >
-      <div className="w-full max-w-lg bg-[#111827] border border-slate-800 rounded-3xl p-6 shadow-2xl">
+      <div className="w-full max-w-lg bg-[#111827] border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+        {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <Globe className="w-5 h-5 text-sky-400" />
-            <h2
-              id="online-modal-title"
-              className="font-display font-bold text-xl text-white"
-            >
-              {mode === 'matchmaking'
-                ? 'Public Online Matchmaking'
-                : 'Play With Friends · Room Lobby'}
-            </h2>
+            <div>
+              <h2
+                id="online-modal-title"
+                className="font-display font-bold text-lg sm:text-xl text-white"
+              >
+                {mode === 'matchmaking'
+                  ? 'Public Online Matchmaking'
+                  : 'Play With Friends · Room Lobby'}
+              </h2>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close Online Modal"
-            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="py-5 space-y-4">
+        {/* Real-time Connection Status Indicator Pill */}
+        <div className="flex items-center justify-between gap-2 pt-3 text-[11px]">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                connectionStatus === 'connected'
+                  ? 'bg-emerald-400 animate-pulse'
+                  : connectionStatus === 'connecting'
+                  ? 'bg-amber-400 animate-ping'
+                  : 'bg-rose-500'
+              }`}
+            />
+            <span className="text-slate-300 font-medium capitalize">
+              {connectionStatus === 'connected'
+                ? 'Server Synced'
+                : connectionStatus === 'connecting'
+                ? 'Connecting...'
+                : 'Offline'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800/80 text-[10px] text-slate-400">
+            <Signal className="w-3 h-3 text-sky-400" />
+            <span>
+              {backendStatus?.type === 'upstash'
+                ? 'Cloud Sync (Upstash Redis)'
+                : 'Local Sync Engine'}
+            </span>
+          </div>
+        </div>
+
+        <div className="py-4 space-y-4">
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-200">
-              {errorMessage}
+            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-200 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1 font-medium">{errorMessage}</div>
             </div>
           )}
 
+          {/* MODE: PUBLIC ONLINE MATCHMAKING */}
           {mode === 'matchmaking' ? (
-            <div className="text-center py-6 space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center mx-auto text-sky-400">
-                <Globe className="w-8 h-8 animate-spin" />
-              </div>
-              <div>
-                <div className="font-display font-bold text-lg text-white">
-                  {matchmakingStatus === 'searching'
-                    ? 'Searching for Online Opponent...'
-                    : 'Connecting to Matchmaking Queue...'}
+            <div className="py-4 space-y-5 text-center">
+              {matchmakingStatus === 'matched' ? (
+                <div className="space-y-3">
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-500/10">
+                    <Check className="w-8 h-8 animate-bounce" />
+                  </div>
+                  <div>
+                    <div className="font-display font-bold text-lg text-emerald-300">
+                      Opponent Found!
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Joining matched game session... Launching board.
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                  Connected to real-time WebSocket game server. Open a second browser tab and click Online Matchmaking to pair immediately!
-                </p>
-              </div>
+              ) : matchmakingStatus === 'searching' ? (
+                <div className="space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center mx-auto text-sky-400 relative">
+                    <Globe className="w-8 h-8 animate-spin" />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-sky-400 animate-ping" />
+                  </div>
+                  <div>
+                    <div className="font-display font-bold text-lg text-white">
+                      Searching for Opponent...
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono text-amber-300 mt-2">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{formatTimer(searchSeconds)}</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
+                      Looking for an active online challenger. You can test matchmaking instantly by opening a second browser tab or window!
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={onCancelMatchmaking || onClose}
+                      className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
+                    >
+                      Cancel Search
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-slate-400">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                  </div>
+                  <div>
+                    <div className="font-display font-bold text-base text-white">
+                      Connecting to Matchmaking Queue...
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Establishing server synchronization...
+                    </p>
+                  </div>
+                  {onRetryMatchmaking && (
+                    <button
+                      type="button"
+                      onClick={onRetryMatchmaking}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-display font-bold text-xs cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Retry</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ) : !room ? (
+            /* MODE: PRIVATE ROOM - NO ACTIVE ROOM */
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="font-display font-bold text-sm text-white">
-                  Create a New Private Room
+                <div className="font-display font-bold text-sm text-white flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <span>Create a New Private Room</span>
                 </div>
                 <p className="text-xs text-slate-400">
                   Generate a unique 6-character room code with server-authoritative turns and dice validation.
@@ -720,7 +854,7 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                 <button
                   type="button"
                   onClick={onCreateRoom}
-                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm cursor-pointer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm cursor-pointer transition-colors"
                 >
                   Create Room Code
                 </button>
@@ -729,8 +863,8 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (joinCodeInput.trim()) {
-                    onJoinRoom(joinCodeInput.trim());
+                  if (isJoinCodeValid) {
+                    onJoinRoom(normalizedJoinCode);
                   }
                 }}
                 className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3"
@@ -742,24 +876,30 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   <input
                     type="text"
                     maxLength={6}
-                    placeholder="Enter 6-character code"
+                    placeholder="6-character code"
                     value={joinCodeInput}
                     onChange={(e) =>
-                      setJoinCodeInput(e.target.value.toUpperCase())
+                      setJoinCodeInput(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase())
                     }
-                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono-tabular uppercase text-white focus:outline-none focus:border-sky-400"
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono tracking-widest uppercase text-white focus:outline-none focus:border-sky-400"
                   />
                   <button
                     type="submit"
-                    disabled={joinCodeInput.trim().length < 4}
-                    className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 font-display font-bold text-sm cursor-pointer"
+                    disabled={!isJoinCodeValid}
+                    className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-display font-bold text-sm cursor-pointer transition-colors"
                   >
                     Join Room
                   </button>
                 </div>
+                {joinCodeInput.length > 0 && !isJoinCodeValid && (
+                  <span className="text-[11px] text-amber-400/90 block">
+                    Room code must be exactly 6 alphanumeric characters.
+                  </span>
+                )}
               </form>
             </div>
           ) : (
+            /* MODE: PRIVATE ROOM - IN LOBBY */
             <div className="space-y-4">
               {/* Active Room Code Header */}
               <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900 border border-slate-800">
@@ -767,14 +907,14 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   <span className="text-xs text-slate-400 block">
                     Share Room Code
                   </span>
-                  <span className="font-mono-tabular font-bold text-2xl tracking-widest text-amber-400">
+                  <span className="font-mono font-bold text-2xl tracking-widest text-amber-400">
                     {room.roomCode}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopyCode}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer transition-colors"
                 >
                   {copied ? (
                     <>
@@ -796,7 +936,10 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   <span>Players in Lobby ({room.players.length}/4)</span>
                   {assignedColor && (
                     <span>
-                      Your Color: <strong className="text-white">{COLOR_META[assignedColor].label}</strong>
+                      Your Seat:{' '}
+                      <strong className="text-white">
+                        {COLOR_META[assignedColor].label}
+                      </strong>
                     </span>
                   )}
                 </div>
@@ -837,12 +980,12 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
               </div>
 
               {/* Room Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={onToggleReady}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer transition-colors"
                   >
                     Toggle Ready
                   </button>
@@ -850,10 +993,21 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                     <button
                       type="button"
                       onClick={onAddBot}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 cursor-pointer"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 cursor-pointer transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add AI Bot</span>
+                      <span>Add Bot</span>
+                    </button>
+                  )}
+                  {onLeaveRoom && (
+                    <button
+                      type="button"
+                      onClick={onLeaveRoom}
+                      title="Leave Room Lobby"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-xs font-semibold text-rose-300 cursor-pointer transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Leave</span>
                     </button>
                   )}
                 </div>
@@ -862,7 +1016,7 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   type="button"
                   disabled={room.players.length < 2}
                   onClick={onStartOnlineMatch}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-display font-bold text-sm cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-display font-bold text-sm cursor-pointer transition-colors"
                 >
                   <Play className="w-4 h-4 fill-slate-950" />
                   <span>Start Online Match</span>
