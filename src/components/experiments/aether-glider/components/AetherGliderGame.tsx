@@ -27,6 +27,18 @@ import {
 } from '../game/engine';
 import { renderGameCanvas } from '../game/renderer';
 import {
+  HighScoreQualification,
+  LeaderboardEntry,
+  LeaderboardTabId,
+  SubmitHighScoreResult,
+  evaluateHighScoreQualification,
+  loadEnvironmentBestScores,
+  loadLastPilotName,
+  loadLeaderboardEntries,
+  saveEnvironmentBestScore,
+  submitLeaderboardScore,
+} from '../game/leaderboard';
+import {
   loadBestScore,
   loadMutedPreference,
   loadSelectedBird,
@@ -38,6 +50,10 @@ import {
 } from '../game/storage';
 import { DefeatCause, GamePhase, RunStats, SimulationState } from '../game/types';
 import {
+  HighScoreNameEntryPanel,
+  LeaderboardModal,
+} from './LeaderboardModal';
+import {
   AbilityIconSvg,
   BirdAvatarSvg,
   EnvironmentIconSvg,
@@ -46,6 +62,7 @@ import {
   RestartIconSvg,
   SoundIconSvg,
   TitleEmblemSvg,
+  TrophyIconSvg,
   TuningIconSvg,
 } from './TitleEmblemSvg';
 
@@ -87,6 +104,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   const mutedKey = `${storageKeyPrefix}_muted`;
   const birdStorageKey = `${storageKeyPrefix}_bird`;
   const envStorageKey = `${storageKeyPrefix}_env`;
+  const leaderboardStorageKey = `${storageKeyPrefix}_leaderboards`;
+  const envBestStorageKey = `${storageKeyPrefix}_env_best_scores`;
+  const pilotNameStorageKey = `${storageKeyPrefix}_pilot_name`;
 
   const [config, setConfig] = useState<GameConfig>(() => ({
     ...DEFAULT_GAME_CONFIG,
@@ -109,6 +129,25 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
   const [activePresetId, setActivePresetId] = useState<string>('standard');
   const [showTuningModal, setShowTuningModal] = useState<boolean>(false);
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState<boolean>(false);
+  const [activeLeaderboardTab, setActiveLeaderboardTab] = useState<LeaderboardTabId>('global');
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>(() =>
+    loadLeaderboardEntries(leaderboardStorageKey)
+  );
+  const [envBestScores, setEnvBestScores] = useState<Record<EnvironmentId, number>>(() =>
+    loadEnvironmentBestScores(envBestStorageKey)
+  );
+  const [pilotName, setPilotName] = useState<string>(() =>
+    loadLastPilotName(pilotNameStorageKey)
+  );
+  const [highScoreQualification, setHighScoreQualification] =
+    useState<HighScoreQualification | null>(null);
+  const [submittedRunResult, setSubmittedRunResult] =
+    useState<SubmitHighScoreResult | null>(null);
+  const [nameValidationError, setNameValidationError] = useState<string | null>(null);
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(null);
+  const [quickSubmitError, setQuickSubmitError] = useState<string | null>(null);
+  const [quickSubmitSuccess, setQuickSubmitSuccess] = useState<string | null>(null);
 
   const [muted, setMuted] = useState<boolean>(() => loadMutedPreference(mutedKey));
   const audioRef = useRef<AudioController | null>(null);
@@ -142,9 +181,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
 
   const [phase, setPhase] = useState<GamePhase>('title');
   const [score, setScore] = useState<number>(0);
+  const [bestScore, setBestScore] = useState<number>(() => loadBestScore(bestScoreKey));
   const [comboCount, setComboCount] = useState<number>(0);
   const [comboMultiplier, setComboMultiplier] = useState<number>(1);
-  const [bestScore, setBestScore] = useState<number>(() => loadBestScore(bestScoreKey));
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
   const [tierLabel, setTierLabel] = useState<string>('Calm Skies');
   const [runStats, setRunStats] = useState<RunStats | null>(null);
@@ -153,13 +192,10 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
   const [abilityReady, setAbilityReady] = useState<boolean>(true);
   const [abilityActive, setAbilityActive] = useState<boolean>(false);
   const [isCompactHeight, setIsCompactHeight] = useState<boolean>(false);
-  const [isMobileOrTablet, setIsMobileOrTablet] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setIsMobileOrTablet(window.innerWidth <= 1024);
-    }
-  }, []);
+  const [isMobileOrTablet, setIsMobileOrTablet] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 1024;
+  });
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -175,6 +211,10 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     )
   );
   const heldKeysRef = useRef<Set<string>>(new Set());
+  const preRunGlobalBestRef = useRef<number>(loadBestScore(bestScoreKey));
+  const preRunEnvBestRef = useRef<number>(
+    loadEnvironmentBestScores(envBestStorageKey)[loadSelectedEnvironment(envStorageKey)] ?? 0
+  );
 
   const syncPhaseAttr = useCallback((nextPhase: GamePhase) => {
     setPhase(nextPhase);
@@ -182,14 +222,6 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     if (typeof document !== 'undefined' && document.body) {
       document.body.dataset.state = nextPhase;
     }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (typeof document !== 'undefined' && document.body) {
-        document.body.removeAttribute('data-state');
-      }
-    };
   }, []);
 
   const handleSelectBird = useCallback(
@@ -258,11 +290,15 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       const sim = simRef.current;
       const currentBest = loadBestScore(bestScoreKey);
       sim.bestScore = Math.max(sim.bestScore, currentBest);
+      preRunGlobalBestRef.current = sim.bestScore;
+      const currentEnvBests = loadEnvironmentBestScores(envBestStorageKey);
+      preRunEnvBestRef.current = currentEnvBests[sim.environmentId] ?? 0;
 
       resetForNewRun(sim, configRef.current, Date.now());
       heldKeysRef.current.clear();
 
       setShowTuningModal(false);
+      setShowLeaderboardModal(false);
       setScore(0);
       setComboCount(0);
       setComboMultiplier(1);
@@ -274,11 +310,14 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       setSpeedMultiplier(diff.multiplier);
       setTierLabel(diff.tierLabel);
       setRunStats(null);
+      setHighScoreQualification(null);
+      setSubmittedRunResult(null);
+      setNameValidationError(null);
       syncPhaseAttr('playing');
       audioRef.current?.setEnvironmentMusic(sim.environmentId, 'playing');
       audioRef.current?.playFlap(sim.birdId);
     },
-    [bestScoreKey, syncPhaseAttr]
+    [bestScoreKey, envBestStorageKey, syncPhaseAttr]
   );
 
   const handleReturnToTitle = useCallback(
@@ -298,6 +337,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       sim.abilityCooldownTimer = 0;
       sim.shieldActive = false;
       setShowTuningModal(false);
+      setShowLeaderboardModal(false);
       setScore(0);
       setComboCount(0);
       setComboMultiplier(1);
@@ -322,12 +362,136 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       } else if (sim.phase === 'paused') {
         sim.phase = 'playing';
         setShowTuningModal(false);
+        setShowLeaderboardModal(false);
         heldKeysRef.current.clear();
         syncPhaseAttr('playing');
         audioRef.current?.playClick();
       }
     },
     [syncPhaseAttr]
+  );
+
+  const handleOpenLeaderboard = useCallback(
+    (tab?: LeaderboardTabId, e?: React.MouseEvent<HTMLElement>) => {
+      if (e) {
+        e.stopPropagation();
+        if (e.currentTarget instanceof HTMLElement) {
+          e.currentTarget.blur();
+        }
+      }
+      const sim = simRef.current;
+      if (sim.phase === 'playing' && !sim.pendingGameOver) {
+        sim.phase = 'paused';
+        heldKeysRef.current.clear();
+        syncPhaseAttr('paused');
+      }
+      setShowTuningModal(false);
+      setQuickSubmitError(null);
+      setQuickSubmitSuccess(null);
+      if (tab) {
+        setActiveLeaderboardTab(tab);
+      }
+      setShowLeaderboardModal(true);
+      audioRef.current?.playClick();
+    },
+    [syncPhaseAttr]
+  );
+
+  const handleSubmitRunHighScore = useCallback(() => {
+    const finalScore = runStats?.score ?? score;
+    const targetBird = runStats?.birdId ?? selectedBirdId;
+    const targetEnv = runStats?.environmentId ?? selectedEnvId;
+    const res = submitLeaderboardScore(
+      {
+        playerName: pilotName,
+        score: finalScore,
+        birdId: targetBird,
+        environmentId: targetEnv,
+        maxCombo: runStats?.maxCombo ?? comboCount,
+        peakComboMultiplier: runStats?.peakComboMultiplier ?? comboMultiplier,
+        medal: runStats?.medal,
+      },
+      leaderboardStorageKey,
+      pilotNameStorageKey,
+      envBestStorageKey
+    );
+
+    if (!res.ok) {
+      setNameValidationError(res.error ?? 'Please enter a valid pilot callsign.');
+      return;
+    }
+
+    setNameValidationError(null);
+    setLeaderboardEntries(res.entries);
+    setSubmittedRunResult(res);
+    setHighlightedEntryId(res.entry?.id ?? null);
+    setEnvBestScores(loadEnvironmentBestScores(envBestStorageKey));
+    if (res.entry) {
+      setPilotName(res.entry.playerName);
+    }
+    audioRef.current?.playMilestone();
+  }, [
+    comboCount,
+    comboMultiplier,
+    envBestStorageKey,
+    leaderboardStorageKey,
+    pilotName,
+    pilotNameStorageKey,
+    runStats,
+    score,
+    selectedBirdId,
+    selectedEnvId,
+  ]);
+
+  const handleQuickSubmitScore = useCallback(
+    (targetEnvId: EnvironmentId) => {
+      const envBest = envBestScores[targetEnvId] ?? 0;
+      const candidateScore = Math.max(score, envBest, bestScore);
+      const res = submitLeaderboardScore(
+        {
+          playerName: pilotName,
+          score: candidateScore,
+          birdId: selectedBirdId,
+          environmentId: targetEnvId,
+          maxCombo: runStats?.maxCombo ?? comboCount,
+          peakComboMultiplier: runStats?.peakComboMultiplier ?? comboMultiplier,
+        },
+        leaderboardStorageKey,
+        pilotNameStorageKey,
+        envBestStorageKey
+      );
+
+      if (!res.ok) {
+        setQuickSubmitError(res.error ?? 'Please enter a valid pilot callsign.');
+        setQuickSubmitSuccess(null);
+        return;
+      }
+
+      setQuickSubmitError(null);
+      setLeaderboardEntries(res.entries);
+      setHighlightedEntryId(res.entry?.id ?? null);
+      setEnvBestScores(loadEnvironmentBestScores(envBestStorageKey));
+      if (res.entry) {
+        setPilotName(res.entry.playerName);
+        setQuickSubmitSuccess(
+          `Recorded ${res.entry.playerName} (${res.entry.score} pts) — Global #${res.globalRank} · ${getEnvironmentProfile(targetEnvId).shortName} #${res.environmentRank}`
+        );
+      }
+      audioRef.current?.playMilestone();
+    },
+    [
+      bestScore,
+      comboCount,
+      comboMultiplier,
+      envBestScores,
+      envBestStorageKey,
+      leaderboardStorageKey,
+      pilotName,
+      pilotNameStorageKey,
+      runStats,
+      score,
+      selectedBirdId,
+    ]
   );
 
   const handlePlayerFlapAction = useCallback(() => {
@@ -360,6 +524,12 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           sim.bestScore = saved;
           setBestScore(saved);
         }
+        const updatedEnvBests = saveEnvironmentBestScore(
+          sim.environmentId,
+          sim.score,
+          envBestStorageKey
+        );
+        setEnvBestScores(updatedEnvBests);
         setAbilityActive(true);
         setAbilityReady(false);
         setAbilityStatusText(`ACTIVE ${sim.abilityActiveTimer.toFixed(1)}s`);
@@ -367,7 +537,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       }
       return used;
     },
-    [bestScoreKey]
+    [bestScoreKey, envBestStorageKey]
   );
 
   useEffect(() => {
@@ -396,7 +566,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const aspect = rect.width / rect.height;
       const logicalHeight = WORLD_HEIGHT;
-      const logicalWidth = Math.max(360, Math.min(2400, Math.round(logicalHeight * aspect)));
+      const logicalWidth = Math.max(360, Math.min(1800, Math.round(logicalHeight * aspect)));
 
       canvas.width = Math.round(logicalWidth * dpr);
       canvas.height = Math.round(logicalHeight * dpr);
@@ -459,12 +629,9 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       }
 
       if (events.scoredPoint || events.shieldBlocked || events.comboBroken) {
+        setScore(sim.score);
         setComboCount(sim.comboCount);
         setComboMultiplier(sim.comboMultiplier);
-      }
-
-      if (events.scoredPoint || events.shieldBlocked) {
-        setScore(sim.score);
         const diff = computeDifficultyParams(sim.score, cfg);
         setSpeedMultiplier(diff.multiplier);
         setTierLabel(diff.tierLabel);
@@ -474,27 +641,52 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           sim.bestScore = saved;
           setBestScore(saved);
         }
+        const updatedEnvBests = saveEnvironmentBestScore(
+          sim.environmentId,
+          sim.score,
+          envBestStorageKey
+        );
+        setEnvBestScores(updatedEnvBests);
 
         if (events.shieldBlocked) {
           audioRef.current?.playShieldShatter();
-        } else if (events.milestoneReached) {
-          audioRef.current?.playMilestone();
         } else if (events.comboTierUp) {
           audioRef.current?.playComboTierUp(sim.comboMultiplier);
+        } else if (events.milestoneReached) {
+          audioRef.current?.playMilestone();
         } else if (events.scoredPoint) {
           audioRef.current?.playScore(sim.score, sim.comboMultiplier);
         }
       }
 
       if (events.collided) {
+        setComboCount(0);
+        setComboMultiplier(1);
         const saved = saveBestScore(sim.score, bestScoreKey);
         sim.bestScore = saved;
         if (sim.frozenRunStats) {
           sim.frozenRunStats.bestScore = saved;
         }
         setBestScore(saved);
-        setComboCount(0);
-        setComboMultiplier(1);
+
+        const updatedEnvBests = saveEnvironmentBestScore(
+          sim.environmentId,
+          sim.score,
+          envBestStorageKey
+        );
+        setEnvBestScores(updatedEnvBests);
+
+        const currentEntries = loadLeaderboardEntries(leaderboardStorageKey);
+        setLeaderboardEntries(currentEntries);
+        const qual = evaluateHighScoreQualification(
+          currentEntries,
+          sim.score,
+          sim.environmentId,
+          preRunGlobalBestRef.current,
+          preRunEnvBestRef.current
+        );
+        setHighScoreQualification(qual);
+
         audioRef.current?.setMusicPhase('gameover');
         audioRef.current?.playCollision(sim.causeOfDefeat);
       }
@@ -524,10 +716,19 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [bestScoreKey, syncPhaseAttr]);
+  }, [bestScoreKey, envBestStorageKey, leaderboardStorageKey, syncPhaseAttr]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Do not intercept keystrokes when typing inside Pilot Callsign / Leaderboard inputs
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
       const code = e.code;
       const key = e.key.toLowerCase();
 
@@ -550,8 +751,17 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         return;
       }
 
+      if (code === 'KeyL') {
+        if (showLeaderboardModal) {
+          setShowLeaderboardModal(false);
+        } else {
+          handleOpenLeaderboard(sim.environmentId);
+        }
+        return;
+      }
+
       if (code === 'KeyE' || code === 'ShiftLeft' || code === 'ShiftRight') {
-        if (sim.phase === 'playing') {
+        if (sim.phase === 'playing' && !showLeaderboardModal && !showTuningModal) {
           e.preventDefault();
           handleTriggerAbility();
         }
@@ -559,31 +769,35 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       }
 
       // Cycle environment with Q in any phase (Title, Playing, Paused, Game Over)
-      if (code === 'KeyQ') {
+      if (code === 'KeyQ' && !showLeaderboardModal) {
         const idx = ENVIRONMENT_PROFILES.findIndex((env) => env.id === sim.environmentId);
         const nextEnv = ENVIRONMENT_PROFILES[(idx + 1) % ENVIRONMENT_PROFILES.length];
         handleSelectEnvironment(nextEnv.id);
         return;
       }
 
-      if (code === 'Digit1' && sim.phase === 'title') {
+      if (code === 'Digit1' && sim.phase === 'title' && !showLeaderboardModal) {
         handleSelectBird('kora');
         return;
       }
-      if (code === 'Digit2' && sim.phase === 'title') {
+      if (code === 'Digit2' && sim.phase === 'title' && !showLeaderboardModal) {
         handleSelectBird('zephyr');
         return;
       }
-      if (code === 'Digit3' && sim.phase === 'title') {
+      if (code === 'Digit3' && sim.phase === 'title' && !showLeaderboardModal) {
         handleSelectBird('ignis');
         return;
       }
-      if (code === 'Digit4' && sim.phase === 'title') {
+      if (code === 'Digit4' && sim.phase === 'title' && !showLeaderboardModal) {
         handleSelectBird('chronos');
         return;
       }
 
       if (code === 'Escape' || code === 'KeyP') {
+        if (showLeaderboardModal) {
+          setShowLeaderboardModal(false);
+          return;
+        }
         if (showTuningModal) {
           setShowTuningModal(false);
           return;
@@ -594,7 +808,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         return;
       }
 
-      if (code === 'KeyR') {
+      if (code === 'KeyR' && !showLeaderboardModal && !showTuningModal) {
         if (sim.phase === 'playing' || sim.phase === 'paused' || sim.phase === 'gameover') {
           handleStartOrRestart();
         }
@@ -602,7 +816,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       }
 
       if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW' || key === ' ') {
-        if (showTuningModal) return;
+        if (showTuningModal || showLeaderboardModal) return;
         if (sim.phase === 'title' || sim.phase === 'gameover') {
           handleStartOrRestart();
         } else if (sim.phase === 'playing') {
@@ -612,7 +826,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       }
 
       if (code === 'Enter') {
-        if (showTuningModal) return;
+        if (showTuningModal || showLeaderboardModal) return;
         if (sim.phase === 'title' || sim.phase === 'gameover') {
           e.preventDefault();
           handleStartOrRestart();
@@ -643,6 +857,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       document.removeEventListener('visibilitychange', clearHeldInputs);
     };
   }, [
+    handleOpenLeaderboard,
     handlePlayerFlapAction,
     handleSelectBird,
     handleSelectEnvironment,
@@ -650,6 +865,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
     handleToggleMute,
     handleTogglePause,
     handleTriggerAbility,
+    showLeaderboardModal,
     showTuningModal,
   ]);
 
@@ -705,7 +921,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           e.preventDefault();
           if (phase === 'playing') {
             handlePlayerFlapAction();
-          } else if (phase === 'title' && !showTuningModal) {
+          } else if (phase === 'title' && !showTuningModal && !showLeaderboardModal) {
             handleStartOrRestart();
           }
         }}
@@ -716,12 +932,12 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
       {/* World-Matched Perimeter HUD (Pointer Pass-Through) */}
       <div
         className={`pointer-events-none absolute inset-0 flex flex-col justify-between ${
-          isCompactHeight ? 'p-2' : 'p-3 sm:p-4'
+          isCompactHeight ? 'p-2' : 'p-3 sm:p-6'
         }`}
       >
         <div className="flex items-start justify-between gap-1.5 sm:gap-2">
           <div className={`flex ${isCompactHeight ? 'flex-row items-center gap-2' : 'flex-col items-start gap-2'}`}>
-            {/* Top-Left Telemetry Plaque */}
+            {/* Top-Left Telemetry Plaque (Global Best + Realm Best) */}
             <div
               className={`pointer-events-auto flex items-center gap-2.5 rounded-xl ${
                 isCompactHeight ? 'px-2.5 py-1' : 'px-3 sm:px-3.5 py-1.5 sm:py-2'
@@ -734,7 +950,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             >
               <div>
                 <div className="text-[9px] sm:text-[10px] font-bold tracking-widest text-amber-300/80 uppercase whitespace-nowrap">
-                  Best Run
+                  Global Best
                 </div>
                 <div
                   data-testid="hud-best-score"
@@ -747,6 +963,29 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   }}
                 >
                   {bestScore}
+                </div>
+              </div>
+
+              <div className="h-6 w-[1px] bg-amber-700/50" aria-hidden="true" />
+
+              <div>
+                <div
+                  className="text-[9px] sm:text-[10px] font-bold tracking-widest uppercase whitespace-nowrap"
+                  style={{ color: selectedEnv.colors.accentHex }}
+                >
+                  {selectedEnv.shortName} Best
+                </div>
+                <div
+                  data-testid="hud-env-best-score"
+                  className={`${
+                    isCompactHeight ? 'text-sm' : 'text-base sm:text-lg'
+                  } font-extrabold text-amber-200 leading-tight`}
+                  style={{
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {envBestScores[selectedEnvId] ?? 0}
                 </div>
               </div>
 
@@ -913,6 +1152,28 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             <button
               type="button"
               tabIndex={-1}
+              data-testid="open-leaderboard-button"
+              onClick={(e) => handleOpenLeaderboard(selectedEnvId, e)}
+              aria-label="Open Global and Environment Leaderboards (L)"
+              title="Hall of Fame Leaderboards [L]"
+              className="flex h-9 sm:h-11 px-2.5 sm:px-3 items-center justify-center gap-1.5 rounded-xl transition-transform active:scale-95 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+              style={{
+                backgroundColor: showLeaderboardModal
+                  ? 'rgba(180, 83, 9, 0.92)'
+                  : 'rgba(20, 14, 30, 0.9)',
+                border: '2px solid #FBBF24',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+              }}
+            >
+              <TrophyIconSvg className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span className="hidden sm:inline text-xs font-extrabold text-amber-100 whitespace-nowrap">
+                Ranks
+              </span>
+            </button>
+
+            <button
+              type="button"
+              tabIndex={-1}
               onClick={handleToggleMute}
               aria-label={muted ? 'Unmute sound effects (M)' : 'Mute sound effects (M)'}
               aria-pressed={!muted}
@@ -936,6 +1197,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 if (phase === 'playing') {
                   handleTogglePause();
                 }
+                setShowLeaderboardModal(false);
                 setShowTuningModal((v) => !v);
                 audioRef.current?.playClick();
               }}
@@ -991,9 +1253,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           </div>
         </div>
 
-        {/* Bottom Area: Mobile/Tablet Dedicated Ability Action Button + Control Hint (Active Flight Only) */}
-        {phase === 'playing' && (
-          <div className="relative flex flex-col items-center justify-end">
+        {/* Bottom Area: Mobile/Tablet Dedicated Ability Action Button + Control Hint */}
+        <div className="relative flex flex-col items-center justify-end">
           {/* Dedicated On-Screen Ability Button — Exclusively for Mobile & Tablet View */}
           {phase === 'playing' && isMobileOrTablet && (
             <div
@@ -1109,20 +1370,19 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             </p>
           </div>
         </div>
-        )}
       </div>
 
       {/* TITLE / READY SCREEN OVERLAY */}
-      {phase === 'title' && !showTuningModal && (
+      {phase === 'title' && !showTuningModal && !showLeaderboardModal && (
         <div
           className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-between ${
-            isCompactHeight ? 'pt-1 pb-1 px-4' : 'pt-6 sm:pt-10 pb-3 sm:pb-5 px-3 sm:px-4'
+            isCompactHeight ? 'pt-1 pb-1.5 px-4' : 'py-6 sm:py-12 px-3 sm:px-4'
           }`}
         >
           {/* Upper Negative-Space Emblem Lockup */}
           <div
             className={`pointer-events-auto flex flex-col items-center text-center max-w-md w-full ${
-              isCompactHeight ? 'mt-0' : 'mt-1 sm:mt-1'
+              isCompactHeight ? 'mt-0' : 'mt-11 sm:mt-2'
             }`}
           >
             <TitleEmblemSvg
@@ -1145,8 +1405,8 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           <div
             className={`pointer-events-auto flex flex-col items-center w-full ${
               isCompactHeight
-                ? 'gap-1 mb-1 max-w-xl'
-                : 'gap-1.5 sm:gap-2 mb-1 sm:mb-2 max-w-xl'
+                ? 'gap-1 mb-7 max-w-xl'
+                : 'gap-1.5 sm:gap-2 mb-5 sm:mb-7 max-w-xl'
             }`}
           >
             {/* Row 1: 4 Bird Selection Tabs (2x2 on narrow mobile portrait, 4-col on sm/landscape/desktop) */}
@@ -1244,7 +1504,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               })}
             </div>
 
-            {/* Combined Bird Ability & Environment Trap Info Plaque (hidden in ultra-compact height to keep full playfield visible, or shown compactly) */}
+            {/* Combined Bird Ability & Environment Trap Info Plaque */}
             {!isCompactHeight && (
               <div
                 data-testid="selected-loadout-card"
@@ -1281,7 +1541,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               </div>
             )}
 
-            {/* Primary Launch CTA + Speed Presets Row */}
+            {/* Primary Launch CTA + Leaderboard Button + Speed Presets Row */}
             <div
               className={`flex ${
                 isCompactHeight
@@ -1326,6 +1586,23 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 Launch Flight
               </button>
 
+              <button
+                type="button"
+                data-testid="title-leaderboard-button"
+                onClick={(e) => handleOpenLeaderboard('global', e)}
+                className={`flex items-center justify-center gap-1.5 ${
+                  isCompactHeight ? 'py-1.5 px-3 text-xs' : 'py-2 sm:py-2.5 px-3.5 text-xs sm:text-sm'
+                } rounded-xl font-extrabold text-amber-100 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0`}
+                style={{
+                  backgroundColor: 'rgba(28, 20, 44, 0.94)',
+                  border: '2px solid #FBBF24',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+                }}
+              >
+                <TrophyIconSvg className="w-4 h-4 shrink-0" />
+                <span>Leaderboards</span>
+              </button>
+
               <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                 {TUNING_PRESETS.map((preset) => {
                   const isSelected = activePresetId === preset.id;
@@ -1335,7 +1612,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                       type="button"
                       onClick={() => applyPreset(preset.id)}
                       className={`flex-1 sm:flex-initial ${
-                        isCompactHeight ? 'py-1.5 px-2 text-[10px]' : 'py-2 sm:py-2.5 px-3 text-xs'
+                        isCompactHeight ? 'py-1.5 px-2 text-[10px]' : 'py-2 sm:py-2.5 px-2.5 text-xs'
                       } rounded-xl font-bold transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-amber-300`}
                       style={{
                         backgroundColor: isSelected
@@ -1350,27 +1627,24 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   );
                 })}
               </div>
-            </div>
 
-            {/* Separate Control-Hint Line beneath the Launch & Difficulty Controls */}
-            <div className="w-full pt-2 sm:pt-3 pb-0.5 text-center">
-              <p
-                className="text-center text-[10px] sm:text-xs font-medium tracking-wide text-amber-100/90 whitespace-nowrap"
+              <a
+                href="/web-lab"
+                className="py-1.5 px-4 rounded-xl text-xs font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap"
                 style={{
-                  textShadow: '0 2px 6px rgba(0, 0, 0, 0.9)',
+                  backgroundColor: '#1E162B',
+                  border: '1px solid rgba(146, 64, 14, 0.4)',
                 }}
               >
-                {isMobileOrTablet
-                  ? 'Tap Flap · Ability Button · Q Realm · P Pause · M Mute'
-                  : 'Space / Tap Flap · E Ability · Q Realm · P Pause · M Mute'}
-              </p>
+                Exit to Web Lab
+              </a>
             </div>
           </div>
         </div>
       )}
 
       {/* PAUSE MODAL CARD */}
-      {phase === 'paused' && !showTuningModal && (
+      {phase === 'paused' && !showTuningModal && !showLeaderboardModal && (
         <div
           role="dialog"
           aria-modal="true"
@@ -1487,24 +1761,13 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                   Change Realm
                 </button>
               </div>
-
-              <a
-                href="/web-lab"
-                className="py-2 px-4 rounded-xl text-xs sm:text-sm font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap"
-                style={{
-                  backgroundColor: '#1E162B',
-                  border: '1px solid rgba(146, 64, 14, 0.4)',
-                }}
-              >
-                Exit to Web Lab
-              </a>
             </div>
           </div>
         </div>
       )}
 
       {/* GAME OVER MODAL CARD */}
-      {phase === 'gameover' && !showTuningModal && (
+      {phase === 'gameover' && !showTuningModal && !showLeaderboardModal && (
         <div
           role="dialog"
           aria-modal="true"
@@ -1514,7 +1777,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
         >
           <div
             className={`w-full max-w-md rounded-2xl ${
-              isCompactHeight ? 'p-3.5' : 'p-4 sm:p-6'
+              isCompactHeight ? 'p-3' : 'p-4 sm:p-5'
             } text-center my-auto`}
             style={{
               backgroundColor: '#1B1429',
@@ -1541,7 +1804,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             {/* Medal Recognition Row */}
             {!isCompactHeight && (
               <div
-                className="mt-3 flex items-center justify-between rounded-xl px-4 py-2"
+                className="mt-2.5 flex items-center justify-between rounded-xl px-4 py-1.5"
                 style={{
                   backgroundColor: '#120D1D',
                   border: '1.5px solid rgba(217, 119, 6, 0.45)',
@@ -1555,7 +1818,7 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
             )}
 
             {/* 4 Tabular Stat Tiles (Score, Best Run, Max Combo, Flight Time) */}
-            <div className={`${isCompactHeight ? 'mt-2' : 'mt-3'} grid grid-cols-2 sm:grid-cols-4 gap-2`}>
+            <div className={`${isCompactHeight ? 'mt-2' : 'mt-2.5'} grid grid-cols-2 sm:grid-cols-4 gap-2`}>
               <div
                 className="flex flex-col justify-between rounded-xl p-2"
                 style={{
@@ -1655,8 +1918,33 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               </div>
             </div>
 
+            {/* High-Score Player Name Entry Panel */}
+            <HighScoreNameEntryPanel
+              score={runStats?.score ?? score}
+              environmentId={runStats?.environmentId ?? selectedEnvId}
+              qualification={
+                highScoreQualification ?? {
+                  qualifies: (runStats?.score ?? score) > 0,
+                  isNewGlobalPersonalBest: Boolean(runStats?.isNewBest),
+                  isNewEnvironmentPersonalBest: (runStats?.score ?? score) > 0,
+                  projectedGlobalRank: null,
+                  projectedEnvironmentRank: null,
+                }
+              }
+              pilotName={pilotName}
+              onPilotNameChange={(val) => {
+                setPilotName(val);
+                if (nameValidationError) setNameValidationError(null);
+              }}
+              onSubmit={handleSubmitRunHighScore}
+              validationError={nameValidationError}
+              submittedResult={submittedRunResult}
+              onOpenLeaderboard={(tab) => handleOpenLeaderboard(tab)}
+              isCompactHeight={isCompactHeight}
+            />
+
             {/* Quick Bird & Environment Switchers inside Game Over */}
-            <div className={`${isCompactHeight ? 'mt-2 space-y-1.5' : 'mt-3 space-y-2'}`}>
+            <div className={`${isCompactHeight ? 'mt-2 space-y-1.5' : 'mt-2.5 space-y-1.5'}`}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {BIRD_PROFILES.map((bird) => {
                   const isSelected = bird.id === selectedBirdId;
@@ -1707,13 +1995,13 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
               </div>
             </div>
 
-            <div className={`${isCompactHeight ? 'mt-2.5 flex-row' : 'mt-4 flex-col'} flex gap-2`}>
+            <div className={`${isCompactHeight ? 'mt-2 flex-row' : 'mt-3 flex-col'} flex gap-2`}>
               <button
                 type="button"
                 data-start="true"
                 onClick={handleStartOrRestart}
                 className={`flex-1 ${
-                  isCompactHeight ? 'py-2 text-sm' : 'py-3 text-base sm:text-lg'
+                  isCompactHeight ? 'py-2 text-sm' : 'py-2.5 text-base sm:text-lg'
                 } px-5 rounded-xl font-extrabold text-amber-950 transition-transform hover:scale-[1.01] active:scale-[0.98] cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-amber-300`}
                 style={{
                   fontFamily: '"Bricolage Grotesque", sans-serif',
@@ -1725,25 +2013,39 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
                 Play Again
               </button>
 
-              <button
-                type="button"
-                onClick={handleReturnToTitle}
-                className={`${
-                  isCompactHeight ? 'py-2 px-4' : 'w-full py-2 px-4'
-                } rounded-xl text-xs sm:text-sm font-bold text-amber-100 transition-colors hover:bg-amber-900/40 cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-amber-300`}
-                style={{
-                  backgroundColor: '#291E3A',
-                  border: '1.5px solid #92400E',
-                }}
-              >
-                Return to Title
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  data-testid="gameover-leaderboard-button"
+                  onClick={(e) =>
+                    handleOpenLeaderboard(runStats?.environmentId ?? selectedEnvId, e)
+                  }
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs sm:text-sm font-extrabold text-amber-200 transition-colors hover:bg-amber-900/40 cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-amber-300"
+                  style={{
+                    backgroundColor: '#291E3A',
+                    border: '1.5px solid #FBBF24',
+                  }}
+                >
+                  <TrophyIconSvg className="w-4 h-4 shrink-0" />
+                  <span>Leaderboards</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleReturnToTitle}
+                  className="py-2 px-3 rounded-xl text-xs sm:text-sm font-bold text-amber-100 transition-colors hover:bg-amber-900/40 cursor-pointer whitespace-nowrap focus-visible:outline-2 focus-visible:outline-amber-300"
+                  style={{
+                    backgroundColor: '#291E3A',
+                    border: '1.5px solid #92400E',
+                  }}
+                >
+                  Return to Title
+                </button>
+              </div>
 
               <a
                 href="/web-lab"
-                className={`${
-                  isCompactHeight ? 'py-2 px-4' : 'w-full py-2 px-4'
-                } rounded-xl text-xs sm:text-sm font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap`}
+                className="w-full py-2 px-4 rounded-xl text-xs sm:text-sm font-bold text-amber-200/80 transition-colors hover:bg-amber-900/30 text-center cursor-pointer whitespace-nowrap"
                 style={{
                   backgroundColor: '#1E162B',
                   border: '1px solid rgba(146, 64, 14, 0.4)',
@@ -1937,6 +2239,33 @@ export const AetherGliderGame: React.FC<AetherGliderGameProps> = ({
           </div>
         </div>
       )}
+
+      {/* GLOBAL & PER-ENVIRONMENT LEADERBOARD MODAL */}
+      <LeaderboardModal
+        isOpen={showLeaderboardModal}
+        onClose={() => setShowLeaderboardModal(false)}
+        activeTab={activeLeaderboardTab}
+        onSelectTab={(tab) => {
+          setActiveLeaderboardTab(tab);
+          setQuickSubmitError(null);
+          setQuickSubmitSuccess(null);
+          audioRef.current?.playClick();
+        }}
+        entries={leaderboardEntries}
+        globalBestScore={bestScore}
+        envBestScores={envBestScores}
+        selectedEnvironmentId={selectedEnvId}
+        highlightedEntryId={highlightedEntryId}
+        pilotName={pilotName}
+        onPilotNameChange={(val) => {
+          setPilotName(val);
+          if (quickSubmitError) setQuickSubmitError(null);
+        }}
+        onQuickSubmitScore={handleQuickSubmitScore}
+        quickSubmitError={quickSubmitError}
+        quickSubmitSuccess={quickSubmitSuccess}
+        isCompactHeight={isCompactHeight}
+      />
     </div>
   );
 };

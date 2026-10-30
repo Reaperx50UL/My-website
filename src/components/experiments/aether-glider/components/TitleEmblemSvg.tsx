@@ -443,3 +443,31 @@ export const MedalBadgeSvg: React.FC<{ medal: MedalTier }> = ({ medal }) => {
     </div>
   );
 };
+
+export const TrophyIconSvg: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' }) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+    <path
+      d="M6 4h12v5a6 6 0 0 1-12 0V4z"
+      fill="#FBBF24"
+      stroke="#1C120C"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M6 6H3.5a2 2 0 0 0 0 4c.8 0 1.8.8 2.5 2M18 6h2.5a2 2 0 0 1 0 4c-.8 0-1.8.8-2.5 2"
+      fill="none"
+      stroke="#FDE68A"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+    <path
+      d="M12 15v4M8 20h8"
+      fill="none"
+      stroke="#FDE68A"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+    />
+    <circle cx="12" cy="8.5" r="1.8" fill="#FEF3C7" />
+  </svg>
+);
+
