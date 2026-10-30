@@ -5,7 +5,6 @@ import { ArrowLeft, ExternalLink, Github, Calendar, Activity, Sparkles } from "l
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { ScientificCalculator } from "@/components/experiments/scientific-calculator";
-import { FlappyBird } from "@/components/experiments/flappy-bird";
 import { AetherGlider, AetherGliderGame } from "@/components/experiments/aether-glider";
 import { LudoRoyale, LudoRoyaleGame } from "@/components/experiments/ludo-royale";
 
@@ -58,7 +57,7 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
     );
   }
 
-  const isInteractiveApp = project.slug === "scientific-calculator" || project.slug === "flappy-bird";
+  const isInteractiveApp = project.slug === "scientific-calculator";
   const isWideApp = project.slug === "scientific-calculator";
   const isCalculator = project.slug === "scientific-calculator";
 
@@ -121,16 +120,6 @@ export default function WebLabProjectPage({ params }: { params: { slug: string }
       {project.slug === "scientific-calculator" && (
         <div className="mb-16">
           <ScientificCalculator />
-        </div>
-      )}
-
-      {project.slug === "flappy-bird" && (
-        <div className="mb-16">
-          <div className="text-xs font-mono text-cyan-400/70 mb-3 uppercase tracking-wider flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            Live Arcade Canvas
-          </div>
-          <FlappyBird />
         </div>
       )}
 

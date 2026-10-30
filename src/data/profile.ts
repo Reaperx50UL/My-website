@@ -195,29 +195,6 @@ export const webLabData: WebLabProject[] = [
     featured: true
   },
   {
-    slug: "flappy-bird",
-    title: "Cosmic Flappy Bird",
-    category: "Experiments",
-    shortDescription: "A retro arcade gravity-runner rebuilt in an interactive HTML5 canvas with neon particle physics and cosmic barriers.",
-    fullDescription: "A high-performance 60fps arcade web game inspired by the classic Flappy Bird. Players pilot a futuristic quantum probe through shifting cosmic energy pillars and void rifts. Features responsive canvas physics, smooth velocity curves, trail particle systems, high-score persistence, and touch/keyboard controls.",
-    problem: "Classic web arcade games often suffer from input latency, jerky frame rates on high-refresh monitors, and lack of visual polish on modern dark-mode screens.",
-    solution: "Developed an optimized HTML5 Canvas game loop utilizing delta-time physics, dynamic difficulty pacing, particle trail emitters, and local storage state persistence.",
-    features: [
-      "Smooth 60 FPS HTML5 Canvas physics engine",
-      "Responsive flight mechanics (Spacebar, Click, or Tap to flap)",
-      "Dynamic procedural cosmic barrier generation",
-      "Glowing particle trail and engine exhaust physics",
-      "Local storage high score tracking and session bests",
-      "Instant restart and pause capability",
-      "Mobile-friendly touch screen controls"
-    ],
-    technologies: ["HTML5 Canvas", "React", "TypeScript", "Tailwind CSS"],
-    status: "Completed",
-    date: "2026-10",
-    tags: ["Game", "Canvas", "Physics", "Arcade"],
-    featured: true
-  },
-  {
     slug: "aether-glider",
     title: "Aether Glider: Clockwork Sky Trials",
     category: "Web Apps",

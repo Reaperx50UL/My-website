@@ -13,7 +13,6 @@ import {
   Network, 
   ArrowUpRight,
   Calculator,
-  Gamepad2,
   Compass,
   Crown,
   Sparkles
@@ -107,14 +106,7 @@ export function WebLabContent() {
                           <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-110 group-hover:border-cyan-400/60 transition-all duration-500 shadow-[0_0_30px_rgba(6,182,212,0.2)]">
                             <Calculator className="w-8 h-8" />
                           </div>
-                        </div>
-                      ) : project.slug === "flappy-bird" ? (
-                        <div className="relative z-10 flex flex-col items-center">
-                          <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center text-violet-400 group-hover:scale-110 group-hover:border-violet-400/60 transition-all duration-500 shadow-[0_0_30px_rgba(139,92,246,0.2)]">
-                            <Gamepad2 className="w-8 h-8" />
-                          </div>
-                        </div>
-                      ) : project.slug === "aether-glider" ? (
+                        </div> ) : project.slug === "aether-glider" ? (
                         <div className="relative z-10 flex flex-col items-center">
                           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:scale-110 group-hover:border-amber-400/60 transition-all duration-500 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
                             <Compass className="w-8 h-8" />
@@ -132,7 +124,7 @@ export function WebLabContent() {
                       
                       <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent opacity-80 pointer-events-none"></div>
 
-                      {(project.slug === "scientific-calculator" || project.slug === "flappy-bird" || project.slug === "aether-glider" || project.slug === "ludo-royale") && (
+                      {(project.slug === "scientific-calculator" || project.slug === "aether-glider" || project.slug === "ludo-royale") && (
                         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-950/70 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 shadow-md backdrop-blur-md">
                           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                           <span>INTERACTIVE</span>
@@ -171,9 +163,8 @@ export function WebLabContent() {
                           className="inline-flex items-center gap-2 text-foreground font-medium group/link hover:text-cyan-400 transition-colors"
                         >
                           {project.slug === "scientific-calculator" 
-                            ? "Launch Calculator" 
-                            : project.slug === "flappy-bird" 
-                            ? "Play Flappy Bird" 
+                            ? "Launch Calculator"
+ 
                             : project.slug === "aether-glider"
                             ? "Launch Flight" 
                             : project.slug === "ludo-royale"
