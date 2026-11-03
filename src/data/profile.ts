@@ -1,8 +1,8 @@
 export const profileData = {
   name: "Apan Datta",
-  title: "Electronics Engineering Student • Developer • Technology Enthusiast • Cybersecurity Learner",
+  title: "Electronics & Communication Engineer • Developer • Technology Enthusiast • Cybersecurity Learner",
   shortBio: "I enjoy building technology projects and exploring the connection between software, electronics and cybersecurity.",
-  fullBio: "I am an Electronics Engineering student with a deep interest in modern technology. I enjoy software development and am actively exploring cybersecurity alongside my core engineering studies. My approach is centered on continuous learning—whether that involves diving into modern web technologies, building hardware prototypes, or experimenting with new software frameworks.",
+  fullBio: "I am an Electronics and Communication Engineering graduate with a deep interest in modern technology. I enjoy software development and am actively exploring cybersecurity alongside my core engineering background. My approach is centered on continuous learning—whether that involves diving into modern web technologies, building hardware prototypes, or experimenting with new software frameworks.",
   status: "Open to opportunities",
   
   contact: {
@@ -20,8 +20,8 @@ export const profileData = {
   
   aboutCards: [
     {
-      title: "B.Tech / Electronics Engineering",
-      subtitle: "Current Education"
+      title: "B.Tech / Electronics and Communication Engineering",
+      subtitle: "Graduated June 2023"
     },
     {
       title: "Web Development • Cybersecurity • Electronics",
@@ -70,17 +70,48 @@ export const skillsData: Record<SkillCategory, Skill[]> = {
 
 export interface Education {
   degree: string;
+  field?: string;
   institution: string;
   date: string;
+  score: string;
+  scoreLabel: string;
+  level: "btech" | "higher_secondary" | "secondary";
+  subLabel?: string;
+  status?: string;
   description?: string;
 }
 
 export const educationData: Education[] = [
   {
-    degree: "B.Tech / Electronics Engineering",
-    institution: "CGEC",
-    date: "2021 - Present",
-  }
+    degree: "Bachelor of Technology (B.Tech)",
+    field: "Electronics and Communication Engineering",
+    institution: "Cooch Behar Government Engineering College (CGEC)",
+    date: "June 2023",
+    score: "9.09/10.0",
+    scoreLabel: "CGPA",
+    level: "btech",
+    status: "Graduated",
+  },
+  {
+    degree: "Higher Secondary Education",
+    institution: "Barajaguli Gopal Academy (H.S)",
+    date: "May 2019",
+    score: "81.6%",
+    scoreLabel: "Percentage",
+    level: "higher_secondary",
+    subLabel: "12th Standard",
+    status: "Completed",
+  },
+  {
+    degree: "Secondary Education",
+    institution: "Barajaguli Gopal Academy (H.S)",
+    date: "May 2017",
+    score: "83%",
+    scoreLabel: "Percentage",
+    level: "secondary",
+    subLabel: "10th Standard",
+    status: "Completed",
+  },
 ];
 
 export interface Experience {
