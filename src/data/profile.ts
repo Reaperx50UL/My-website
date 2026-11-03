@@ -144,39 +144,83 @@ export const experienceData: Experience[] = [
 
 export interface Project {
   slug: string;
+  projectNumber: string;
   title: string;
-  shortDescription: string;
-  fullDescription?: string;
-  problem?: string;
-  solution?: string;
-  features?: string[];
+  shortTitle: string;
+  projectType: "Major Project" | "Minor Project";
+  year: string;
   category: "Web" | "Python" | "Cybersecurity" | "Electronics" | "Other";
+  shortDescription: string;
+  overview: string;
+  objective: string;
+  implementation: string;
+  contribution: string;
   technologies: string[];
+  featured?: boolean;
   image?: string;
   githubUrl?: string;
   liveUrl?: string;
   date?: string;
   status?: string;
   tags?: string[];
-  featured?: boolean;
 }
 
 export const projectsData: Project[] = [
-  // Example placeholder project. Replace with real projects.
-  /*
   {
-    slug: "portfolio-v2",
-    title: "Portfolio Platform V2",
-    shortDescription: "A modern futuristic portfolio and web lab platform.",
-    fullDescription: "Detailed description here.",
-    category: "Web",
-    technologies: ["Next.js", "React", "TypeScript", "Tailwind CSS"],
-    image: "/projects/portfolio-v2.webp",
-    githubUrl: "YOUR_GITHUB_URL_HERE",
-    liveUrl: "YOUR_LIVE_URL_HERE",
-    featured: true
-  }
-  */
+    slug: "automated-writing-machine",
+    projectNumber: "01",
+    title: "Automated Writing Machine Using Arduino Uno Based System",
+    shortTitle: "Automated Writing Machine",
+    projectType: "Major Project",
+    year: "2023",
+    category: "Electronics",
+    shortDescription:
+      "Built an automated writing system with Arduino Uno, using sensors and motor control for precise text output. Applied embedded programming and mechanical integration to deliver a functional prototype.",
+    overview:
+      "An automated precision writing system engineered with an Arduino Uno microcontroller, coordinating dual-axis stepper motor locomotion and a servo-driven pen lift to replicate intricate text patterns and vector drawing trajectories.",
+    objective:
+      "Build an automated writing system capable of producing precise text output and mechanical motion coordination.",
+    implementation:
+      "Used an Arduino Uno microcontroller, position limit sensors, dual-axis motor control drivers, embedded C/C++ firmware, and mechanical integration to deliver a functional physical prototype.",
+    contribution:
+      "Programmed embedded motor orchestration routines, integrated sensor calibration logic, assembled the physical gantry frame, and tuned pen-lift pressure for clean, repeatable text drawing.",
+    technologies: [
+      "Arduino Uno",
+      "Embedded Programming",
+      "Sensors",
+      "Motor Control",
+      "Mechanical Integration",
+    ],
+    featured: true,
+  },
+  {
+    slug: "temperature-controlled-dc-motor",
+    projectNumber: "02",
+    title: "Temperature Controlled DC Motor Using 8085 Microprocessor & ADC0808",
+    shortTitle: "Temperature Controlled DC Motor",
+    projectType: "Minor Project",
+    year: "2022",
+    category: "Electronics",
+    shortDescription:
+      "Developed a temperature-responsive motor control system using the 8085 microprocessor and ADC0808 for analog-to-digital conversion. Programmed dynamic motor speed control based on sensor input, applying embedded programming and hardware interfacing techniques.",
+    overview:
+      "A closed-loop hardware control system coupling temperature sensor instrumentation to an 8-bit ADC0808 converter and Intel 8085 microprocessor to govern DC motor velocity based on real-time thermal conditions.",
+    objective:
+      "Develop a temperature-responsive DC motor control system with automated digital speed modulation.",
+    implementation:
+      "Used an 8085 microprocessor, ADC0808 for analog-to-digital conversion, analog temperature sensing circuitry, and dynamic DC motor speed control drivers.",
+    contribution:
+      "Programmed assembly control routines for the 8085 processor, interfaced the ADC0808 with temperature sensing circuitry, and calibrated dynamic motor speed control based on sensor input.",
+    technologies: [
+      "8085 Microprocessor",
+      "ADC0808",
+      "Temperature Sensing",
+      "Analog-to-Digital Conversion",
+      "DC Motor Control",
+      "Hardware Interfacing",
+    ],
+    featured: false,
+  },
 ];
 
 export interface WebLabProject {
