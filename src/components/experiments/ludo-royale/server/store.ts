@@ -46,6 +46,12 @@ export type ServerMessage =
   | { type: 'WELCOME'; clientId: string; onlineCount: number }
   | { type: 'ROOM_UPDATED'; room: ServerRoom; assignedColor: PlayerColor }
   | { type: 'GAME_STATE_SYNC'; gameState: GameState }
+  | {
+      type: 'DICE_ROLLED';
+      playerColor: PlayerColor;
+      diceValue: number;
+      gameState: GameState;
+    }
   | { type: 'MATCHMAKING_STATUS'; status: 'searching' | 'matched'; queueSize: number }
   | { type: 'ERROR'; message: string };
 

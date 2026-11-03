@@ -164,6 +164,18 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   >(() => multiplayerClient.getConnectionStatus());
 
   const recordedMatchIdRef = useRef<string | null>(null);
+  const localRollStartTimeRef = useRef<number | null>(null);
+  const rollTimerRef = useRef<number | null>(null);
+  const lastAnimatedEventIdRef = useRef<string | null>(null);
+
+  // Clean up any pending roll animations on unmount
+  useEffect(() => {
+    return () => {
+      if (rollTimerRef.current) {
+        window.clearTimeout(rollTimerRef.current);
+      }
+    };
+  }, []);
 
   // Sync document.body.dataset.state with shellState
   useEffect(() => {
@@ -223,6 +235,47 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
     }
   }, [gameState, shellState, assignedColor]);
 
+  // Coordinates online dice animations so both local and remote players see the 3D dice roll & impact
+  const triggerOnlineDiceRollAnimation = useCallback(
+    (finalGameState: GameState, diceValue: number) => {
+      const latestEventId = finalGameState.eventLog?.[0]?.id;
+      if (latestEventId) {
+        lastAnimatedEventIdRef.current = latestEventId;
+      }
+
+      const totalDelay = settings.reducedMotion ? 60 : 680;
+      const elapsed = localRollStartTimeRef.current
+        ? Date.now() - localRollStartTimeRef.current
+        : 0;
+      const remainingDelay = Math.max(0, totalDelay - elapsed);
+
+      // Start roll animation and sound if not already started
+      setIsRolling(true);
+      if (!localRollStartTimeRef.current) {
+        soundManager.playDiceRoll(settings.diceStyle);
+        soundManager.triggerHaptic(15);
+      }
+
+      if (rollTimerRef.current) {
+        window.clearTimeout(rollTimerRef.current);
+      }
+
+      rollTimerRef.current = window.setTimeout(() => {
+        rollTimerRef.current = null;
+        localRollStartTimeRef.current = null;
+
+        soundManager.playDiceLand(settings.diceStyle);
+        if (diceValue === 6) {
+          soundManager.playSixRolled();
+          soundManager.triggerHaptic(22);
+        }
+        setIsRolling(false);
+        setGameState(finalGameState);
+      }, remainingDelay);
+    },
+    [settings.reducedMotion, settings.diceStyle]
+  );
+
   // Subscribe to WebSocket & realtime multiplayer events
   useEffect(() => {
     const unsubscribe = multiplayerClient.subscribe((msg: ServerMessage) => {
@@ -233,12 +286,31 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         setAssignedColor(msg.assignedColor);
         setOnlineError(null);
         if (msg.room.status === 'playing' && msg.room.gameState) {
-          setGameState(msg.room.gameState);
+          if (!rollTimerRef.current) {
+            setGameState(msg.room.gameState);
+          }
           setActiveModal(null);
           setShellState('playing');
         }
+      } else if (msg.type === 'DICE_ROLLED') {
+        triggerOnlineDiceRollAnimation(msg.gameState, msg.diceValue);
       } else if (msg.type === 'GAME_STATE_SYNC') {
-        setGameState(msg.gameState);
+        const latestEvent = msg.gameState.eventLog?.[0];
+        const isNewRoll =
+          latestEvent &&
+          (latestEvent.type === 'roll' ||
+            latestEvent.type === 'skip' ||
+            latestEvent.type === 'forfeit_sixes') &&
+          latestEvent.id !== lastAnimatedEventIdRef.current;
+
+        if (isNewRoll && msg.gameState.diceValue !== null) {
+          triggerOnlineDiceRollAnimation(
+            msg.gameState,
+            msg.gameState.diceValue
+          );
+        } else if (!rollTimerRef.current) {
+          setGameState(msg.gameState);
+        }
         setActiveModal(null);
         if (msg.gameState.turnPhase !== 'GAME_OVER') {
           setShellState('playing');
@@ -248,16 +320,26 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         if (msg.status === 'matched' && msg.room) {
           setOnlineRoom(msg.room);
           if (msg.assignedColor) setAssignedColor(msg.assignedColor);
-          if (msg.room.gameState) setGameState(msg.room.gameState);
+          if (msg.room.gameState) {
+            if (!rollTimerRef.current) {
+              setGameState(msg.room.gameState);
+            }
+          }
           setActiveModal(null);
           setShellState('playing');
         }
       } else if (msg.type === 'ERROR') {
         setOnlineError(msg.message);
+        if (rollTimerRef.current) {
+          window.clearTimeout(rollTimerRef.current);
+          rollTimerRef.current = null;
+        }
+        localRollStartTimeRef.current = null;
+        setIsRolling(false);
       }
     });
     return unsubscribe;
-  }, []);
+  }, [triggerOnlineDiceRollAnimation]);
 
   // Start a quick 4-player match vs AI immediately
   const handleQuickPlay = useCallback(() => {
@@ -402,11 +484,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       return;
     }
 
-    // Online mode requests server-authoritative roll
+    // Online mode requests server-authoritative roll with tactile immediate rolling start
     if (
       (gameState.mode === 'friends' || gameState.mode === 'matchmaking') &&
       gameState.roomCode
     ) {
+      localRollStartTimeRef.current = Date.now();
+      setIsRolling(true);
       soundManager.playDiceRoll(settings.diceStyle);
       soundManager.triggerHaptic(15);
       multiplayerClient.requestRollDice(gameState.roomCode);
@@ -884,11 +968,23 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             }
           }}
           onLeaveRoom={() => {
+            if (rollTimerRef.current) {
+              window.clearTimeout(rollTimerRef.current);
+              rollTimerRef.current = null;
+            }
+            localRollStartTimeRef.current = null;
+            setIsRolling(false);
             multiplayerClient.leaveRoom();
             setOnlineRoom(null);
             setOnlineError(null);
           }}
           onCancelMatchmaking={() => {
+            if (rollTimerRef.current) {
+              window.clearTimeout(rollTimerRef.current);
+              rollTimerRef.current = null;
+            }
+            localRollStartTimeRef.current = null;
+            setIsRolling(false);
             multiplayerClient.leaveMatchmaking();
             setMatchmakingStatus('idle');
             setActiveModal(null);

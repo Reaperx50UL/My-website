@@ -32,6 +32,12 @@ export type ServerMessage =
   | { type: 'ROOM_UPDATED'; room: OnlineRoomInfo; assignedColor: PlayerColor }
   | { type: 'GAME_STATE_SYNC'; gameState: GameState }
   | {
+      type: 'DICE_ROLLED';
+      playerColor: PlayerColor;
+      diceValue: number;
+      gameState: GameState;
+    }
+  | {
       type: 'MATCHMAKING_STATUS';
       status: 'idle' | 'searching' | 'matched';
       queueSize: number;
@@ -429,10 +435,22 @@ class MultiplayerClient {
       }
 
       if (result.gameState) {
-        this.notifyListeners({
-          type: 'GAME_STATE_SYNC',
-          gameState: result.gameState,
-        });
+        if (result.rollOutcome || payload.type === 'ROLL_DICE') {
+          this.notifyListeners({
+            type: 'DICE_ROLLED',
+            playerColor:
+              result.gameState.players[result.gameState.activePlayerIndex]
+                ?.color || 'red',
+            diceValue:
+              result.rollOutcome || result.gameState.diceValue || 1,
+            gameState: result.gameState,
+          });
+        } else {
+          this.notifyListeners({
+            type: 'GAME_STATE_SYNC',
+            gameState: result.gameState,
+          });
+        }
       }
 
       if (result.status === 'matched' && result.room) {

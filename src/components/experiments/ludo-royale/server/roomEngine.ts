@@ -81,6 +81,13 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
       const roll = generateFairDiceRoll();
       room.gameState = commitDiceRoll(room.gameState, roll);
       modified = true;
+      const diceMsg: ServerMessage = {
+        type: 'DICE_ROLLED',
+        playerColor: activePlayer.color,
+        diceValue: roll,
+        gameState: room.gameState,
+      };
+      multiplayerStore.broadcast(`room:${room.roomCode}`, diceMsg);
     } else if (room.gameState.turnPhase === 'SELECTING_TOKEN') {
       const chosen = chooseAIMove(
         room.gameState.legalMoves,
@@ -353,7 +360,7 @@ export async function handleStartMatch(
 export async function handleRollDice(
   roomCode: string,
   playerId: string
-): Promise<{ success: boolean; gameState?: GameState; error?: string }> {
+): Promise<{ success: boolean; gameState?: GameState; rollOutcome?: number; error?: string }> {
   const code = (roomCode || '').trim().toUpperCase();
   const room = await multiplayerStore.getRoom(code);
   if (!room || !room.gameState || room.status !== 'playing') {
@@ -382,7 +389,15 @@ export async function handleRollDice(
   await multiplayerStore.saveRoom(room);
   broadcastGameState(room);
 
-  return { success: true, gameState: room.gameState };
+  const diceMsg: ServerMessage = {
+    type: 'DICE_ROLLED',
+    playerColor: activePlayer.color,
+    diceValue: rollOutcome,
+    gameState: room.gameState,
+  };
+  multiplayerStore.broadcast(`room:${room.roomCode}`, diceMsg);
+
+  return { success: true, gameState: room.gameState, rollOutcome };
 }
 
 export async function handleMoveToken(
