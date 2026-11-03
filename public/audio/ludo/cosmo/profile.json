@@ -1,0 +1,14 @@
+{
+  "skinId": "cosmo_cube",
+  "name": "Cosmo Cube Audio Identity",
+  "audioFolder": "/audio/ludo/cosmo/",
+  "rollSynthesis": {
+    "baseLayer": "ambient_nebula_whoosh",
+    "shimmerLayer": "celestial_stardust_chime",
+    "frequenciesHz": [523.25, 659.25, 783.99, 987.77, 1174.66]
+  },
+  "landSynthesis": {
+    "impact": "resonant_cosmic_chime",
+    "chordHz": [523.25, 783.99, 1046.5, 1567.98]
+  }
+}

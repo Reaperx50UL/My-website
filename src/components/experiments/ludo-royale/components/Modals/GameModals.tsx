@@ -31,6 +31,7 @@ import {
   COLOR_META,
   DICE_STYLE_OPTIONS,
   getBoardThemeOption,
+  getDiceStyleOption,
 } from '../../game/constants';
 import { BoardThemePreviewSVG } from '../Board/LudoBoard';
 import { DiceFaceSVG, ThreeDimensionalDie } from '../Dice/DiceRoller';
@@ -1530,6 +1531,21 @@ export const SettingsModal: React.FC<{
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
   const [previewRollingDiceId, setPreviewRollingDiceId] =
     useState<DiceStyle | null>(null);
+  const [justSelectedDiceId, setJustSelectedDiceId] =
+    useState<DiceStyle | null>(null);
+  const previewRollTimerRef = React.useRef<number | null>(null);
+  const highlightTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (previewRollTimerRef.current) {
+        window.clearTimeout(previewRollTimerRef.current);
+      }
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    };
+  }, []);
 
   const { level, currentLevelXp, nextLevelXp, progressPercent } =
     calculatePlayerLevel(profile.experiencePoints);
@@ -1822,13 +1838,18 @@ export const SettingsModal: React.FC<{
           </div>
 
           {/* Dice Design Selector */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300">
-                Select Dice Design
-              </span>
-              <span className="text-[10px] text-amber-400 font-medium">
-                6 Unique Styles
+              <div>
+                <span className="font-semibold text-slate-200 block">
+                  Select Dice Design
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Includes all 6 Classic Dice + 4 VOIDNOD Animated 2D Cubes (🌋 ⚡ 🔷 🌌)
+                </span>
+              </div>
+              <span className="text-[10px] text-amber-400 font-medium shrink-0">
+                {DICE_STYLE_OPTIONS.length} Unique Styles
               </span>
             </div>
 
@@ -1836,48 +1857,69 @@ export const SettingsModal: React.FC<{
               {DICE_STYLE_OPTIONS.map((d) => {
                 const isSelected = (settings.diceStyle || 'classic_ivory') === d.id;
                 const isPreviewRolling = previewRollingDiceId === d.id;
+                const isJustHighlighted = justSelectedDiceId === d.id;
                 return (
                   <button
                     key={d.id}
                     type="button"
+                    data-testid={`dice-style-option-${d.id}`}
                     onClick={() => {
                       onUpdateSettings({ ...settings, diceStyle: d.id });
+                      soundManager.playDiceRoll(d.id);
                       setPreviewRollingDiceId(d.id);
-                      window.setTimeout(() => {
+                      setJustSelectedDiceId(d.id);
+                      if (previewRollTimerRef.current) {
+                        window.clearTimeout(previewRollTimerRef.current);
+                      }
+                      if (highlightTimerRef.current) {
+                        window.clearTimeout(highlightTimerRef.current);
+                      }
+                      highlightTimerRef.current = window.setTimeout(() => {
+                        setJustSelectedDiceId((prev) =>
+                          prev === d.id ? null : prev
+                        );
+                      }, 520);
+                      previewRollTimerRef.current = window.setTimeout(() => {
+                        soundManager.playDiceLand(d.id);
                         setPreviewRollingDiceId((prev) =>
                           prev === d.id ? null : prev
                         );
-                      }, 450);
+                      }, 760);
                     }}
                     aria-label={`Select ${d.label} Dice`}
-                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
                       isSelected
-                        ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/50 shadow-md'
+                        ? isJustHighlighted
+                          ? 'bg-amber-500/25 border-amber-300 ring-2 ring-amber-300/90 scale-[1.02] shadow-lg shadow-amber-500/25'
+                          : 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/50 shadow-md'
                         : 'bg-slate-950 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
                     }`}
                   >
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        isPreviewRolling && !settings.reducedMotion
-                          ? 'animate-dice-roll-2d'
-                          : ''
-                      }`}
-                      style={{
-                        background: d.surfaceGradient,
-                        boxShadow: d.shadowStyle,
-                        border: `1.5px solid ${d.borderHex}`,
-                      }}
-                    >
-                      <DiceFaceSVG
-                        face={5}
+                    <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                      <ThreeDimensionalDie
+                        value={5}
+                        isRolling={isPreviewRolling}
                         diceStyle={d.id}
-                        className="w-8 h-8"
+                        size={46}
+                        reducedMotion={settings.reducedMotion}
+                        showSixGlow={false}
+                        interactive={false}
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold text-white text-xs truncate">
-                        {d.label}
+                      <div className="flex items-center gap-1 font-bold text-white text-xs truncate">
+                        {d.badgeIcon && (
+                          <span aria-hidden="true" className="shrink-0">
+                            {d.badgeIcon}
+                          </span>
+                        )}
+                        <span className="truncate">{d.label}</span>
                       </div>
+                      {d.tagline && (
+                        <div className="text-[8px] font-extrabold tracking-wider uppercase text-amber-300/90 truncate mt-0.5">
+                          {d.tagline}
+                        </div>
+                      )}
                       <div className="text-[10px] text-slate-400 line-clamp-2 leading-tight mt-0.5">
                         {d.subtitle}
                       </div>
@@ -1886,6 +1928,107 @@ export const SettingsModal: React.FC<{
                 );
               })}
             </div>
+
+            {/* Selected Die Faces 1-6 & Live 3D Cube Roll Showcase */}
+            {(() => {
+              const activeDie = getDiceStyleOption(settings.diceStyle);
+              const isRollingShowcase = previewRollingDiceId === activeDie.id;
+              const isHighlightedShowcase = justSelectedDiceId === activeDie.id;
+              return (
+                <div
+                  data-testid="selected-dice-faces-showcase"
+                  className={`p-3.5 rounded-xl bg-slate-950/90 border transition-all duration-200 space-y-3 ${
+                    isHighlightedShowcase
+                      ? 'border-amber-400/80 ring-1 ring-amber-400/40'
+                      : 'border-slate-800/90'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div
+                        data-testid="showcase-hero-3d-die"
+                        className="w-18 h-18 flex items-center justify-center shrink-0 rounded-xl bg-slate-900/90 border border-slate-800 p-1"
+                      >
+                        <ThreeDimensionalDie
+                          value={6}
+                          isRolling={isRollingShowcase}
+                          diceStyle={activeDie.id}
+                          size={62}
+                          reducedMotion={settings.reducedMotion}
+                          showSixGlow={false}
+                          interactive={false}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {activeDie.badgeIcon && (
+                            <span aria-hidden="true" className="text-sm">
+                              {activeDie.badgeIcon}
+                            </span>
+                          )}
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-white">
+                            {activeDie.label}
+                          </span>
+                          {activeDie.tagline && (
+                            <span className="text-[9px] font-bold tracking-widest uppercase text-amber-400/90">
+                              • {activeDie.tagline}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-amber-300/90 font-semibold mt-0.5">
+                          3D Roll Physics: {activeDie.animationLabel}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                          {activeDie.subtitle}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        soundManager.playDiceRoll(activeDie.id);
+                        setPreviewRollingDiceId(activeDie.id);
+                        if (previewRollTimerRef.current) {
+                          window.clearTimeout(previewRollTimerRef.current);
+                        }
+                        previewRollTimerRef.current = window.setTimeout(() => {
+                          soundManager.playDiceLand(activeDie.id);
+                          setPreviewRollingDiceId((prev) =>
+                            prev === activeDie.id ? null : prev
+                          );
+                        }, 760);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 text-[10px] font-bold uppercase tracking-wider transition cursor-pointer shrink-0"
+                    >
+                      Roll &amp; Test FX
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
+                    {([1, 2, 3, 4, 5, 6] as const).map((faceNum) => (
+                      <div
+                        key={faceNum}
+                        className="flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-xl bg-slate-900/80 border border-slate-800/80"
+                      >
+                        <ThreeDimensionalDie
+                          value={faceNum}
+                          isRolling={false}
+                          diceStyle={activeDie.id}
+                          size={54}
+                          reducedMotion={settings.reducedMotion}
+                          showSixGlow={false}
+                          showShadow={false}
+                          interactive={false}
+                        />
+                        <span className="text-[10px] font-bold text-slate-300">
+                          {faceNum}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Board & Token Theme Selector (6 Signature Designs) */}

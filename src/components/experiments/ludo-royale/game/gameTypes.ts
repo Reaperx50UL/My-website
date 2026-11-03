@@ -183,9 +183,22 @@ export type DiceStyle =
   | 'obsidian_neon'
   | 'emerald_jade'
   | 'crimson_ruby'
-  | 'celestial_runic';
+  | 'celestial_runic'
+  | 'lava_cube'
+  | 'electro_cube'
+  | 'tesseract_cube'
+  | 'cosmo_cube';
 
-export type DicePipShape = 'circle' | 'diamond' | 'hexagon' | 'star' | 'roman';
+export type DicePipShape =
+  | 'circle'
+  | 'diamond'
+  | 'hexagon'
+  | 'star'
+  | 'roman'
+  | 'magma'
+  | 'plasma'
+  | 'tesseract'
+  | 'cosmos';
 
 export type DiceTexturePattern =
   | 'ivory_grain'
@@ -193,7 +206,11 @@ export type DiceTexturePattern =
   | 'carbon_circuit'
   | 'veined_jade'
   | 'faceted_gemstone'
-  | 'nebula_astrolabe';
+  | 'nebula_astrolabe'
+  | 'volcanic_magma'
+  | 'electric_plasma'
+  | 'dimensional_tesseract'
+  | 'voidnod_cosmos';
 
 export type DiceAnimationProfile =
   | 'tournament_tumble'
@@ -201,7 +218,11 @@ export type DiceAnimationProfile =
   | 'cyber_gyro'
   | 'jade_levitate'
   | 'ruby_vortex'
-  | 'astral_orbit';
+  | 'astral_orbit'
+  | 'lava_eruption'
+  | 'electro_surge'
+  | 'tesseract_warp'
+  | 'cosmo_nebula';
 
 export type DiceModelGeometry =
   | 'chamfered_ivory'
@@ -209,7 +230,11 @@ export type DiceModelGeometry =
   | 'holo_obsidian'
   | 'carved_jade'
   | 'faceted_ruby'
-  | 'astrolabe_runic';
+  | 'astrolabe_runic'
+  | 'obsidian_lava_2d'
+  | 'plasma_electro_2d'
+  | 'hyper_tesseract_2d'
+  | 'voidnod_cosmo_2d';
 
 export interface DiceRollPhysics {
   spinMultipliers: { x: number; y: number; z: number };
@@ -223,11 +248,15 @@ export interface DiceRollPhysics {
   hoverTilt: { x: number; y: number; z: number };
   idleAnimationClass: string;
   rollingEffectClass: string;
+  landingEffectClass?: string;
 }
 
 export interface DiceStyleOption {
   id: DiceStyle;
   label: string;
+  tagline?: string;
+  badgeIcon?: string;
+  isPremium2D?: boolean;
   subtitle: string;
   pipShape: DicePipShape;
   texturePattern: DiceTexturePattern;

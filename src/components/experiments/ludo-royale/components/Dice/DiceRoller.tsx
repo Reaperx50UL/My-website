@@ -69,7 +69,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
               aria-label={`Switch Dice Style (Current: ${styleOpt.label})`}
               className="px-2 py-0.5 rounded-md bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-[10px] font-medium text-amber-300 transition-colors cursor-pointer"
             >
-              🎲 {styleOpt.label}
+              {styleOpt.badgeIcon || '🎲'} {styleOpt.label}
             </button>
           )}
           <span className="text-[11px] sm:text-xs font-medium text-slate-400 whitespace-nowrap">
@@ -90,7 +90,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
       <div className="flex items-center gap-2.5 sm:gap-3 w-full">
         {/* 2D Die */}
         <div
-          className="relative shrink-0 flex items-center justify-center p-0.5"
+          className="relative shrink-0 flex items-center justify-center p-1"
           data-testid="hud-2d-die-container"
         >
           <ThreeDimensionalDie
@@ -99,7 +99,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
             canRoll={canRoll}
             activeColor={activeColor}
             diceStyle={diceStyle}
-            size={54}
+            size={60}
             reducedMotion={reducedMotion}
             interactive={true}
             onClick={() => {

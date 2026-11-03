@@ -1,0 +1,15 @@
+{
+  "skinId": "electro_cube",
+  "name": "Electro Cube Audio Identity",
+  "audioFolder": "/audio/ludo/electro/",
+  "rollSynthesis": {
+    "baseLayer": "capacitor_charge_sweep",
+    "arcLayer": "plasma_arc_pulses",
+    "frequenciesHz": [420, 680, 940, 1280, 860]
+  },
+  "landSynthesis": {
+    "impact": "clean_electric_snap",
+    "fundamentalHz": 1120,
+    "snapSweepEndHz": 240
+  }
+}

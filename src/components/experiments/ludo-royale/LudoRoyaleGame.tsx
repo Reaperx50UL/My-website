@@ -407,19 +407,20 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       (gameState.mode === 'friends' || gameState.mode === 'matchmaking') &&
       gameState.roomCode
     ) {
-      soundManager.playDiceRoll();
+      soundManager.playDiceRoll(settings.diceStyle);
       soundManager.triggerHaptic(15);
       multiplayerClient.requestRollDice(gameState.roomCode);
       return;
     }
 
     setIsRolling(true);
-    soundManager.playDiceRoll();
+    soundManager.playDiceRoll(settings.diceStyle);
     soundManager.triggerHaptic(15);
 
     const rollDelay = settings.reducedMotion ? 60 : 680;
     window.setTimeout(() => {
       const outcome = generateFairDiceRoll();
+      soundManager.playDiceLand(settings.diceStyle);
       if (outcome === 6) {
         soundManager.playSixRolled();
         soundManager.triggerHaptic(22);
@@ -427,7 +428,14 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       setIsRolling(false);
       setGameState((prev) => commitDiceRoll(prev, outcome));
     }, rollDelay);
-  }, [shellState, gameState, isRolling, animatingMove, settings.reducedMotion]);
+  }, [
+    shellState,
+    gameState,
+    isRolling,
+    animatingMove,
+    settings.reducedMotion,
+    settings.diceStyle,
+  ]);
 
   // Automatic Turn Transition when a player has no legal moves or rolls three 6s
   useEffect(() => {

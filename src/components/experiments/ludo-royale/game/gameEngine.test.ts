@@ -397,10 +397,10 @@ test('15. XP calculation awards victory, completion, captures, and home tokens c
   assert.equal(lvl2.progressPercent, 20);
 });
 
-test('16. Dice design catalog provides 6 distinct styles with custom pip shapes and safe fallback', () => {
-  assert.equal(DICE_STYLE_OPTIONS.length, 6);
+test('16. Dice design catalog provides 10 distinct styles with custom pip shapes and safe fallback', () => {
+  assert.equal(DICE_STYLE_OPTIONS.length, 10);
   const uniqueIds = new Set(DICE_STYLE_OPTIONS.map((d) => d.id));
-  assert.equal(uniqueIds.size, 6);
+  assert.equal(uniqueIds.size, 10);
 
   const runic = getDiceStyleOption('celestial_runic');
   assert.equal(runic.label, 'Astral Runic');
@@ -408,6 +408,22 @@ test('16. Dice design catalog provides 6 distinct styles with custom pip shapes 
 
   const obsidian = getDiceStyleOption('obsidian_neon');
   assert.equal(obsidian.pipShape, 'hexagon');
+
+  const lava = getDiceStyleOption('lava_cube');
+  assert.equal(lava.label, 'Lava Cube');
+  assert.equal(lava.pipShape, 'magma');
+
+  const electro = getDiceStyleOption('electro_cube');
+  assert.equal(electro.label, 'Electro Cube');
+  assert.equal(electro.pipShape, 'plasma');
+
+  const tesseract = getDiceStyleOption('tesseract_cube');
+  assert.equal(tesseract.label, 'Tesseract Cube');
+  assert.equal(tesseract.pipShape, 'tesseract');
+
+  const cosmo = getDiceStyleOption('cosmo_cube');
+  assert.equal(cosmo.label, 'Cosmo Cube');
+  assert.equal(cosmo.pipShape, 'cosmos');
 
   // Fallback to classic_ivory when undefined
   const fallback = getDiceStyleOption(undefined);
@@ -692,7 +708,7 @@ test('23. Move indicator builder maps each playable token to its token number (1
 });
 
 test('24. Every 3D dice style defines a unique texture map, model geometry, animation profile, and roll physics transform', () => {
-  assert.equal(DICE_STYLE_OPTIONS.length, 6);
+  assert.equal(DICE_STYLE_OPTIONS.length, 10);
 
   const uniqueTextures = new Set(DICE_STYLE_OPTIONS.map((d) => d.texturePattern));
   const uniqueAnimations = new Set(
@@ -703,10 +719,10 @@ test('24. Every 3D dice style defines a unique texture map, model geometry, anim
     DICE_STYLE_OPTIONS.map((d) => d.rollPhysics.idleAnimationClass)
   );
 
-  assert.equal(uniqueTextures.size, 6);
-  assert.equal(uniqueAnimations.size, 6);
-  assert.equal(uniqueModels.size, 6);
-  assert.equal(uniqueIdleClasses.size, 6);
+  assert.equal(uniqueTextures.size, 10);
+  assert.equal(uniqueAnimations.size, 10);
+  assert.equal(uniqueModels.size, 10);
+  assert.equal(uniqueIdleClasses.size, 10);
 
   assert.equal(getDiceStyleOption('classic_ivory').texturePattern, 'ivory_grain');
   assert.equal(getDiceStyleOption('royal_gold').texturePattern, 'brushed_bullion');
@@ -714,6 +730,10 @@ test('24. Every 3D dice style defines a unique texture map, model geometry, anim
   assert.equal(getDiceStyleOption('emerald_jade').texturePattern, 'veined_jade');
   assert.equal(getDiceStyleOption('crimson_ruby').texturePattern, 'faceted_gemstone');
   assert.equal(getDiceStyleOption('celestial_runic').texturePattern, 'nebula_astrolabe');
+  assert.equal(getDiceStyleOption('lava_cube').texturePattern, 'volcanic_magma');
+  assert.equal(getDiceStyleOption('electro_cube').texturePattern, 'electric_plasma');
+  assert.equal(getDiceStyleOption('tesseract_cube').texturePattern, 'dimensional_tesseract');
+  assert.equal(getDiceStyleOption('cosmo_cube').texturePattern, 'voidnod_cosmos');
 
   // Verify style-specific 3D roll transform calculations
   const ivoryRoll = computeDiceRollTransform({

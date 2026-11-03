@@ -330,3 +330,1044 @@
 .animate-dice-shockwave {
   animation: diceRollShockwave 0.65s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
+
+/* ============================================================================
+   TRUE 3D VOLUMETRIC 6-SIDED CUBE ROLLING, LANDING & PULSATING IDLE ANIMATIONS
+   IMPORTANT: Never apply `filter` to `.dice-cube-3d` so browser `preserve-3d`
+   renders all 6 faces with true 3D depth sorting as one solid continuous cube.
+   ============================================================================ */
+
+.dice-stage-perspective {
+  perspective: 540px;
+  perspective-origin: 50% 34%;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+}
+
+.dice-cube-3d {
+  --cube-size: 44px;
+  --cube-half: 22px;
+  --cube-face-z: 21.8px;
+  --cube-core-size: 43px;
+  --cube-corner-radius: 16%;
+  --cube-edge-thickness: 5.5px;
+  --cube-specular-color: rgba(255, 255, 255, 0.52);
+  --cube-rim-color: rgba(255, 255, 255, 0.32);
+  --cube-ao-color: rgba(0, 0, 0, 0.58);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  transform-origin: 50% 50% 0px;
+  will-change: transform;
+}
+
+.dice-cube-static-posture {
+  transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg);
+}
+
+/* Solid Rounded-Corner 3D Interior Core (strictly orthogonal so nothing protrudes) */
+.dice-cube-core-plane {
+  position: absolute;
+  width: calc(var(--cube-size) * 0.92);
+  height: calc(var(--cube-size) * 0.92);
+  left: calc(50% - (var(--cube-size) * 0.46));
+  top: calc(50% - (var(--cube-size) * 0.46));
+  border-radius: 18%;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+/* Stepped 3D Quarter-Circle Rounded Fillet Shells Parallel to All 6 Faces:
+   Seamlessly fills the 16% rounded corners in 3D space */
+.dice-cube-fillet-layer {
+  position: absolute;
+  width: var(--fillet-size, var(--cube-size));
+  height: var(--fillet-size, var(--cube-size));
+  left: calc(50% - (var(--fillet-size, var(--cube-size)) * 0.5));
+  top: calc(50% - (var(--fillet-size, var(--cube-size)) * 0.5));
+  border-radius: var(--fillet-radius, 17%);
+  pointer-events: none;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* 6 Continuous Rounded-Corner Cube Faces Mapped Flush in Unified preserve-3d Space */
+.dice-cube-face-3d {
+  position: absolute;
+  width: var(--cube-size);
+  height: var(--cube-size);
+  left: calc(50% - var(--cube-half));
+  top: calc(50% - var(--cube-half));
+  border-radius: var(--cube-corner-radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.dice-cube-face-3d--front {
+  transform: rotateY(0deg) translate3d(0px, 0px, var(--cube-face-z));
+}
+
+.dice-cube-face-3d--back {
+  transform: rotateY(180deg) translate3d(0px, 0px, var(--cube-face-z));
+}
+
+.dice-cube-face-3d--top {
+  transform: rotateX(90deg) translate3d(0px, 0px, var(--cube-face-z));
+}
+
+.dice-cube-face-3d--bottom {
+  transform: rotateX(-90deg) translate3d(0px, 0px, var(--cube-face-z));
+}
+
+.dice-cube-face-3d--left {
+  transform: rotateY(-90deg) translate3d(0px, 0px, var(--cube-face-z));
+}
+
+.dice-cube-face-3d--right {
+  transform: rotateY(90deg) translate3d(0px, 0px, var(--cube-face-z));
+}
+
+/* Continuous 3D Directional Cushion Lighting & Curved Bevel Wrap Across Rounded Edges */
+.dice-cube-face-3d::before,
+.dice-cube-face-3d::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* ::before â€” Smooth 3D Spherical Light Falloff & Ambient Occlusion Matched at Rounded Vertices */
+.dice-cube-face-3d--top::before {
+  background:
+    radial-gradient(circle at 28% 76%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.10) 48%, rgba(0, 0, 0, 0.12) 100%),
+    linear-gradient(15deg, rgba(255, 255, 255, 0.16) 0%, transparent 60%, rgba(0, 0, 0, 0.14) 100%);
+}
+
+.dice-cube-face-3d--front::before {
+  background:
+    radial-gradient(circle at 26% 24%, rgba(255, 255, 255, 0.22) 0%, transparent 54%, rgba(0, 0, 0, 0.30) 100%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12) 0%, transparent 48%, rgba(0, 0, 0, 0.28) 100%);
+}
+
+.dice-cube-face-3d--left::before {
+  background:
+    radial-gradient(circle at 76% 24%, rgba(255, 255, 255, 0.18) 0%, rgba(0, 0, 0, 0.14) 50%, rgba(0, 0, 0, 0.46) 100%),
+    linear-gradient(225deg, rgba(255, 255, 255, 0.10) 0%, rgba(0, 0, 0, 0.22) 48%, rgba(0, 0, 0, 0.48) 100%);
+}
+
+.dice-cube-face-3d--right::before {
+  background:
+    radial-gradient(circle at 24% 24%, rgba(255, 255, 255, 0.14) 0%, rgba(0, 0, 0, 0.20) 50%, rgba(0, 0, 0, 0.50) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0.24) 48%, rgba(0, 0, 0, 0.52) 100%);
+}
+
+.dice-cube-face-3d--bottom::before {
+  background:
+    radial-gradient(circle at 26% 20%, rgba(0, 0, 0, 0.24) 0%, rgba(0, 0, 0, 0.54) 65%, rgba(0, 0, 0, 0.70) 100%);
+}
+
+.dice-cube-face-3d--back::before {
+  background:
+    radial-gradient(circle at 76% 22%, rgba(0, 0, 0, 0.20) 0%, rgba(0, 0, 0, 0.44) 60%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+/* ::after â€” Smooth Pillowed 3D Cushion Rim & Rounded Edge Specular/AO Continuity */
+.dice-cube-face-3d--top::after {
+  box-shadow:
+    inset 0 -2.5px 4px var(--cube-specular-color),
+    inset 2.5px 0 4px var(--cube-rim-color),
+    inset -2px 2px 4px rgba(0, 0, 0, 0.22);
+}
+
+.dice-cube-face-3d--front::after {
+  box-shadow:
+    inset 0 2.5px 4px var(--cube-specular-color),
+    inset 2.5px 0 4px var(--cube-rim-color),
+    inset -2.5px 0 4.5px rgba(0, 0, 0, 0.36),
+    inset 0 -2.5px 4.5px var(--cube-ao-color);
+}
+
+.dice-cube-face-3d--left::after {
+  box-shadow:
+    inset -2.5px 0 4px var(--cube-rim-color),
+    inset 0 2.5px 4px var(--cube-rim-color),
+    inset 2.5px 0 4.5px var(--cube-ao-color),
+    inset 0 -2.5px 4.5px var(--cube-ao-color);
+}
+
+.dice-cube-face-3d--right::after {
+  box-shadow:
+    inset 2px 0 3.5px rgba(0, 0, 0, 0.34),
+    inset 0 2px 3.5px rgba(255, 255, 255, 0.18),
+    inset -2.5px -2.5px 4.5px var(--cube-ao-color);
+}
+
+.dice-cube-face-3d--bottom::after {
+  box-shadow:
+    inset 0 2.5px 4px var(--cube-ao-color),
+    inset 2.5px 0 4px var(--cube-ao-color),
+    inset -2.5px -2.5px 4.5px rgba(0, 0, 0, 0.75);
+}
+
+.dice-cube-face-3d--back::after {
+  box-shadow:
+    inset 0 2px 3.5px rgba(255, 255, 255, 0.14),
+    inset 0 -2.5px 4.5px rgba(0, 0, 0, 0.70),
+    inset 2.5px -2.5px 4.5px var(--cube-ao-color);
+}
+
+/* Dynamic 3D Specular Sheen Sweeping Across Faces During Roll & Idle */
+@keyframes diceFaceSheenSweep {
+  0% {
+    opacity: 0.16;
+  }
+  25% {
+    opacity: 0.88;
+  }
+  50% {
+    opacity: 0.22;
+  }
+  75% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0.24;
+  }
+}
+
+.animate-dice-face-sheen {
+  animation: diceFaceSheenSweep 0.36s ease-in-out infinite;
+}
+
+@keyframes diceIdleSheenPulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.animate-dice-idle-sheen {
+  animation: diceIdleSheenPulse 3.4s ease-in-out infinite;
+}
+
+/* Dynamic Floor Shadow Pulsing in Sync With Tabletop Bounces & Idle Breathing */
+@keyframes diceShadowBounce {
+  0% {
+    transform: scale(1.04);
+    opacity: 0.88;
+  }
+  12% {
+    transform: scale(1.1);
+    opacity: 0.92;
+  }
+  32% {
+    transform: scale(0.55);
+    opacity: 0.42;
+  }
+  56% {
+    transform: scale(0.62);
+    opacity: 0.48;
+  }
+  78% {
+    transform: scale(1.08);
+    opacity: 0.94;
+  }
+  90% {
+    transform: scale(0.84);
+    opacity: 0.68;
+  }
+  100% {
+    transform: scale(0.96);
+    opacity: 0.8;
+  }
+}
+
+.animate-dice-shadow-bounce {
+  animation: diceShadowBounce 0.76s cubic-bezier(0.22, 0.88, 0.36, 1) infinite;
+}
+
+@keyframes diceShadowBreathe {
+  0%, 100% {
+    transform: scale(0.96);
+    opacity: 0.76;
+  }
+  50% {
+    transform: scale(0.88);
+    opacity: 0.62;
+  }
+}
+
+.animate-dice-shadow-breathe {
+  animation: diceShadowBreathe 3.4s ease-in-out infinite;
+}
+
+/* ============================================================================
+   CONTINUOUS 3-FACE STUDIO IDLE BREATHING PERSONALITIES (ALL 10 DICE SKINS)
+   Maintains a solid 3-face cube silhouette (Top, Front, Side always visible)
+   ============================================================================ */
+@keyframes diceIdleClassic3D {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg);
+  }
+  50% {
+    transform: translate3d(0px, -1.8px, 2px) rotateX(-19deg) rotateY(24deg) rotateZ(0.5deg);
+  }
+}
+
+.animate-dice-idle-classic-3d,
+.animate-dice-idle-ivory {
+  animation: diceIdleClassic3D 3.8s ease-in-out infinite;
+}
+
+@keyframes diceIdleBullion {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(21deg) rotateZ(-1deg);
+  }
+  50% {
+    transform: translate3d(0px, -1.4px, 1.5px) rotateX(-18deg) rotateY(25deg) rotateZ(0deg);
+  }
+}
+
+.animate-dice-idle-bullion {
+  animation: diceIdleBullion 4.2s ease-in-out infinite;
+}
+
+@keyframes diceIdleCyber {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-17deg) rotateY(21deg) rotateZ(-1.5deg);
+  }
+  50% {
+    transform: translate3d(0px, -2.2px, 3px) rotateX(-20deg) rotateY(26deg) rotateZ(1deg);
+  }
+}
+
+.animate-dice-idle-cyber {
+  animation: diceIdleCyber 3.2s ease-in-out infinite;
+}
+
+@keyframes diceIdleJade {
+  0%, 100% {
+    transform: translate3d(0px, -0.5px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg);
+  }
+  50% {
+    transform: translate3d(0px, -2.6px, 3px) rotateX(-19deg) rotateY(24deg) rotateZ(1deg);
+  }
+}
+
+.animate-dice-idle-jade {
+  animation: diceIdleJade 4.0s ease-in-out infinite;
+}
+
+@keyframes diceIdleRuby {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-17deg) rotateY(21deg) rotateZ(-1deg);
+  }
+  50% {
+    transform: translate3d(0px, -2px, 2.5px) rotateX(-20deg) rotateY(25deg) rotateZ(1deg);
+  }
+}
+
+.animate-dice-idle-ruby {
+  animation: diceIdleRuby 3.5s ease-in-out infinite;
+}
+
+@keyframes diceIdleAstral {
+  0%, 100% {
+    transform: translate3d(0px, -0.5px, 0px) rotateX(-17deg) rotateY(21deg) rotateZ(-1deg);
+  }
+  50% {
+    transform: translate3d(0px, -2.8px, 3.5px) rotateX(-20deg) rotateY(26deg) rotateZ(1.5deg);
+  }
+}
+
+.animate-dice-idle-astral {
+  animation: diceIdleAstral 3.8s ease-in-out infinite;
+}
+
+/* ============================================================================
+   5-STAGE PHYSICAL 3D CUBE TUMBLING SEQUENCES
+   Stage 1 (0-10%): Anticipation (compression & pull-back)
+   Stage 2 (10-28%): Launch (upward lift & multi-axis acceleration)
+   Stage 3 (28-76%): Tumbling (full 3D corner-over-corner rotation)
+   Stage 4 (76-90%): Landing (tabletop impact & small physical bounce)
+   Stage 5 (90-100%): Settling (smooth stop into 3-face solid cube posture)
+   ============================================================================ */
+@keyframes diceRollClassic3D {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(0deg) scale3d(1, 1, 1);
+  }
+  10% {
+    transform: translate3d(0px, 3px, -6px) rotateX(-28deg) rotateY(10deg) rotateZ(-8deg) scale3d(0.94, 0.80, 0.94);
+  }
+  28% {
+    transform: translate3d(-6px, -14px, 16px) rotateX(185deg) rotateY(145deg) rotateZ(75deg) scale3d(0.84, 0.86, 0.84);
+  }
+  54% {
+    transform: translate3d(5px, -10px, 14px) rotateX(415deg) rotateY(365deg) rotateZ(195deg) scale3d(0.86, 0.86, 0.86);
+  }
+  78% {
+    transform: translate3d(-2px, 4px, -2px) rotateX(685deg) rotateY(695deg) rotateZ(345deg) scale3d(0.98, 0.82, 0.98);
+  }
+  90% {
+    transform: translate3d(1px, -4px, 5px) rotateX(708deg) rotateY(748deg) rotateZ(362deg) scale3d(0.94, 0.96, 0.94);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(704deg) rotateY(740deg) rotateZ(359deg) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes diceLandClassic3D {
+  0% {
+    transform: translate3d(0px, 3px, -2px) rotateX(-10deg) rotateY(14deg) rotateZ(-3deg) scale3d(1.04, 0.86, 1.04);
+  }
+  38% {
+    transform: translate3d(0px, -3px, 4px) rotateX(-20deg) rotateY(25deg) rotateZ(2deg) scale3d(0.96, 1.03, 0.96);
+  }
+  72% {
+    transform: translate3d(0px, 1px, 0px) rotateX(-15deg) rotateY(19deg) rotateZ(-1deg) scale3d(1.01, 0.98, 1.01);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+}
+
+.animate-dice-roll-2d,
+.animate-dice-roll-ivory,
+.animate-dice-roll-bullion,
+.animate-dice-roll-cyber,
+.animate-dice-roll-jade,
+.animate-dice-roll-ruby,
+.animate-dice-roll-astral {
+  animation: diceRollClassic3D 0.76s cubic-bezier(0.22, 0.88, 0.36, 1) infinite;
+}
+
+.animate-dice-land-classic-3d {
+  animation: diceLandClassic3D 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* 1. LAVA CUBE â€” Heavy Volcanic Obsidian Compression -> Launch -> Multi-Axis Boulder Tumble -> Impact & Settle */
+@keyframes diceRollLava2D {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+  10% {
+    transform: translate3d(0px, 4px, -8px) rotateX(-32deg) rotateY(8deg) rotateZ(-10deg) scale3d(0.96, 0.76, 0.96);
+  }
+  28% {
+    transform: translate3d(-5px, -15px, 18px) rotateX(195deg) rotateY(155deg) rotateZ(-85deg) scale3d(0.84, 0.86, 0.84);
+  }
+  52% {
+    transform: translate3d(4px, 4px, -3px) rotateX(410deg) rotateY(345deg) rotateZ(-195deg) scale3d(0.98, 0.78, 0.98);
+  }
+  74% {
+    transform: translate3d(-3px, -8px, 10px) rotateX(585deg) rotateY(545deg) rotateZ(-295deg) scale3d(0.86, 0.88, 0.86);
+  }
+  88% {
+    transform: translate3d(1px, 3px, -2px) rotateX(696deg) rotateY(732deg) rotateZ(-356deg) scale3d(0.98, 0.84, 0.98);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(704deg) rotateY(740deg) rotateZ(-361deg) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes diceLandLava2D {
+  0% {
+    transform: translate3d(0px, 4px, -4px) rotateX(-8deg) rotateY(12deg) rotateZ(-4deg) scale3d(1.06, 0.80, 1.06);
+  }
+  34% {
+    transform: translate3d(-1px, -4px, 5px) rotateX(-21deg) rotateY(26deg) rotateZ(3deg) scale3d(0.94, 1.04, 0.94);
+  }
+  66% {
+    transform: translate3d(0px, 1.5px, -1px) rotateX(-14deg) rotateY(18deg) rotateZ(-1.5deg) scale3d(1.01, 0.97, 1.01);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+}
+
+/* 2. ELECTRO CUBE â€” High-Voltage Magnetic Compression -> Rapid Multi-Axis Tumble -> Impact & Settle */
+@keyframes diceRollElectro2D {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+  9% {
+    transform: translate3d(0px, 3px, -5px) rotateX(-26deg) rotateY(28deg) rotateZ(8deg) scale3d(0.94, 0.80, 0.94);
+  }
+  26% {
+    transform: translate3d(-7px, -13px, 16px) rotateX(175deg) rotateY(-145deg) rotateZ(110deg) scale3d(0.84, 0.84, 0.84);
+  }
+  50% {
+    transform: translate3d(7px, -9px, 14px) rotateX(385deg) rotateY(-365deg) rotateZ(225deg) scale3d(0.86, 0.84, 0.86);
+  }
+  76% {
+    transform: translate3d(-4px, 3px, -2px) rotateX(675deg) rotateY(-685deg) rotateZ(340deg) scale3d(0.98, 0.84, 0.98);
+  }
+  90% {
+    transform: translate3d(2px, -3px, 4px) rotateX(708deg) rotateY(-704deg) rotateZ(362deg) scale3d(0.95, 0.97, 0.95);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(704deg) rotateY(-700deg) rotateZ(359deg) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes diceLandElectro2D {
+  0% {
+    transform: translate3d(-2px, 3px, -2px) rotateX(-10deg) rotateY(14deg) rotateZ(-4deg) scale3d(1.05, 0.85, 1.05);
+  }
+  32% {
+    transform: translate3d(2px, -3px, 4px) rotateX(-21deg) rotateY(26deg) rotateZ(3deg) scale3d(0.95, 1.03, 0.95);
+  }
+  65% {
+    transform: translate3d(-1px, 1px, 0px) rotateX(-15deg) rotateY(19deg) rotateZ(-1deg) scale3d(1.01, 0.98, 1.01);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+}
+
+/* 3. TESSERACT CUBE â€” Dimensional Compression -> 4D Vertex Multi-Axis Tumble -> Realignment & Settle */
+@keyframes diceRollTesseract2D {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+  10% {
+    transform: translate3d(0px, 3px, -6px) rotateX(-25deg) rotateY(30deg) rotateZ(14deg) scale3d(0.92, 0.82, 0.92);
+  }
+  28% {
+    transform: translate3d(-4px, -13px, 16px) rotateX(195deg) rotateY(-185deg) rotateZ(125deg) scale3d(0.82, 0.82, 0.82);
+  }
+  54% {
+    transform: translate3d(4px, -11px, 18px) rotateX(415deg) rotateY(-405deg) rotateZ(245deg) scale3d(0.85, 0.85, 0.85);
+  }
+  78% {
+    transform: translate3d(-2px, 3px, -2px) rotateX(680deg) rotateY(-685deg) rotateZ(348deg) scale3d(0.97, 0.85, 0.97);
+  }
+  90% {
+    transform: translate3d(1px, -3px, 4px) rotateX(708deg) rotateY(-703deg) rotateZ(362deg) scale3d(0.95, 0.96, 0.95);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(704deg) rotateY(-700deg) rotateZ(359deg) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes tesseractInnerHypercubeRoll {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale3d(0.55, 0.55, 0.55);
+  }
+  35% {
+    transform: translate3d(0px, 0px, 5px) rotateX(-240deg) rotateY(240deg) rotateZ(-120deg) scale3d(1.18, 1.18, 1.18);
+  }
+  70% {
+    transform: translate3d(0px, 0px, -3px) rotateX(-510deg) rotateY(510deg) rotateZ(-255deg) scale3d(0.58, 0.58, 0.58);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-720deg) rotateY(720deg) rotateZ(-360deg) scale3d(0.6, 0.6, 0.6);
+  }
+}
+
+.animate-tesseract-inner-3d {
+  animation: tesseractInnerHypercubeRoll 0.76s cubic-bezier(0.25, 0.9, 0.35, 1) infinite;
+  transform-style: preserve-3d;
+}
+
+@keyframes diceLandTesseract2D {
+  0% {
+    transform: translate3d(0px, 3px, -2px) rotateX(-10deg) rotateY(14deg) rotateZ(6deg) scale3d(1.04, 0.86, 1.04);
+  }
+  38% {
+    transform: translate3d(0px, -3px, 4px) rotateX(-20deg) rotateY(25deg) rotateZ(-2deg) scale3d(0.95, 1.03, 0.95);
+  }
+  72% {
+    transform: translate3d(0px, 1px, 0px) rotateX(-15deg) rotateY(19deg) rotateZ(0deg) scale3d(1.01, 0.98, 1.01);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+}
+
+/* 4. COSMO CUBE â€” Celestial Compression -> Orbital Multi-Axis Tumble -> Soft Cosmic Landing & Settle */
+@keyframes diceRollCosmo2D {
+  0% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+  10% {
+    transform: translate3d(0px, 3px, -5px) rotateX(-26deg) rotateY(12deg) rotateZ(-8deg) scale3d(0.93, 0.82, 0.93);
+  }
+  28% {
+    transform: translate3d(-7px, -13px, 16px) rotateX(185deg) rotateY(195deg) rotateZ(95deg) scale3d(0.84, 0.84, 0.84);
+  }
+  54% {
+    transform: translate3d(6px, -10px, 16px) rotateX(405deg) rotateY(425deg) rotateZ(215deg) scale3d(0.86, 0.86, 0.86);
+  }
+  78% {
+    transform: translate3d(-2px, 3px, -2px) rotateX(682deg) rotateY(705deg) rotateZ(346deg) scale3d(0.97, 0.84, 0.97);
+  }
+  90% {
+    transform: translate3d(1px, -3px, 4px) rotateX(708deg) rotateY(746deg) rotateZ(361deg) scale3d(0.95, 0.97, 0.95);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(704deg) rotateY(740deg) rotateZ(359deg) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes diceLandCosmo2D {
+  0% {
+    transform: translate3d(1px, 3px, -2px) rotateX(-10deg) rotateY(14deg) rotateZ(4deg) scale3d(1.04, 0.86, 1.04);
+  }
+  40% {
+    transform: translate3d(-1px, -3px, 4px) rotateX(-20deg) rotateY(25deg) rotateZ(-2deg) scale3d(0.96, 1.02, 0.96);
+  }
+  74% {
+    transform: translate3d(0px, 1px, 0px) rotateX(-15deg) rotateY(19deg) rotateZ(0deg) scale3d(1.01, 0.99, 1.01);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+}
+
+.animate-dice-roll-lava-2d {
+  animation: diceRollLava2D 0.76s cubic-bezier(0.22, 0.88, 0.36, 1) infinite;
+}
+
+.animate-dice-land-lava-2d {
+  animation: diceLandLava2D 0.48s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-dice-roll-electro-2d {
+  animation: diceRollElectro2D 0.74s cubic-bezier(0.2, 0.86, 0.36, 1) infinite;
+}
+
+.animate-dice-land-electro-2d {
+  animation: diceLandElectro2D 0.44s cubic-bezier(0.22, 1.4, 0.48, 1) forwards;
+}
+
+.animate-dice-roll-tesseract-2d {
+  animation: diceRollTesseract2D 0.76s cubic-bezier(0.25, 0.9, 0.35, 1) infinite;
+}
+
+.animate-dice-land-tesseract-2d {
+  animation: diceLandTesseract2D 0.5s cubic-bezier(0.28, 1.48, 0.54, 1) forwards;
+}
+
+.animate-dice-roll-cosmo-2d {
+  animation: diceRollCosmo2D 0.78s cubic-bezier(0.32, 0.64, 0.45, 1) infinite;
+}
+
+.animate-dice-land-cosmo-2d {
+  animation: diceLandCosmo2D 0.52s cubic-bezier(0.28, 1.42, 0.56, 1) forwards;
+}
+
+/* Fallback shared classes preserved for backward compatibility */
+.animate-dice-roll-premium-2d {
+  animation: diceRollLava2D 0.76s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.animate-dice-land-2d {
+  animation: diceLandLava2D 0.46s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ============================================================================
+   VOIDNOD PREMIUM DICE SKINS: DISTINCT 3D PULSATING IDLE ANIMATIONS & AURAS
+   1. Lava Cube: Heavy Volcanic Magma Heartbeat Pulse & Thermal Breathing
+   2. Electro Cube: High-Voltage Capacitor Double-Surge & Electromagnetic Levitation
+   3. Tesseract Cube: 4D Dimensional Phase Expansion & Inner Hypercube Precession
+   4. Cosmo Cube: Zero-Gravity Celestial Orbit Float & Supernova Nebula Pulse
+   ============================================================================ */
+
+/* 1. LAVA CUBE IDLE â€” Volcanic Magma Heartbeat Pulse (Warm Heavy Expansion & Glow) */
+@keyframes diceIdleLava {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+  28% {
+    transform: translate3d(0px, -2.5px, 4px) rotateX(-20deg) rotateY(25deg) rotateZ(1deg) scale3d(1.065, 1.065, 1.065);
+  }
+  46% {
+    transform: translate3d(0px, -1px, 1.5px) rotateX(-17deg) rotateY(22deg) rotateZ(-0.5deg) scale3d(0.99, 0.99, 0.99);
+  }
+  70% {
+    transform: translate3d(0px, -2px, 3px) rotateX(-19deg) rotateY(24deg) rotateZ(0.8deg) scale3d(1.045, 1.045, 1.045);
+  }
+}
+
+@keyframes lavaAuraPulse {
+  0%, 100% {
+    transform: scale(0.88);
+    opacity: 0.42;
+  }
+  28% {
+    transform: scale(1.18);
+    opacity: 0.92;
+  }
+  46% {
+    transform: scale(0.95);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 0.82;
+  }
+}
+
+@keyframes lavaCrackPulse {
+  0%, 100% {
+    opacity: 0.68;
+    filter: brightness(0.92);
+  }
+  28% {
+    opacity: 1;
+    filter: brightness(1.35);
+  }
+  46% {
+    opacity: 0.78;
+    filter: brightness(1.0);
+  }
+  70% {
+    opacity: 0.98;
+    filter: brightness(1.25);
+  }
+}
+
+@keyframes emberRise {
+  0% {
+    transform: translateY(6px) scale(0.65);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-18px) scale(1.25);
+    opacity: 0;
+  }
+}
+
+/* 2. ELECTRO CUBE IDLE â€” High-Voltage Capacitor Surge & Magnetic Gyro Hover */
+@keyframes diceIdleElectro {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(-16deg) rotateY(21deg) rotateZ(-1deg) scale3d(1, 1, 1);
+  }
+  22% {
+    transform: translate3d(-0.8px, -3px, 4.5px) rotateX(-21deg) rotateY(27deg) rotateZ(2deg) scale3d(1.07, 1.07, 1.07);
+  }
+  36% {
+    transform: translate3d(0.6px, -2px, 2.5px) rotateX(-18deg) rotateY(23deg) rotateZ(-1.5deg) scale3d(1.01, 1.01, 1.01);
+  }
+  52% {
+    transform: translate3d(-0.5px, -3.4px, 5px) rotateX(-22deg) rotateY(28deg) rotateZ(2.2deg) scale3d(1.075, 1.075, 1.075);
+  }
+  78% {
+    transform: translate3d(0px, -1.2px, 1.5px) rotateX(-17deg) rotateY(19deg) rotateZ(0deg) scale3d(0.99, 0.99, 0.99);
+  }
+}
+
+@keyframes electroAuraPulse {
+  0%, 100% {
+    transform: scale(0.86);
+    opacity: 0.38;
+  }
+  22%, 52% {
+    transform: scale(1.22);
+    opacity: 0.95;
+  }
+  36% {
+    transform: scale(0.96);
+    opacity: 0.52;
+  }
+}
+
+@keyframes electroChannelPulse {
+  0%, 100% {
+    opacity: 0.65;
+    filter: brightness(0.95);
+  }
+  22%, 52% {
+    opacity: 1;
+    filter: brightness(1.4);
+  }
+  36% {
+    opacity: 0.78;
+    filter: brightness(1.05);
+  }
+}
+
+@keyframes electroArcFlicker {
+  0%, 100% {
+    opacity: 0.22;
+    transform: scale(0.96);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  42% {
+    opacity: 0.18;
+    transform: scale(0.98);
+  }
+  55% {
+    opacity: 0.96;
+    transform: scale(1.08);
+  }
+  80% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+
+/* 3. TESSERACT CUBE IDLE â€” 4D Dimensional Phase-Breathing & Inner Hypercube Precession */
+@keyframes diceIdleTesseract {
+  0%, 100% {
+    transform: translate3d(0px, -0.5px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(0.98, 0.98, 0.98);
+  }
+  35% {
+    transform: translate3d(-1px, -3.6px, 5px) rotateX(-23deg) rotateY(29deg) rotateZ(2.5deg) scale3d(1.075, 1.075, 1.075);
+  }
+  68% {
+    transform: translate3d(1px, -2.2px, 3px) rotateX(-14deg) rotateY(15deg) rotateZ(-2.5deg) scale3d(1.03, 1.03, 1.03);
+  }
+}
+
+@keyframes tesseractAuraPulse {
+  0%, 100% {
+    transform: rotate(0deg) scale(0.86);
+    opacity: 0.42;
+  }
+  50% {
+    transform: rotate(45deg) scale(1.22);
+    opacity: 0.94;
+  }
+}
+
+@keyframes tesseractInnerHypercubeIdle {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotateX(15deg) rotateY(-20deg) rotateZ(0deg) scale3d(0.54, 0.54, 0.54);
+  }
+  50% {
+    transform: translate3d(0px, 0px, 2px) rotateX(-35deg) rotateY(45deg) rotateZ(-25deg) scale3d(0.68, 0.68, 0.68);
+  }
+}
+
+.animate-tesseract-inner-3d-idle {
+  animation: tesseractInnerHypercubeIdle 3.2s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+@keyframes tesseractInnerShift {
+  0%, 100% {
+    transform: rotate(0deg) scale(0.92);
+    opacity: 0.78;
+  }
+  50% {
+    transform: rotate(12deg) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes tesseractOuterShift {
+  0%, 100% {
+    transform: rotate(0deg) scale(1.04);
+    opacity: 0.82;
+  }
+  50% {
+    transform: rotate(-10deg) scale(0.94);
+    opacity: 1;
+  }
+}
+
+/* 4. COSMO CUBE IDLE â€” Zero-Gravity Celestial Float & Supernova Nebula Pulse */
+@keyframes diceIdleCosmo {
+  0%, 100% {
+    transform: translate3d(0px, -0.5px, 0px) rotateX(-16deg) rotateY(20deg) rotateZ(-1deg) scale3d(0.99, 0.99, 0.99);
+  }
+  33% {
+    transform: translate3d(1.2px, -4px, 5.5px) rotateX(-22deg) rotateY(28deg) rotateZ(2.2deg) scale3d(1.07, 1.07, 1.07);
+  }
+  66% {
+    transform: translate3d(-1.2px, -2.5px, 3px) rotateX(-13deg) rotateY(15deg) rotateZ(-2deg) scale3d(1.035, 1.035, 1.035);
+  }
+}
+
+@keyframes cosmoAuraPulse {
+  0%, 100% {
+    transform: scale(0.88);
+    opacity: 0.44;
+  }
+  50% {
+    transform: scale(1.24);
+    opacity: 0.94;
+  }
+}
+
+@keyframes cosmoStarTwinkle {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(0.88);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.22);
+  }
+}
+
+@keyframes pipPulseSubtle {
+  0%, 100% {
+    opacity: 0.82;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes diceImpactRipple {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1.58);
+    opacity: 0;
+  }
+}
+
+.animate-dice-idle-lava {
+  animation: diceIdleLava 2.6s ease-in-out infinite;
+}
+
+.animate-lava-aura-pulse {
+  animation: lavaAuraPulse 2.6s ease-in-out infinite;
+}
+
+.animate-lava-crack {
+  animation: lavaCrackPulse 2.6s ease-in-out infinite;
+}
+
+.animate-ember-rise {
+  animation: emberRise 1.6s ease-out infinite;
+}
+
+.animate-dice-idle-electro {
+  animation: diceIdleElectro 2.4s ease-in-out infinite;
+}
+
+.animate-electro-aura-pulse {
+  animation: electroAuraPulse 2.4s ease-in-out infinite;
+}
+
+.animate-electro-channel-pulse {
+  animation: electroChannelPulse 2.4s ease-in-out infinite;
+}
+
+.animate-electro-arc {
+  animation: electroArcFlicker 1.5s ease-in-out infinite;
+}
+
+.animate-dice-idle-tesseract {
+  animation: diceIdleTesseract 3.0s ease-in-out infinite;
+}
+
+.animate-tesseract-aura-pulse {
+  animation: tesseractAuraPulse 3.0s ease-in-out infinite;
+}
+
+.animate-tesseract-inner {
+  animation: tesseractInnerShift 3.0s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-tesseract-outer {
+  animation: tesseractOuterShift 3.0s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-dice-idle-cosmo {
+  animation: diceIdleCosmo 3.2s ease-in-out infinite;
+}
+
+.animate-cosmo-aura-pulse {
+  animation: cosmoAuraPulse 3.2s ease-in-out infinite;
+}
+
+.animate-cosmo-twinkle {
+  animation: cosmoStarTwinkle 2.0s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-pip-pulse-subtle {
+  animation: pipPulseSubtle 2.0s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-dice-impact-ripple {
+  animation: diceImpactRipple 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-dice-roll-2d,
+  .animate-dice-roll-ivory,
+  .animate-dice-roll-bullion,
+  .animate-dice-roll-cyber,
+  .animate-dice-roll-jade,
+  .animate-dice-roll-ruby,
+  .animate-dice-roll-astral,
+  .animate-dice-roll-premium-2d,
+  .animate-dice-land-2d,
+  .animate-dice-land-classic-3d,
+  .animate-dice-roll-lava-2d,
+  .animate-dice-land-lava-2d,
+  .animate-dice-roll-electro-2d,
+  .animate-dice-land-electro-2d,
+  .animate-dice-roll-tesseract-2d,
+  .animate-dice-land-tesseract-2d,
+  .animate-dice-roll-cosmo-2d,
+  .animate-dice-land-cosmo-2d,
+  .animate-dice-idle-classic-3d,
+  .animate-dice-idle-ivory,
+  .animate-dice-idle-bullion,
+  .animate-dice-idle-cyber,
+  .animate-dice-idle-jade,
+  .animate-dice-idle-ruby,
+  .animate-dice-idle-astral,
+  .animate-dice-idle-lava,
+  .animate-dice-idle-electro,
+  .animate-dice-idle-tesseract,
+  .animate-dice-idle-cosmo,
+  .animate-lava-aura-pulse,
+  .animate-electro-aura-pulse,
+  .animate-tesseract-aura-pulse,
+  .animate-cosmo-aura-pulse,
+  .animate-tesseract-inner-3d-idle,
+  .animate-dice-face-sheen,
+  .animate-dice-idle-sheen,
+  .animate-dice-shadow-bounce,
+  .animate-dice-shadow-breathe,
+  .animate-lava-crack,
+  .animate-ember-rise,
+  .animate-electro-channel-pulse,
+  .animate-electro-arc,
+  .animate-tesseract-inner,
+  .animate-tesseract-outer,
+  .animate-cosmo-twinkle,
+  .animate-pip-pulse-subtle {
+    animation: none !important;
+  }
+}

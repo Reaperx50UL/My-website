@@ -1,0 +1,15 @@
+{
+  "skinId": "lava_cube",
+  "name": "Lava Cube Audio Identity",
+  "audioFolder": "/audio/ludo/lava/",
+  "rollSynthesis": {
+    "baseLayer": "volcanic_basalt_grind",
+    "crackleLayer": "ember_fire_crackle",
+    "frequenciesHz": [110, 145, 95, 160, 120]
+  },
+  "landSynthesis": {
+    "impact": "heavy_magma_slam",
+    "fundamentalHz": 82,
+    "subBassHz": 54
+  }
+}

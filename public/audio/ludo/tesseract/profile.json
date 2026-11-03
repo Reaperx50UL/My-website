@@ -1,0 +1,14 @@
+{
+  "skinId": "tesseract_cube",
+  "name": "Tesseract Cube Audio Identity",
+  "audioFolder": "/audio/ludo/tesseract/",
+  "rollSynthesis": {
+    "baseLayer": "spatial_dimensional_whoosh",
+    "harmonicLayer": "digital_hyperplane_shift",
+    "frequenciesHz": [330, 440, 554.37, 659.25, 880]
+  },
+  "landSynthesis": {
+    "impact": "dimensional_resonance_lock",
+    "chordHz": [440, 659.25, 987.77]
+  }
+}
