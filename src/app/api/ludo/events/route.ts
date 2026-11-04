@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
         type: 'WELCOME',
         clientId,
         onlineCount: multiplayerStore.getOnlineCount(),
+        backend: multiplayerStore.getBackendStatus(),
       };
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(welcomeMsg)}\n\n`));
 

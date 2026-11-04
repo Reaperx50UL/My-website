@@ -91,7 +91,11 @@ export type ServerMessage =
       reachesHome: boolean;
       gameState: GameState;
     }
-  | { type: 'CONNECTION_STATUS'; status: 'connected' | 'connecting' | 'offline' }
+  | {
+      type: 'CONNECTION_STATUS';
+      status: 'connected' | 'connecting' | 'offline';
+      backend?: BackendStatusInfo;
+    }
   | { type: 'ERROR'; message: string };
 
 type Listener = (msg: ServerMessage) => void;
@@ -152,7 +156,11 @@ class MultiplayerClient {
     if (this.connectionStatus !== status) {
       this.connectionStatus = status;
       this.connected = status === 'connected';
-      this.notifyListeners({ type: 'CONNECTION_STATUS', status });
+      this.notifyListeners({
+        type: 'CONNECTION_STATUS',
+        status,
+        backend: this.backendStatus || undefined,
+      });
     }
   }
 
@@ -328,6 +336,7 @@ class MultiplayerClient {
           clientId: this.clientId,
           roomCode: this.currentRoomCode,
           version: String(this.lastVersion),
+          targetPlayers: String(this.currentMatchmakingCount),
         });
 
         const res = await fetch(`/api/ludo/sync?${query.toString()}`, {
@@ -351,9 +360,26 @@ class MultiplayerClient {
 
         const data = await res.json();
         this.setConnectionStatus('connected');
-        if (data.backend) this.backendStatus = data.backend;
+        if (data.backend) {
+          const backendChanged =
+            !this.backendStatus ||
+            this.backendStatus.configured !== data.backend.configured ||
+            this.backendStatus.type !== data.backend.type;
+          this.backendStatus = data.backend;
+          if (backendChanged) {
+            this.notifyListeners({
+              type: 'CONNECTION_STATUS',
+              status: this.connectionStatus,
+              backend: this.backendStatus || undefined,
+            });
+          }
+        }
 
         if (data.unchanged) {
+          return;
+        }
+
+        if (data.status === 'idle') {
           return;
         }
 

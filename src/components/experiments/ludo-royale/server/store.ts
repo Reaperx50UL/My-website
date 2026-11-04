@@ -154,32 +154,47 @@ class MultiplayerStore {
   private hasLoggedWarning: boolean = false;
 
   constructor() {
+    this.refreshCredentials();
+  }
+
+  public refreshCredentials(): void {
     if (typeof process !== 'undefined' && process.env) {
-      this.upstashUrl = process.env.UPSTASH_REDIS_REST_URL || null;
-      this.upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN || null;
+      let url =
+        process.env.UPSTASH_REDIS_REST_URL ||
+        process.env.KV_REST_API_URL ||
+        null;
+      let token =
+        process.env.UPSTASH_REDIS_REST_TOKEN ||
+        process.env.KV_REST_API_TOKEN ||
+        null;
+      if (url) {
+        url = url.trim();
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = `https://${url}`;
+        }
+      }
+      this.upstashUrl = url;
+      this.upstashToken = token ? token.trim() : null;
     }
   }
 
   public isUpstashConfigured(): boolean {
+    this.refreshCredentials();
     return Boolean(this.upstashUrl && this.upstashToken);
   }
 
-  public getBackendStatus(): {
-    type: 'upstash' | 'memory';
-    configured: boolean;
-    description: string;
-  } {
+  public getBackendStatus(): BackendStatusInfo {
     if (this.isUpstashConfigured()) {
       return {
         type: 'upstash',
         configured: true,
-        description: 'Durable Upstash Redis REST Backend (Multi-instance Vercel Sync Active)',
+        description: 'Durable Upstash Redis (Multi-Device Cloud Sync Active)',
       };
     }
     return {
       type: 'memory',
       configured: false,
-      description: 'Single-Instance Memory Backend (Local Dev & Testing)',
+      description: 'Single-Instance Server Mode (Add UPSTASH_REDIS_REST_URL in Vercel for multi-device sync)',
     };
   }
 
@@ -196,7 +211,7 @@ class MultiplayerStore {
         cache: 'no-store',
       });
       if (!res.ok) {
-        console.error(`Upstash Redis error: ${res.statusText}`);
+        console.error(`Upstash Redis error: ${res.statusText} (${res.status})`);
         return null;
       }
       const data = await res.json();
@@ -267,6 +282,25 @@ class MultiplayerStore {
   }
 
   // Matchmaking Queue
+  public async getTicket(clientId: string): Promise<MatchmakingTicket | null> {
+    const now = Date.now();
+    if (this.isUpstashConfigured()) {
+      const raw = await this.executeRedisCommand(['GET', `ludo:ticket:${clientId}`]);
+      if (raw) {
+        try {
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (now - parsed.timestamp <= 120000) {
+            return parsed;
+          }
+        } catch {}
+      }
+    }
+    const memTicket = memoryMatchmakingQueue.find(
+      (t) => t.id === clientId && now - t.timestamp <= 120000
+    );
+    return memTicket || null;
+  }
+
   public async enqueueMatchmaking(ticket: MatchmakingTicket): Promise<number> {
     // Purge expired tickets (> 2 min) and duplicate client tickets
     const now = Date.now();
@@ -279,8 +313,13 @@ class MultiplayerStore {
     memoryMatchmakingQueue.push(ticket);
 
     if (this.isUpstashConfigured()) {
-      // Clean up matched record if any
+      // Remove from all queues first to avoid crosstalk
+      await this.executeRedisCommand(['SREM', 'ludo:queue:2', ticket.id]);
+      await this.executeRedisCommand(['SREM', 'ludo:queue:3', ticket.id]);
+      await this.executeRedisCommand(['SREM', 'ludo:queue:4', ticket.id]);
       await this.executeRedisCommand(['DEL', `ludo:matched:${ticket.id}`]);
+
+      // Set ticket with 120s TTL
       await this.executeRedisCommand([
         'SET',
         `ludo:ticket:${ticket.id}`,
@@ -288,27 +327,83 @@ class MultiplayerStore {
         'EX',
         120, // 2 minutes TTL
       ]);
+      // Add to target queue set
+      await this.executeRedisCommand([
+        'SADD',
+        `ludo:queue:${ticket.targetPlayers}`,
+        ticket.id,
+      ]);
     }
 
-    return memoryMatchmakingQueue.length;
+    const bracket = await this.getMatchmakingBracket(ticket.targetPlayers);
+    return bracket.length;
   }
 
   public async getMatchmakingBracket(
     targetPlayers: MatchmakingPlayerCount
   ): Promise<MatchmakingTicket[]> {
     const now = Date.now();
-    return memoryMatchmakingQueue.filter(
-      (t) => t.targetPlayers === targetPlayers && now - t.timestamp <= 120000
-    );
+    if (this.isUpstashConfigured()) {
+      const membersRaw = await this.executeRedisCommand([
+        'SMEMBERS',
+        `ludo:queue:${targetPlayers}`,
+      ]);
+      const clientIds: string[] = Array.isArray(membersRaw) ? membersRaw : [];
+      if (clientIds.length === 0) {
+        return [];
+      }
+
+      const ticketKeys = clientIds.map((id) => `ludo:ticket:${id}`);
+      const ticketsRaw = await this.executeRedisCommand(['MGET', ...ticketKeys]);
+      const validTickets: MatchmakingTicket[] = [];
+
+      if (Array.isArray(ticketsRaw)) {
+        for (let i = 0; i < clientIds.length; i++) {
+          const raw = ticketsRaw[i];
+          const cid = clientIds[i];
+          if (!raw) {
+            // Expired in Redis, remove from queue set
+            await this.executeRedisCommand(['SREM', `ludo:queue:${targetPlayers}`, cid]);
+          } else {
+            try {
+              const parsed: MatchmakingTicket =
+                typeof raw === 'string' ? JSON.parse(raw) : raw;
+              if (
+                now - parsed.timestamp <= 120000 &&
+                parsed.targetPlayers === targetPlayers
+              ) {
+                validTickets.push(parsed);
+              } else {
+                await this.executeRedisCommand([
+                  'SREM',
+                  `ludo:queue:${targetPlayers}`,
+                  cid,
+                ]);
+              }
+            } catch {
+              await this.executeRedisCommand([
+                'SREM',
+                `ludo:queue:${targetPlayers}`,
+                cid,
+              ]);
+            }
+          }
+        }
+      }
+
+      validTickets.sort((a, b) => a.timestamp - b.timestamp);
+      return validTickets;
+    }
+
+    return memoryMatchmakingQueue
+      .filter((t) => t.targetPlayers === targetPlayers && now - t.timestamp <= 120000)
+      .sort((a, b) => a.timestamp - b.timestamp);
   }
 
   public async dequeueMatchmakingGroup(
     targetPlayers: MatchmakingPlayerCount
   ): Promise<MatchmakingTicket[] | null> {
-    const now = Date.now();
-    const valid = memoryMatchmakingQueue.filter(
-      (t) => t.targetPlayers === targetPlayers && now - t.timestamp <= 120000
-    );
+    const valid = await this.getMatchmakingBracket(targetPlayers);
 
     // Group distinct player IDs
     const distinct: MatchmakingTicket[] = [];
@@ -322,14 +417,21 @@ class MultiplayerStore {
     }
 
     if (distinct.length >= targetPlayers) {
-      for (const t of distinct) {
-        const idx = memoryMatchmakingQueue.indexOf(t);
+      const selected = distinct.slice(0, targetPlayers);
+      for (const t of selected) {
+        const idx = memoryMatchmakingQueue.findIndex((item) => item.id === t.id);
         if (idx !== -1) memoryMatchmakingQueue.splice(idx, 1);
+
         if (this.isUpstashConfigured()) {
+          await this.executeRedisCommand([
+            'SREM',
+            `ludo:queue:${targetPlayers}`,
+            t.id,
+          ]);
           await this.executeRedisCommand(['DEL', `ludo:ticket:${t.id}`]);
         }
       }
-      return distinct;
+      return selected;
     }
     return null;
   }
@@ -350,6 +452,9 @@ class MultiplayerStore {
     memoryMatchedClients.delete(clientId);
 
     if (this.isUpstashConfigured()) {
+      await this.executeRedisCommand(['SREM', 'ludo:queue:2', clientId]);
+      await this.executeRedisCommand(['SREM', 'ludo:queue:3', clientId]);
+      await this.executeRedisCommand(['SREM', 'ludo:queue:4', clientId]);
       await this.executeRedisCommand(['DEL', `ludo:ticket:${clientId}`]);
       await this.executeRedisCommand(['DEL', `ludo:matched:${clientId}`]);
     }

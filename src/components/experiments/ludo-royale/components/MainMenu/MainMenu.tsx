@@ -13,6 +13,7 @@ import React, { useState } from 'react';
 import { AVATAR_OPTIONS, COLOR_META } from '../../game/constants';
 import { GameState, PlayerStats, UserProfile } from '../../game/gameTypes';
 import { calculatePlayerLevel } from '../../game/progression';
+import { BackendStatusInfo } from '../../services/multiplayer';
 
 interface MainMenuProps {
   profile: UserProfile;
@@ -26,6 +27,8 @@ interface MainMenuProps {
   onOpenRules: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
+  connectionStatus?: 'connected' | 'connecting' | 'offline';
+  backendStatus?: BackendStatusInfo | null;
 }
 
 export const MainMenu: React.FC<MainMenuProps> = ({
@@ -40,6 +43,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   onOpenRules,
   onOpenStats,
   onOpenSettings,
+  connectionStatus = 'connected',
+  backendStatus,
 }) => {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const avatarIcon =
@@ -87,6 +92,37 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             </div>
           </div>
         </button>
+
+        <div
+          data-testid="mainmenu-server-indicator"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-mono-tabular shrink-0"
+          title={backendStatus?.description || 'Server connection status'}
+        >
+          <span className="relative flex h-2 w-2">
+            {connectionStatus === 'connected' ? (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </>
+            ) : connectionStatus === 'connecting' ? (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+              </>
+            ) : (
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+            )}
+          </span>
+          <span className="text-slate-300 font-medium hidden sm:inline">
+            {connectionStatus === 'connected'
+              ? backendStatus?.configured
+                ? 'Server: Cloud Synced'
+                : 'Server: Online'
+              : connectionStatus === 'connecting'
+              ? 'Connecting...'
+              : 'Server: Offline'}
+          </span>
+        </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           <button

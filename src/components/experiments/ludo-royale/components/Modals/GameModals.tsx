@@ -56,6 +56,7 @@ import {
   getDefaultSeatName,
 } from '../../game/rules';
 import {
+  BackendStatusInfo,
   OnlineRoomInfo,
   QueuedPlayerSummary,
 } from '../../services/multiplayer';
@@ -645,6 +646,8 @@ interface OnlineModalProps {
   onToggleReady: () => void;
   onStartOnlineMatch: () => void;
   onClose: () => void;
+  connectionStatus?: 'connected' | 'connecting' | 'offline';
+  backendStatus?: BackendStatusInfo | null;
 }
 
 const MATCHMAKING_MODE_CARDS: {
@@ -714,6 +717,8 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
   onToggleReady,
   onStartOnlineMatch,
   onClose,
+  connectionStatus = 'connected',
+  backendStatus,
 }) => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [copied, setCopied] = useState(false);
@@ -782,6 +787,56 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
         </div>
 
         <div className="py-5 space-y-4">
+          {/* Live Server Connection Indicator */}
+          <div
+            data-testid="server-connection-indicator"
+            className="flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-2xl bg-slate-900/90 border border-slate-800"
+          >
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                {connectionStatus === 'connected' ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </>
+                ) : connectionStatus === 'connecting' ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                  </>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" />
+                )}
+              </span>
+              <span className="text-xs font-semibold text-slate-200">
+                {connectionStatus === 'connected'
+                  ? 'Connected to Server'
+                  : connectionStatus === 'connecting'
+                  ? 'Connecting to Server...'
+                  : 'Server Offline'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px] font-mono-tabular">
+              {backendStatus?.configured ? (
+                <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  Cloud Redis Sync Active
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  In-Memory Server Mode
+                </span>
+              )}
+            </div>
+          </div>
+
+          {backendStatus && !backendStatus.configured && mode === 'matchmaking' && (
+            <div className="px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200/90 leading-relaxed">
+              ℹ️ <strong>Multi-Device Notice:</strong> Server is currently operating in in-memory mode. For multiple devices across separate Vercel serverless instances to pair together, add <code className="text-amber-100 bg-amber-950/70 px-1 py-0.5 rounded border border-amber-500/30">UPSTASH_REDIS_REST_URL</code> and <code className="text-amber-100 bg-amber-950/70 px-1 py-0.5 rounded border border-amber-500/30">UPSTASH_REDIS_REST_TOKEN</code> to your Vercel Project Environment Variables.
+            </div>
+          )}
           {/* Status / Termination Notice Banner */}
           {statusNotice && (
             <div

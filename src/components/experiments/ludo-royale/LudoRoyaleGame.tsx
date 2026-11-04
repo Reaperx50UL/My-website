@@ -48,6 +48,7 @@ import {
   UserProfile,
 } from './game/gameTypes';
 import {
+  BackendStatusInfo,
   multiplayerClient,
   OnlineRoomInfo,
   QueuedPlayerSummary,
@@ -177,6 +178,9 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'connecting' | 'offline'
   >(() => multiplayerClient.getConnectionStatus());
+  const [backendStatus, setBackendStatus] = useState<BackendStatusInfo | null>(() =>
+    multiplayerClient.getBackendStatus()
+  );
 
   const recordedMatchIdRef = useRef<string | null>(null);
   const bannerTimerRef = useRef<number | null>(null);
@@ -335,6 +339,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
     const unsubscribe = multiplayerClient.subscribe((msg: ServerMessage) => {
       if (msg.type === 'CONNECTION_STATUS') {
         setConnectionStatus(msg.status);
+        if (msg.backend) setBackendStatus(msg.backend);
       } else if (msg.type === 'ROOM_UPDATED') {
         setOnlineRoom(msg.room);
         setAssignedColor(msg.assignedColor);
@@ -1021,6 +1026,8 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           profile={profile}
           stats={stats}
           savedGame={savedGame}
+          connectionStatus={connectionStatus}
+          backendStatus={backendStatus}
           onQuickPlay={handleQuickPlay}
           onResumeGame={() => {
             if (savedGame) {
@@ -1285,6 +1292,8 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           errorMessage={onlineError}
           statusNotice={onlineStatusNotice}
           onDismissNotice={() => setOnlineStatusNotice(null)}
+          connectionStatus={connectionStatus}
+          backendStatus={backendStatus}
           matchmakingStatus={matchmakingStatus}
           selectedPlayerCount={selectedMatchmakingCount}
           matchmakingFoundPlayers={matchmakingFoundPlayers}
@@ -1297,7 +1306,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             setMatchmakingFoundPlayers(1);
             setQueuedPlayers([
               {
-                id: profile.nickname,
+                id: multiplayerClient.getClientId() || profile.nickname,
                 name: profile.nickname,
                 avatar: profile.avatar,
               },

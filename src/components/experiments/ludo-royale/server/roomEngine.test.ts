@@ -204,3 +204,53 @@ test('9. Leaving Room: removes player from lobby and handles host transition or 
   const roomAfterHostLeave = await multiplayerStore.getRoom(code);
   assert.equal(roomAfterHostLeave, null);
 });
+
+test('10. 3-Player & 4-Player Matchmaking Brackets: queue independently and match exact player counts', async () => {
+  const p3_1 = `p3-1-${Date.now()}`;
+  const p3_2 = `p3-2-${Date.now()}`;
+  const p3_3 = `p3-3-${Date.now()}`;
+
+  // 3-Player queue: 1st player queues
+  const res1 = await handleJoinMatchmaking(p3_1, 'Trio1', 'crown', 3);
+  assert.equal(res1.status, 'searching');
+  assert.equal(res1.targetPlayers, 3);
+
+  // Verify getTicket works
+  const ticket1 = await multiplayerStore.getTicket(p3_1);
+  assert.ok(ticket1);
+  assert.equal(ticket1.targetPlayers, 3);
+
+  // 2nd player queues
+  const res2 = await handleJoinMatchmaking(p3_2, 'Trio2', 'shield', 3);
+  assert.equal(res2.status, 'searching');
+  assert.equal(res2.foundPlayers, 2);
+
+  // 3rd player queues -> match triggered!
+  const res3 = await handleJoinMatchmaking(p3_3, 'Trio3', 'knight', 3);
+  assert.equal(res3.status, 'matched');
+  assert.ok(res3.room);
+  assert.equal(res3.room.players.length, 3);
+  assert.equal(res3.room.targetPlayers, 3);
+
+  // All 3 players now have match records
+  const m1 = await multiplayerStore.getMatchForClient(p3_1);
+  const m2 = await multiplayerStore.getMatchForClient(p3_2);
+  const m3 = await multiplayerStore.getMatchForClient(p3_3);
+  assert.ok(m1 && m2 && m3);
+  assert.equal(m1.roomCode, res3.room.roomCode);
+  assert.equal(m2.roomCode, res3.room.roomCode);
+  assert.equal(m3.roomCode, res3.room.roomCode);
+});
+
+test('11. Ticket lifecycle: getTicket returns null after match or cancellation', async () => {
+  const pId = `ticket-test-${Date.now()}`;
+  assert.equal(await multiplayerStore.getTicket(pId), null);
+
+  await handleJoinMatchmaking(pId, 'TicketUser', 'crown', 4);
+  const activeTicket = await multiplayerStore.getTicket(pId);
+  assert.ok(activeTicket);
+  assert.equal(activeTicket.targetPlayers, 4);
+
+  await handleLeaveMatchmaking(pId);
+  assert.equal(await multiplayerStore.getTicket(pId), null);
+});

@@ -37,7 +37,7 @@ import {
   ServerRoom,
 } from './store';
 
-function generateRoomCode(): string {
+export function generateRoomCode(): string {
   // Use unambiguous uppercase characters (omits 0, O, 1, I)
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
