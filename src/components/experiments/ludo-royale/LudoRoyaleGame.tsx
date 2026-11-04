@@ -21,6 +21,7 @@ import {
   VictoryModal,
 } from './components/Modals/GameModals';
 import { chooseAIMove } from './game/aiStrategy';
+import { getStepPathCoords } from './game/boardLayout';
 import {
   BOARD_THEME_OPTIONS,
   DICE_STYLE_OPTIONS,
@@ -167,12 +168,21 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const localRollStartTimeRef = useRef<number | null>(null);
   const rollTimerRef = useRef<number | null>(null);
   const lastAnimatedEventIdRef = useRef<string | null>(null);
+  const lastCaptureSoundTimeRef = useRef<number>(0);
+  const lastHomeSoundTimeRef = useRef<number>(0);
+  const lastProcessedCaptureEventIdRef = useRef<string | null>(null);
+  const stepIntervalRef = useRef<number | null>(null);
+  const pendingGameStateRef = useRef<GameState | null>(null);
+  const animatingMoveRef = useRef<{ tokenId: string; coord: GridCoord } | null>(null);
 
-  // Clean up any pending roll animations on unmount
+  // Clean up any pending roll or step animations on unmount
   useEffect(() => {
     return () => {
       if (rollTimerRef.current) {
         window.clearTimeout(rollTimerRef.current);
+      }
+      if (stepIntervalRef.current) {
+        window.clearInterval(stepIntervalRef.current);
       }
     };
   }, []);
@@ -294,6 +304,95 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         }
       } else if (msg.type === 'DICE_ROLLED') {
         triggerOnlineDiceRollAnimation(msg.gameState, msg.diceValue);
+      } else if (msg.type === 'TOKEN_MOVED') {
+        const isCapture = msg.capturedIds && msg.capturedIds.length > 0;
+        const isHome = msg.reachesHome;
+        const now = Date.now();
+
+        const recentlyTriggeredCapture =
+          isCapture && now - lastCaptureSoundTimeRef.current < 1200;
+        const recentlyTriggeredHome =
+          isHome && now - lastHomeSoundTimeRef.current < 1200;
+
+        // If the local player's own move is currently stepping on screen
+        if (
+          animatingMoveRef.current !== null &&
+          animatingMoveRef.current.tokenId === msg.tokenId
+        ) {
+          pendingGameStateRef.current = msg.gameState;
+          return;
+        }
+
+        // Remote opponent or bot move
+        let tokenColor: PlayerColor = 'red';
+        let tokenIndex = 0;
+        const parts = msg.tokenId.split('-');
+        if (parts.length === 2) {
+          tokenColor = parts[0] as PlayerColor;
+          tokenIndex = Number(parts[1]) || 0;
+        }
+        const coords = getStepPathCoords(
+          tokenColor,
+          msg.fromSteps,
+          msg.toSteps,
+          tokenIndex
+        );
+
+        if (settings.reducedMotion || coords.length <= 1) {
+          if (isCapture && !recentlyTriggeredCapture) {
+            soundManager.playCapture();
+            soundManager.triggerHaptic(30);
+            lastCaptureSoundTimeRef.current = now;
+          } else if (isHome && !recentlyTriggeredHome) {
+            soundManager.playReachHome();
+            soundManager.triggerHaptic(25);
+            lastHomeSoundTimeRef.current = now;
+          }
+          setGameState(msg.gameState);
+          return;
+        }
+
+        // Animate remote/bot token walking
+        if (stepIntervalRef.current) {
+          window.clearInterval(stepIntervalRef.current);
+          stepIntervalRef.current = null;
+        }
+
+        let stepIdx = 0;
+        const initialAnim = { tokenId: msg.tokenId, coord: coords[0] };
+        animatingMoveRef.current = initialAnim;
+        setAnimatingMove(initialAnim);
+        soundManager.playStep(0);
+        soundManager.triggerHaptic(10);
+
+        stepIntervalRef.current = window.setInterval(() => {
+          stepIdx += 1;
+          if (stepIdx < coords.length) {
+            const nextAnim = { tokenId: msg.tokenId, coord: coords[stepIdx] };
+            animatingMoveRef.current = nextAnim;
+            setAnimatingMove(nextAnim);
+            soundManager.playStep(stepIdx);
+          } else {
+            if (stepIntervalRef.current) {
+              window.clearInterval(stepIntervalRef.current);
+              stepIntervalRef.current = null;
+            }
+            animatingMoveRef.current = null;
+            setAnimatingMove(null);
+
+            if (isCapture && !recentlyTriggeredCapture) {
+              soundManager.playCapture();
+              soundManager.triggerHaptic(30);
+              lastCaptureSoundTimeRef.current = Date.now();
+            } else if (isHome && !recentlyTriggeredHome) {
+              soundManager.playReachHome();
+              soundManager.triggerHaptic(25);
+              lastHomeSoundTimeRef.current = Date.now();
+            }
+
+            setGameState(msg.gameState);
+          }
+        }, 115);
       } else if (msg.type === 'GAME_STATE_SYNC') {
         const latestEvent = msg.gameState.eventLog?.[0];
         const isNewRoll =
@@ -303,11 +402,41 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             latestEvent.type === 'forfeit_sixes') &&
           latestEvent.id !== lastAnimatedEventIdRef.current;
 
+        const isCaptureEvent =
+          latestEvent &&
+          latestEvent.type === 'capture' &&
+          latestEvent.id !== lastProcessedCaptureEventIdRef.current;
+
+        const isHomeEvent =
+          latestEvent &&
+          latestEvent.type === 'home' &&
+          latestEvent.id !== lastProcessedCaptureEventIdRef.current;
+
+        const now = Date.now();
+
+        if (isCaptureEvent) {
+          lastProcessedCaptureEventIdRef.current = latestEvent.id;
+          if (now - lastCaptureSoundTimeRef.current > 1200) {
+            soundManager.playCapture();
+            soundManager.triggerHaptic(30);
+            lastCaptureSoundTimeRef.current = now;
+          }
+        } else if (isHomeEvent) {
+          lastProcessedCaptureEventIdRef.current = latestEvent.id;
+          if (now - lastHomeSoundTimeRef.current > 1200) {
+            soundManager.playReachHome();
+            soundManager.triggerHaptic(25);
+            lastHomeSoundTimeRef.current = now;
+          }
+        }
+
         if (isNewRoll && msg.gameState.diceValue !== null) {
           triggerOnlineDiceRollAnimation(
             msg.gameState,
             msg.gameState.diceValue
           );
+        } else if (animatingMoveRef.current) {
+          pendingGameStateRef.current = msg.gameState;
         } else if (!rollTimerRef.current) {
           setGameState(msg.gameState);
         }
@@ -339,7 +468,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       }
     });
     return unsubscribe;
-  }, [triggerOnlineDiceRollAnimation]);
+  }, [triggerOnlineDiceRollAnimation, settings.reducedMotion]);
 
   // Start a quick 4-player match vs AI immediately
   const handleQuickPlay = useCallback(() => {
@@ -423,9 +552,68 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         (gameState.mode === 'friends' || gameState.mode === 'matchmaking') &&
         gameState.roomCode
       ) {
+        multiplayerClient.requestMoveToken(gameState.roomCode, tokenId);
+
+        const coords = move.pathCoords;
+        if (settings.reducedMotion || coords.length <= 1) {
+          if (move.capturesTokenIds.length > 0) {
+            soundManager.playCapture();
+            soundManager.triggerHaptic(30);
+            lastCaptureSoundTimeRef.current = Date.now();
+          } else if (move.reachesHome) {
+            soundManager.playReachHome();
+            soundManager.triggerHaptic(25);
+            lastHomeSoundTimeRef.current = Date.now();
+          } else {
+            soundManager.playStep(0);
+            soundManager.triggerHaptic(10);
+          }
+          return;
+        }
+
+        if (stepIntervalRef.current) {
+          window.clearInterval(stepIntervalRef.current);
+          stepIntervalRef.current = null;
+        }
+
+        let stepIdx = 0;
+        const initialAnim = { tokenId, coord: coords[0] };
+        animatingMoveRef.current = initialAnim;
+        setAnimatingMove(initialAnim);
         soundManager.playStep(0);
         soundManager.triggerHaptic(10);
-        multiplayerClient.requestMoveToken(gameState.roomCode, tokenId);
+
+        stepIntervalRef.current = window.setInterval(() => {
+          stepIdx += 1;
+          if (stepIdx < coords.length) {
+            const nextAnim = { tokenId, coord: coords[stepIdx] };
+            animatingMoveRef.current = nextAnim;
+            setAnimatingMove(nextAnim);
+            soundManager.playStep(stepIdx);
+          } else {
+            if (stepIntervalRef.current) {
+              window.clearInterval(stepIntervalRef.current);
+              stepIntervalRef.current = null;
+            }
+            animatingMoveRef.current = null;
+            setAnimatingMove(null);
+
+            if (move.capturesTokenIds.length > 0) {
+              soundManager.playCapture();
+              soundManager.triggerHaptic(30);
+              lastCaptureSoundTimeRef.current = Date.now();
+            } else if (move.reachesHome) {
+              soundManager.playReachHome();
+              soundManager.triggerHaptic(25);
+              lastHomeSoundTimeRef.current = Date.now();
+            }
+
+            if (pendingGameStateRef.current) {
+              setGameState(pendingGameStateRef.current);
+              pendingGameStateRef.current = null;
+            }
+          }
+        }, 115);
         return;
       }
 
@@ -446,18 +634,31 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         return;
       }
 
+      if (stepIntervalRef.current) {
+        window.clearInterval(stepIntervalRef.current);
+        stepIntervalRef.current = null;
+      }
+
       let stepIdx = 0;
-      setAnimatingMove({ tokenId, coord: coords[0] });
+      const initialAnim = { tokenId, coord: coords[0] };
+      animatingMoveRef.current = initialAnim;
+      setAnimatingMove(initialAnim);
       soundManager.playStep(0);
       soundManager.triggerHaptic(10);
 
-      const stepInterval = window.setInterval(() => {
+      stepIntervalRef.current = window.setInterval(() => {
         stepIdx += 1;
         if (stepIdx < coords.length) {
-          setAnimatingMove({ tokenId, coord: coords[stepIdx] });
+          const nextAnim = { tokenId, coord: coords[stepIdx] };
+          animatingMoveRef.current = nextAnim;
+          setAnimatingMove(nextAnim);
           soundManager.playStep(stepIdx);
         } else {
-          clearInterval(stepInterval);
+          if (stepIntervalRef.current) {
+            window.clearInterval(stepIntervalRef.current);
+            stepIntervalRef.current = null;
+          }
+          animatingMoveRef.current = null;
           setAnimatingMove(null);
           if (move.capturesTokenIds.length > 0) {
             soundManager.playCapture();
@@ -972,6 +1173,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
               window.clearTimeout(rollTimerRef.current);
               rollTimerRef.current = null;
             }
+            if (stepIntervalRef.current) {
+              window.clearInterval(stepIntervalRef.current);
+              stepIntervalRef.current = null;
+            }
+            animatingMoveRef.current = null;
+            setAnimatingMove(null);
+            pendingGameStateRef.current = null;
             localRollStartTimeRef.current = null;
             setIsRolling(false);
             multiplayerClient.leaveRoom();
@@ -983,6 +1191,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
               window.clearTimeout(rollTimerRef.current);
               rollTimerRef.current = null;
             }
+            if (stepIntervalRef.current) {
+              window.clearInterval(stepIntervalRef.current);
+              stepIntervalRef.current = null;
+            }
+            animatingMoveRef.current = null;
+            setAnimatingMove(null);
+            pendingGameStateRef.current = null;
             localRollStartTimeRef.current = null;
             setIsRolling(false);
             multiplayerClient.leaveMatchmaking();

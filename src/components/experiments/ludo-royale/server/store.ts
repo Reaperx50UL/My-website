@@ -52,6 +52,15 @@ export type ServerMessage =
       diceValue: number;
       gameState: GameState;
     }
+  | {
+      type: 'TOKEN_MOVED';
+      tokenId: string;
+      fromSteps: number;
+      toSteps: number;
+      capturedIds: string[];
+      reachesHome: boolean;
+      gameState: GameState;
+    }
   | { type: 'MATCHMAKING_STATUS'; status: 'searching' | 'matched'; queueSize: number }
   | { type: 'ERROR'; message: string };
 

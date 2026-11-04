@@ -97,8 +97,23 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
         room.gameState.rules
       );
       if (chosen) {
+        const moveDetails = room.gameState.legalMoves.find(
+          (m) => m.tokenId === chosen.tokenId
+        );
         room.gameState = executeTokenMove(room.gameState, chosen.tokenId);
         modified = true;
+        if (moveDetails) {
+          const moveMsg: ServerMessage = {
+            type: 'TOKEN_MOVED',
+            tokenId: chosen.tokenId,
+            fromSteps: moveDetails.fromSteps,
+            toSteps: moveDetails.toSteps,
+            capturedIds: moveDetails.capturesTokenIds || [],
+            reachesHome: moveDetails.reachesHome || false,
+            gameState: room.gameState,
+          };
+          multiplayerStore.broadcast(`room:${room.roomCode}`, moveMsg);
+        }
       }
     }
   }
@@ -404,7 +419,18 @@ export async function handleMoveToken(
   roomCode: string,
   playerId: string,
   tokenId: string
-): Promise<{ success: boolean; gameState?: GameState; error?: string }> {
+): Promise<{
+  success: boolean;
+  gameState?: GameState;
+  moveResult?: {
+    tokenId: string;
+    fromSteps: number;
+    toSteps: number;
+    capturedIds: string[];
+    reachesHome: boolean;
+  };
+  error?: string;
+}> {
   const code = (roomCode || '').trim().toUpperCase();
   const room = await multiplayerStore.getRoom(code);
   if (!room || !room.gameState || room.status !== 'playing') {
@@ -425,8 +451,8 @@ export async function handleMoveToken(
     return { success: false, error: 'Moving a token is not valid at this stage.' };
   }
 
-  const isLegal = room.gameState.legalMoves.some((m) => m.tokenId === tokenId);
-  if (!isLegal) {
+  const moveDetails = room.gameState.legalMoves.find((m) => m.tokenId === tokenId);
+  if (!moveDetails) {
     return { success: false, error: 'Illegal move rejected by server.' };
   }
 
@@ -434,7 +460,28 @@ export async function handleMoveToken(
   await multiplayerStore.saveRoom(room);
   broadcastGameState(room);
 
-  return { success: true, gameState: room.gameState };
+  const moveMsg: ServerMessage = {
+    type: 'TOKEN_MOVED',
+    tokenId,
+    fromSteps: moveDetails.fromSteps,
+    toSteps: moveDetails.toSteps,
+    capturedIds: moveDetails.capturesTokenIds || [],
+    reachesHome: moveDetails.reachesHome || false,
+    gameState: room.gameState,
+  };
+  multiplayerStore.broadcast(`room:${room.roomCode}`, moveMsg);
+
+  return {
+    success: true,
+    gameState: room.gameState,
+    moveResult: {
+      tokenId,
+      fromSteps: moveDetails.fromSteps,
+      toSteps: moveDetails.toSteps,
+      capturedIds: moveDetails.capturesTokenIds || [],
+      reachesHome: moveDetails.reachesHome || false,
+    },
+  };
 }
 
 export async function handleAdvanceTurn(

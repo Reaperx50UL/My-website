@@ -44,6 +44,15 @@ export type ServerMessage =
       room?: OnlineRoomInfo;
       assignedColor?: PlayerColor;
     }
+  | {
+      type: 'TOKEN_MOVED';
+      tokenId: string;
+      fromSteps: number;
+      toSteps: number;
+      capturedIds: string[];
+      reachesHome: boolean;
+      gameState: GameState;
+    }
   | { type: 'CONNECTION_STATUS'; status: 'connected' | 'connecting' | 'offline' }
   | { type: 'ERROR'; message: string };
 
@@ -443,6 +452,16 @@ class MultiplayerClient {
                 ?.color || 'red',
             diceValue:
               result.rollOutcome || result.gameState.diceValue || 1,
+            gameState: result.gameState,
+          });
+        } else if (payload.type === 'MOVE_TOKEN' && result.moveResult) {
+          this.notifyListeners({
+            type: 'TOKEN_MOVED',
+            tokenId: result.moveResult.tokenId,
+            fromSteps: result.moveResult.fromSteps,
+            toSteps: result.moveResult.toSteps,
+            capturedIds: result.moveResult.capturedIds || [],
+            reachesHome: result.moveResult.reachesHome || false,
             gameState: result.gameState,
           });
         } else {
