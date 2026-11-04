@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   handleAddBot,
+  handleAdvanceTurn,
   handleCreateRoom,
   handleJoinMatchmaking,
   handleJoinRoom,
@@ -323,4 +324,52 @@ test('13. 3P Match Departure: 1st human departure replaces seat with bot, 2nd de
   assert.ok(finalRoom);
   assert.equal(finalRoom!.status, 'terminated');
   assert.equal(finalRoom!.terminatedReason, 'last_human_remaining');
+});
+
+test('14. Matchmaking Turn Progression: P1 rolls, turn transitions, version increments, P2 rolls without deadlock', async () => {
+  const p1 = 'user-turn-1';
+  const p2 = 'user-turn-2';
+
+  await handleJoinMatchmaking(p1, 'Player 1', 'knight', 2);
+  const matched = await handleJoinMatchmaking(p2, 'Player 2', 'crown', 2);
+  assert.equal(matched.status, 'matched');
+  assert.ok(matched.room);
+
+  const roomCode = matched.room!.roomCode;
+  const initialVersion = matched.room!.version || 1;
+
+  // Verify Player 1 is active (red)
+  let room = await multiplayerStore.getRoom(roomCode);
+  assert.ok(room && room.gameState);
+  assert.equal(room!.gameState!.turnPhase, 'WAITING_FOR_ROLL');
+  assert.equal(room!.gameState!.players[room!.gameState!.activePlayerIndex].color, 'red');
+
+  // Player 1 rolls
+  const rollRes = await handleRollDice(roomCode, p1);
+  assert.equal(rollRes.success, true);
+  assert.ok(rollRes.gameState);
+  assert.ok(rollRes.version! > initialVersion, 'Version should increment on roll');
+
+  // If rolled < 6, all tokens are in yard so legalMoves is empty and phase is TURN_TRANSITION
+  if (rollRes.gameState!.turnPhase === 'TURN_TRANSITION') {
+    const advRes = await handleAdvanceTurn(roomCode);
+    assert.equal(advRes.success, true);
+    assert.ok(advRes.version! > rollRes.version!, 'Version should increment on turn transition');
+    assert.equal(advRes.gameState!.turnPhase, 'WAITING_FOR_ROLL');
+    assert.equal(advRes.gameState!.players[advRes.gameState!.activePlayerIndex].color, 'yellow');
+
+    // Player 2 rolls now
+    const p2RollRes = await handleRollDice(roomCode, p2);
+    assert.equal(p2RollRes.success, true);
+    assert.ok(p2RollRes.version! > advRes.version!, 'Version should increment on P2 roll');
+  } else if (rollRes.gameState!.turnPhase === 'SELECTING_TOKEN') {
+    // Player 1 rolled 6, can move token
+    const tokenId = rollRes.gameState!.legalMoves[0].tokenId;
+    const moveRes = await handleMoveToken(roomCode, p1, tokenId);
+    assert.equal(moveRes.success, true);
+    assert.ok(moveRes.version! > rollRes.version!, 'Version should increment on token move');
+  }
+
+  // Cleanup
+  await handleLeaveRoom(roomCode, p1);
 });

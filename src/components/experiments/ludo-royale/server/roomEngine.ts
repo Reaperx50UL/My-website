@@ -56,7 +56,6 @@ export function broadcastRoomUpdate(room: ServerRoom): void {
       version: room.version,
     };
     multiplayerStore.broadcast(`client:${player.id}`, msg);
-    multiplayerStore.broadcast(`room:${room.roomCode}`, msg);
   }
 }
 
@@ -80,10 +79,16 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
   let modified = false;
   const state = room.gameState;
 
-  // 1. Advance turn transition if pending
+  // 1. Advance turn transition if pending (after sufficient delay for dice roll animation to complete)
   if (state.turnPhase === 'TURN_TRANSITION') {
-    room.gameState = completeTurnTransition(state);
-    modified = true;
+    const lastEvent = state.eventLog?.[0];
+    const elapsed = lastEvent?.timestamp ? Date.now() - lastEvent.timestamp : 9999;
+    if (elapsed >= 1100) {
+      room.gameState = completeTurnTransition(state);
+      room.version = (room.version || 1) + 1;
+      room.updatedAt = Date.now();
+      modified = true;
+    }
   }
 
   // 2. Execute AI Bot turn if current active player is AI
@@ -92,6 +97,8 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
     if (room.gameState.turnPhase === 'WAITING_FOR_ROLL') {
       const roll = generateFairDiceRoll();
       room.gameState = commitDiceRoll(room.gameState, roll);
+      room.version = (room.version || 1) + 1;
+      room.updatedAt = Date.now();
       await multiplayerStore.saveRoom(room);
       const diceMsg: ServerMessage = {
         type: 'DICE_ROLLED',
@@ -116,6 +123,8 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
           (m) => m.tokenId === chosen.tokenId
         );
         room.gameState = executeTokenMove(room.gameState, chosen.tokenId);
+        room.version = (room.version || 1) + 1;
+        room.updatedAt = Date.now();
         await multiplayerStore.saveRoom(room);
         if (moveDetails) {
           const moveMsg: ServerMessage = {
@@ -138,6 +147,7 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
 
   if (modified) {
     await multiplayerStore.saveRoom(room);
+    broadcastRoomUpdate(room);
     broadcastGameState(room);
   }
 
@@ -501,6 +511,8 @@ export async function handleStartMatch(
     players: configs,
     rules: room.rules,
   });
+  room.version = (room.version || 1) + 1;
+  room.updatedAt = Date.now();
 
   await multiplayerStore.saveRoom(room);
   broadcastRoomUpdate(room);
@@ -512,7 +524,7 @@ export async function handleStartMatch(
 export async function handleRollDice(
   roomCode: string,
   playerId: string
-): Promise<{ success: boolean; gameState?: GameState; rollOutcome?: number; error?: string }> {
+): Promise<{ success: boolean; gameState?: GameState; rollOutcome?: number; version?: number; room?: ServerRoom; error?: string }> {
   const code = (roomCode || '').trim().toUpperCase();
   const room = await multiplayerStore.getRoom(code);
   if (!room || !room.gameState || room.status !== 'playing') {
@@ -537,9 +549,10 @@ export async function handleRollDice(
   // Server generates fair dice outcome
   const rollOutcome = generateFairDiceRoll();
   room.gameState = commitDiceRoll(room.gameState, rollOutcome);
+  room.version = (room.version || 1) + 1;
+  room.updatedAt = Date.now();
 
   await multiplayerStore.saveRoom(room);
-  broadcastGameState(room);
 
   const diceMsg: ServerMessage = {
     type: 'DICE_ROLLED',
@@ -550,7 +563,7 @@ export async function handleRollDice(
   };
   multiplayerStore.broadcast(`room:${room.roomCode}`, diceMsg);
 
-  return { success: true, gameState: room.gameState, rollOutcome };
+  return { success: true, gameState: room.gameState, rollOutcome, version: room.version, room };
 }
 
 export async function handleMoveToken(
@@ -560,6 +573,8 @@ export async function handleMoveToken(
 ): Promise<{
   success: boolean;
   gameState?: GameState;
+  version?: number;
+  room?: ServerRoom;
   moveResult?: {
     tokenId: string;
     fromSteps: number;
@@ -595,6 +610,9 @@ export async function handleMoveToken(
   }
 
   room.gameState = executeTokenMove(room.gameState, tokenId);
+  room.version = (room.version || 1) + 1;
+  room.updatedAt = Date.now();
+
   await multiplayerStore.saveRoom(room);
   broadcastGameState(room);
 
@@ -613,6 +631,8 @@ export async function handleMoveToken(
   return {
     success: true,
     gameState: room.gameState,
+    version: room.version,
+    room,
     moveResult: {
       tokenId,
       fromSteps: moveDetails.fromSteps,
@@ -625,15 +645,27 @@ export async function handleMoveToken(
 
 export async function handleAdvanceTurn(
   roomCode: string
-): Promise<{ success: boolean; gameState?: GameState }> {
+): Promise<{ success: boolean; gameState?: GameState; version?: number; room?: ServerRoom }> {
   const code = (roomCode || '').trim().toUpperCase();
   const room = await multiplayerStore.getRoom(code);
   if (!room || !room.gameState || room.status !== 'playing') {
     return { success: false };
   }
 
-  const changed = await processRoomTick(room);
-  return { success: changed, gameState: room.gameState };
+  let changed = false;
+  if (room.gameState.turnPhase === 'TURN_TRANSITION') {
+    room.gameState = completeTurnTransition(room.gameState);
+    changed = true;
+    room.version = (room.version || 1) + 1;
+    room.updatedAt = Date.now();
+    await multiplayerStore.saveRoom(room);
+    broadcastRoomUpdate(room);
+    broadcastGameState(room);
+  } else {
+    changed = await processRoomTick(room);
+  }
+
+  return { success: changed, gameState: room.gameState, version: room.version, room };
 }
 
 export async function handleJoinMatchmaking(
