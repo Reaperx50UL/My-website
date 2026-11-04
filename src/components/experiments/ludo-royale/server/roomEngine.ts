@@ -53,6 +53,7 @@ export function broadcastRoomUpdate(room: ServerRoom): void {
       type: 'ROOM_UPDATED',
       room,
       assignedColor: player.color,
+      version: room.version,
     };
     multiplayerStore.broadcast(`client:${player.id}`, msg);
     multiplayerStore.broadcast(`room:${room.roomCode}`, msg);
@@ -64,6 +65,7 @@ export function broadcastGameState(room: ServerRoom): void {
   const msg: ServerMessage = {
     type: 'GAME_STATE_SYNC',
     gameState: room.gameState,
+    version: room.version,
   };
   multiplayerStore.broadcast(`room:${room.roomCode}`, msg);
 }
@@ -90,14 +92,17 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
     if (room.gameState.turnPhase === 'WAITING_FOR_ROLL') {
       const roll = generateFairDiceRoll();
       room.gameState = commitDiceRoll(room.gameState, roll);
-      modified = true;
+      await multiplayerStore.saveRoom(room);
       const diceMsg: ServerMessage = {
         type: 'DICE_ROLLED',
         playerColor: activePlayer.color,
         diceValue: roll,
         gameState: room.gameState,
+        version: room.version,
       };
       multiplayerStore.broadcast(`room:${room.roomCode}`, diceMsg);
+      broadcastGameState(room);
+      return true;
     } else if (room.gameState.turnPhase === 'SELECTING_TOKEN') {
       const chosen = chooseAIMove(
         room.gameState.legalMoves,
@@ -111,7 +116,7 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
           (m) => m.tokenId === chosen.tokenId
         );
         room.gameState = executeTokenMove(room.gameState, chosen.tokenId);
-        modified = true;
+        await multiplayerStore.saveRoom(room);
         if (moveDetails) {
           const moveMsg: ServerMessage = {
             type: 'TOKEN_MOVED',
@@ -121,9 +126,12 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
             capturedIds: moveDetails.capturesTokenIds || [],
             reachesHome: moveDetails.reachesHome || false,
             gameState: room.gameState,
+            version: room.version,
           };
           multiplayerStore.broadcast(`room:${room.roomCode}`, moveMsg);
         }
+        broadcastGameState(room);
+        return true;
       }
     }
   }
@@ -259,6 +267,10 @@ export async function handleLeaveRoom(
   const room = await multiplayerStore.getRoom(code);
   if (!room) return { success: true };
 
+  // Always clear matchmaking ticket & matched client mapping for the departing player
+  await multiplayerStore.clearMatchForClient(playerId);
+  await multiplayerStore.removeMatchmaking(playerId);
+
   // Notify the leaving player directly
   multiplayerStore.broadcast(`client:${playerId}`, {
     type: 'ROOM_LEFT',
@@ -279,15 +291,46 @@ export async function handleLeaveRoom(
   const res = resolvePlayerDeparture(room as unknown as AuthoritativeRoom, playerId);
 
   if (res.action === 'terminate_match') {
-    multiplayerStore.broadcast(`room:${code}`, {
+    // Clear match records and queues for all players in this match
+    for (const p of room.players) {
+      await multiplayerStore.clearMatchForClient(p.id);
+      await multiplayerStore.removeMatchmaking(p.id);
+    }
+
+    const nextVersion = (room.version || 1) + 1;
+    const termMsg: ServerMessage = {
       type: 'MATCH_TERMINATED',
       roomCode: code,
       reasonCode: res.reasonCode,
       title: res.notifyTitle,
       message: res.notifyMessage,
       returnTo: res.returnTo,
-    });
-    await multiplayerStore.deleteRoom(code);
+      version: nextVersion,
+    };
+    multiplayerStore.broadcast(`room:${code}`, termMsg);
+    for (const p of room.players) {
+      multiplayerStore.broadcast(`client:${p.id}`, termMsg);
+    }
+
+    if (room.status === 'lobby') {
+      await multiplayerStore.deleteRoom(code);
+    } else {
+      // For active playing matches, retain room temporarily with 'terminated' status
+      // so any polling clients across distributed serverless instances receive the termination
+      const terminatedRoom: ServerRoom = {
+        ...room,
+        status: 'terminated',
+        lifecycle: 'match_terminated',
+        terminatedReason: res.reasonCode,
+        terminatedTitle: res.notifyTitle,
+        terminatedMessage: res.notifyMessage,
+        returnTo: res.returnTo,
+        version: nextVersion,
+        updatedAt: Date.now(),
+      };
+      await multiplayerStore.saveRoom(terminatedRoom);
+    }
+
     return { success: true };
   }
 
@@ -503,6 +546,7 @@ export async function handleRollDice(
     playerColor: activePlayer.color,
     diceValue: rollOutcome,
     gameState: room.gameState,
+    version: room.version,
   };
   multiplayerStore.broadcast(`room:${room.roomCode}`, diceMsg);
 
@@ -562,6 +606,7 @@ export async function handleMoveToken(
     capturedIds: moveDetails.capturesTokenIds || [],
     reachesHome: moveDetails.reachesHome || false,
     gameState: room.gameState,
+    version: room.version,
   };
   multiplayerStore.broadcast(`room:${room.roomCode}`, moveMsg);
 
@@ -609,16 +654,26 @@ export async function handleJoinMatchmaking(
   const existingMatch = await multiplayerStore.getMatchForClient(playerId);
   if (existingMatch) {
     const existingRoom = await multiplayerStore.getRoom(existingMatch.roomCode);
-    if (existingRoom) {
+    const myPlayer = existingRoom?.players.find((p) => p.id === playerId);
+    if (
+      existingRoom &&
+      existingRoom.status === 'playing' &&
+      myPlayer &&
+      !myPlayer.replacedByBot &&
+      myPlayer.connected
+    ) {
       return {
         status: 'matched',
-        targetPlayers,
+        targetPlayers: existingRoom.targetPlayers || targetPlayers,
         foundPlayers: existingRoom.players.length,
         queueSize: 0,
         queuedPlayers: [],
         room: existingRoom,
         assignedColor: existingMatch.color,
       };
+    } else {
+      // Stale or dead match record -> clear it!
+      await multiplayerStore.clearMatchForClient(playerId);
     }
   }
 

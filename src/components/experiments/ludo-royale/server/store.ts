@@ -44,6 +44,9 @@ export interface ServerRoom {
   rules: HouseRules;
   gameState: GameState | null;
   terminatedReason?: string;
+  terminatedTitle?: string;
+  terminatedMessage?: string;
+  returnTo?: 'matchmaking' | 'friends' | 'title';
   updatedAt: number;
   version: number;
 }
@@ -70,13 +73,14 @@ export interface QueuedPlayerSummary {
 
 export type ServerMessage =
   | { type: 'WELCOME'; clientId: string; onlineCount: number; backend?: BackendStatusInfo }
-  | { type: 'ROOM_UPDATED'; room: ServerRoom; assignedColor: PlayerColor }
-  | { type: 'GAME_STATE_SYNC'; gameState: GameState }
+  | { type: 'ROOM_UPDATED'; room: ServerRoom; assignedColor: PlayerColor; version?: number }
+  | { type: 'GAME_STATE_SYNC'; gameState: GameState; version?: number }
   | {
       type: 'DICE_ROLLED';
       playerColor: PlayerColor;
       diceValue: number;
       gameState: GameState;
+      version?: number;
     }
   | {
       type: 'TOKEN_MOVED';
@@ -86,6 +90,7 @@ export type ServerMessage =
       capturedIds: string[];
       reachesHome: boolean;
       gameState: GameState;
+      version?: number;
     }
   | {
       type: 'MATCHMAKING_STATUS';
@@ -96,6 +101,7 @@ export type ServerMessage =
       queuedPlayers: QueuedPlayerSummary[];
       room?: ServerRoom;
       assignedColor?: PlayerColor;
+      version?: number;
     }
   | { type: 'ROOM_LEFT'; roomCode: string }
   | { type: 'ROOM_NOTIFICATION'; message: string }
@@ -105,6 +111,7 @@ export type ServerMessage =
       color: PlayerColor;
       remainingHumans: number;
       message: string;
+      version?: number;
     }
   | {
       type: 'MATCH_TERMINATED';
@@ -113,6 +120,7 @@ export type ServerMessage =
       title: string;
       message: string;
       returnTo: 'matchmaking' | 'friends' | 'title';
+      version?: number;
     }
   | { type: 'CONNECTION_STATUS'; status: 'connected' | 'connecting' | 'offline' }
   | { type: 'ERROR'; message: string };

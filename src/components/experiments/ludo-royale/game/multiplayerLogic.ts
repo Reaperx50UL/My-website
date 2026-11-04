@@ -44,6 +44,9 @@ export interface AuthoritativeRoom {
   rules: HouseRules;
   gameState: GameState | null;
   terminatedReason?: string;
+  terminatedTitle?: string;
+  terminatedMessage?: string;
+  returnTo?: 'matchmaking' | 'friends' | 'title';
 }
 
 export type DepartureResolution =
@@ -284,6 +287,9 @@ export function resolvePlayerDeparture(
         lifecycle: 'room_closed',
         players: room.players.filter((p) => p.id !== departingPlayerId),
         terminatedReason: 'host_left_private_room',
+        terminatedTitle: 'Room Closed',
+        terminatedMessage: `The host (${departingPlayer.name}) has left the room and the lobby has closed.`,
+        returnTo: 'friends',
       };
       return {
         action: 'terminate_match',
@@ -323,6 +329,9 @@ export function resolvePlayerDeparture(
         lifecycle: 'room_closed',
         players: room.players.filter((p) => p.id !== departingPlayerId),
         terminatedReason: 'host_left_private_room',
+        terminatedTitle: 'Room Ended by Host',
+        terminatedMessage: `The host (${departingPlayer.name}) has left the match and the room has ended.`,
+        returnTo: 'friends',
       };
       return {
         action: 'terminate_match',
@@ -349,6 +358,9 @@ export function resolvePlayerDeparture(
         lifecycle: 'room_closed',
         players: remainingRoomPlayers,
         terminatedReason: 'not_enough_players_private',
+        terminatedTitle: 'Match Ended',
+        terminatedMessage: `${departingPlayer.name} has left the match. Returning to room menu.`,
+        returnTo: 'friends',
       };
       return {
         action: 'terminate_match',
@@ -429,6 +441,10 @@ export function resolvePlayerDeparture(
       status: 'terminated',
       lifecycle: 'match_terminated',
       terminatedReason: 'opponent_left_2p',
+      terminatedTitle: 'Opponent Left Match',
+      terminatedMessage:
+        'Your opponent has left the match. Returning to matchmaking.',
+      returnTo: 'matchmaking',
     };
 
     return {
@@ -500,6 +516,10 @@ export function resolvePlayerDeparture(
       status: 'terminated',
       lifecycle: 'match_terminated',
       terminatedReason: 'last_human_remaining',
+      terminatedTitle: 'Match Terminated',
+      terminatedMessage:
+        'The match ended because only one human player remained after opponents left.',
+      returnTo: 'matchmaking',
     };
 
     return {

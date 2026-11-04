@@ -47,13 +47,14 @@ export interface BackendStatusInfo {
 
 export type ServerMessage =
   | { type: 'WELCOME'; clientId: string; onlineCount: number; backend?: BackendStatusInfo }
-  | { type: 'ROOM_UPDATED'; room: OnlineRoomInfo; assignedColor: PlayerColor }
-  | { type: 'GAME_STATE_SYNC'; gameState: GameState }
+  | { type: 'ROOM_UPDATED'; room: OnlineRoomInfo; assignedColor: PlayerColor; version?: number }
+  | { type: 'GAME_STATE_SYNC'; gameState: GameState; version?: number }
   | {
       type: 'DICE_ROLLED';
       playerColor: PlayerColor;
       diceValue: number;
       gameState: GameState;
+      version?: number;
     }
   | {
       type: 'MATCHMAKING_STATUS';
@@ -64,6 +65,7 @@ export type ServerMessage =
       queuedPlayers: QueuedPlayerSummary[];
       room?: OnlineRoomInfo;
       assignedColor?: PlayerColor;
+      version?: number;
     }
   | { type: 'ROOM_LEFT'; roomCode: string }
   | { type: 'ROOM_NOTIFICATION'; message: string }
@@ -73,6 +75,7 @@ export type ServerMessage =
       color: PlayerColor;
       remainingHumans: number;
       message: string;
+      version?: number;
     }
   | {
       type: 'MATCH_TERMINATED';
@@ -81,6 +84,7 @@ export type ServerMessage =
       title: string;
       message: string;
       returnTo: 'matchmaking' | 'friends' | 'title';
+      version?: number;
     }
   | {
       type: 'TOKEN_MOVED';
@@ -90,6 +94,7 @@ export type ServerMessage =
       capturedIds: string[];
       reachesHome: boolean;
       gameState: GameState;
+      version?: number;
     }
   | {
       type: 'CONNECTION_STATUS';
@@ -345,14 +350,20 @@ class MultiplayerClient {
 
         if (!res.ok) {
           if (res.status === 404 && this.currentRoomCode) {
-            // Room expired or deleted
+            // Room expired or terminated
+            const staleRoom = this.currentRoomCode;
             this.currentRoomCode = '';
+            this.lastVersion = 0;
             try {
               window.sessionStorage.removeItem('ludo_active_room');
             } catch {}
             this.notifyListeners({
-              type: 'ERROR',
-              message: 'Room session has expired or was closed by host.',
+              type: 'MATCH_TERMINATED',
+              roomCode: staleRoom,
+              reasonCode: 'match_not_found',
+              title: 'Match Ended',
+              message: 'The match session is no longer active.',
+              returnTo: 'matchmaking',
             });
           }
           return;
@@ -375,8 +386,36 @@ class MultiplayerClient {
           }
         }
 
+        // Handle authoritative termination signal from server
+        if (data.terminated) {
+          const roomToExit = this.currentRoomCode;
+          this.currentRoomCode = '';
+          this.lastVersion = 0;
+          try {
+            window.sessionStorage.removeItem('ludo_active_room');
+          } catch {}
+          this.notifyListeners({
+            type: 'MATCH_TERMINATED',
+            roomCode: roomToExit,
+            reasonCode: data.reasonCode || 'match_terminated',
+            title: data.title || 'Match Terminated',
+            message: data.message || 'The match has ended.',
+            returnTo: data.returnTo || 'matchmaking',
+            version: data.version,
+          });
+          return;
+        }
+
         if (data.unchanged) {
           return;
+        }
+
+        // Discard out-of-order stale response from older lambdas
+        if (data.version && data.version < this.lastVersion) {
+          return;
+        }
+        if (data.version) {
+          this.lastVersion = Math.max(this.lastVersion, data.version);
         }
 
         if (data.status === 'idle') {
@@ -385,7 +424,7 @@ class MultiplayerClient {
 
         if (data.status === 'matched' && data.room) {
           this.currentRoomCode = data.room.roomCode;
-          this.lastVersion = data.version || 1;
+          this.lastVersion = data.version || data.room.version || 1;
           this.assignedColor = data.assignedColor || 'red';
           try {
             window.sessionStorage.setItem('ludo_active_room', this.currentRoomCode);
@@ -399,16 +438,19 @@ class MultiplayerClient {
             queuedPlayers: [],
             room: data.room,
             assignedColor: this.assignedColor,
+            version: this.lastVersion,
           });
           this.notifyListeners({
             type: 'ROOM_UPDATED',
             room: data.room,
             assignedColor: this.assignedColor,
+            version: this.lastVersion,
           });
           if (data.gameState) {
             this.notifyListeners({
               type: 'GAME_STATE_SYNC',
               gameState: data.gameState,
+              version: this.lastVersion,
             });
           }
           return;
@@ -422,22 +464,25 @@ class MultiplayerClient {
             foundPlayers: data.foundPlayers || 1,
             queueSize: data.queueSize || 1,
             queuedPlayers: data.queuedPlayers || [],
+            version: this.lastVersion,
           });
           return;
         }
 
         if (data.room) {
-          this.lastVersion = data.version || 0;
+          this.lastVersion = data.version || data.room.version || this.lastVersion;
           if (data.assignedColor) this.assignedColor = data.assignedColor;
           this.notifyListeners({
             type: 'ROOM_UPDATED',
             room: data.room,
             assignedColor: this.assignedColor,
+            version: this.lastVersion,
           });
           if (data.gameState) {
             this.notifyListeners({
               type: 'GAME_STATE_SYNC',
               gameState: data.gameState,
+              version: this.lastVersion,
             });
           }
         }
@@ -500,7 +545,7 @@ class MultiplayerClient {
       // Immediately process returned authoritative data
       if (result.room) {
         this.currentRoomCode = result.room.roomCode;
-        this.lastVersion = result.room.version || 1;
+        this.lastVersion = Math.max(this.lastVersion, result.room.version || 1);
         if (result.assignedColor) {
           this.assignedColor = result.assignedColor;
         }
@@ -511,10 +556,14 @@ class MultiplayerClient {
           type: 'ROOM_UPDATED',
           room: result.room,
           assignedColor: this.assignedColor,
+          version: this.lastVersion,
         });
       }
 
       if (result.gameState) {
+        if (result.version) {
+          this.lastVersion = Math.max(this.lastVersion, result.version);
+        }
         if (result.rollOutcome || payload.type === 'ROLL_DICE') {
           this.notifyListeners({
             type: 'DICE_ROLLED',
@@ -524,6 +573,7 @@ class MultiplayerClient {
             diceValue:
               result.rollOutcome || result.gameState.diceValue || 1,
             gameState: result.gameState,
+            version: this.lastVersion,
           });
         } else if (payload.type === 'MOVE_TOKEN' && result.moveResult) {
           this.notifyListeners({
@@ -534,18 +584,20 @@ class MultiplayerClient {
             capturedIds: result.moveResult.capturedIds || [],
             reachesHome: result.moveResult.reachesHome || false,
             gameState: result.gameState,
+            version: this.lastVersion,
           });
         } else {
           this.notifyListeners({
             type: 'GAME_STATE_SYNC',
             gameState: result.gameState,
+            version: this.lastVersion,
           });
         }
       }
 
       if (result.status === 'matched' && result.room) {
         this.currentRoomCode = result.room.roomCode;
-        this.lastVersion = result.room.version || 1;
+        this.lastVersion = Math.max(this.lastVersion, result.room.version || 1);
         if (result.assignedColor) {
           this.assignedColor = result.assignedColor;
         }
@@ -561,16 +613,19 @@ class MultiplayerClient {
           queuedPlayers: [],
           room: result.room,
           assignedColor: this.assignedColor,
+          version: this.lastVersion,
         });
         this.notifyListeners({
           type: 'ROOM_UPDATED',
           room: result.room,
           assignedColor: this.assignedColor,
+          version: this.lastVersion,
         });
         if (result.room.gameState) {
           this.notifyListeners({
             type: 'GAME_STATE_SYNC',
             gameState: result.room.gameState,
+            version: this.lastVersion,
           });
         }
       } else if (result.status === 'searching') {
@@ -581,6 +636,7 @@ class MultiplayerClient {
           foundPlayers: result.foundPlayers || 1,
           queueSize: result.queueSize || 1,
           queuedPlayers: result.queuedPlayers || [],
+          version: this.lastVersion,
         });
       }
 
@@ -646,11 +702,20 @@ class MultiplayerClient {
   ): void {
     this.currentMatchmakingCount = targetPlayers;
     this.currentRoomCode = '';
+    this.lastVersion = 0;
+    try {
+      window.sessionStorage.removeItem('ludo_active_room');
+    } catch {}
     this.connect();
     this.send({ type: 'JOIN_MATCHMAKING', name, avatar, targetPlayers });
   }
 
   public leaveMatchmaking(): void {
+    this.currentRoomCode = '';
+    this.lastVersion = 0;
+    try {
+      window.sessionStorage.removeItem('ludo_active_room');
+    } catch {}
     this.send({ type: 'LEAVE_MATCHMAKING' });
     this.notifyListeners({
       type: 'MATCHMAKING_STATUS',
@@ -664,12 +729,13 @@ class MultiplayerClient {
 
   public leaveRoom(roomCode?: string): void {
     const code = (roomCode || this.currentRoomCode || '').trim().toUpperCase();
+    this.currentRoomCode = '';
+    this.lastVersion = 0;
+    try {
+      window.sessionStorage.removeItem('ludo_active_room');
+    } catch {}
     if (code) {
       this.send({ type: 'LEAVE_ROOM', roomCode: code });
-      this.currentRoomCode = '';
-      try {
-        window.sessionStorage.removeItem('ludo_active_room');
-      } catch {}
     }
     this.stopSyncLoop();
     this.notifyListeners({ type: 'ROOM_LEFT', roomCode: code });

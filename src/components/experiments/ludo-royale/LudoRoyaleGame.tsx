@@ -193,6 +193,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const stepIntervalRef = useRef<number | null>(null);
   const pendingGameStateRef = useRef<GameState | null>(null);
   const animatingMoveRef = useRef<{ tokenId: string; coord: GridCoord } | null>(null);
+  const lastAppliedVersionRef = useRef<number>(0);
 
   const showTransientMatchBanner = useCallback((text: string) => {
     setInMatchBanner(text);
@@ -206,6 +207,20 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
 
   const handleConfirmLeaveOnlineMatch = useCallback(() => {
     soundManager.playClick();
+    lastAppliedVersionRef.current = 0;
+    pendingGameStateRef.current = null;
+    if (rollTimerRef.current) {
+      window.clearTimeout(rollTimerRef.current);
+      rollTimerRef.current = null;
+    }
+    if (stepIntervalRef.current) {
+      window.clearInterval(stepIntervalRef.current);
+      stepIntervalRef.current = null;
+    }
+    animatingMoveRef.current = null;
+    setAnimatingMove(null);
+    setIsRolling(false);
+    localRollStartTimeRef.current = null;
     const activeCode = onlineRoom?.roomCode || gameState.roomCode;
     multiplayerClient.leaveRoom(activeCode);
     setOnlineRoom(null);
@@ -248,7 +263,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
     if (savedRoom && shellState === 'title') {
       multiplayerClient.connect(savedRoom);
     }
-  }, []);
+  }, [shellState]);
 
   // Configure sound & haptics engine whenever sound/music/haptic settings change
   useEffect(() => {
@@ -341,19 +356,37 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         setConnectionStatus(msg.status);
         if (msg.backend) setBackendStatus(msg.backend);
       } else if (msg.type === 'ROOM_UPDATED') {
+        if (msg.version && msg.version < lastAppliedVersionRef.current) {
+          return;
+        }
+        if (msg.version) {
+          lastAppliedVersionRef.current = Math.max(lastAppliedVersionRef.current, msg.version);
+        }
         setOnlineRoom(msg.room);
         setAssignedColor(msg.assignedColor);
         setOnlineError(null);
         if (msg.room.status === 'playing' && msg.room.gameState) {
-          if (!rollTimerRef.current) {
+          if (!rollTimerRef.current && animatingMoveRef.current === null) {
             setGameState(msg.room.gameState);
           }
           setActiveModal(null);
           setShellState('playing');
         }
       } else if (msg.type === 'DICE_ROLLED') {
+        if (msg.version && msg.version < lastAppliedVersionRef.current) {
+          return;
+        }
+        if (msg.version) {
+          lastAppliedVersionRef.current = Math.max(lastAppliedVersionRef.current, msg.version);
+        }
         triggerOnlineDiceRollAnimation(msg.gameState, msg.diceValue);
       } else if (msg.type === 'TOKEN_MOVED') {
+        if (msg.version && msg.version < lastAppliedVersionRef.current) {
+          return;
+        }
+        if (msg.version) {
+          lastAppliedVersionRef.current = Math.max(lastAppliedVersionRef.current, msg.version);
+        }
         const isCapture = msg.capturedIds && msg.capturedIds.length > 0;
         const isHome = msg.reachesHome;
         const now = Date.now();
@@ -443,6 +476,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           }
         }, 115);
       } else if (msg.type === 'GAME_STATE_SYNC') {
+        if (msg.version && msg.version < lastAppliedVersionRef.current) {
+          return;
+        }
+        if (msg.version) {
+          lastAppliedVersionRef.current = Math.max(lastAppliedVersionRef.current, msg.version);
+        }
+
         const latestEvent = msg.gameState.eventLog?.[0];
         const isNewRoll =
           latestEvent &&
@@ -485,7 +525,9 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             msg.gameState.diceValue
           );
         } else if (animatingMoveRef.current) {
-          pendingGameStateRef.current = msg.gameState;
+          if (msg.gameState.turnPhase !== 'SELECTING_TOKEN') {
+            pendingGameStateRef.current = msg.gameState;
+          }
         } else if (!rollTimerRef.current) {
           setGameState(msg.gameState);
         }
@@ -494,6 +536,12 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           setShellState('playing');
         }
       } else if (msg.type === 'MATCHMAKING_STATUS') {
+        if (msg.version && msg.version < lastAppliedVersionRef.current) {
+          return;
+        }
+        if (msg.version) {
+          lastAppliedVersionRef.current = Math.max(lastAppliedVersionRef.current, msg.version);
+        }
         setMatchmakingStatus(msg.status);
         setSelectedMatchmakingCount(msg.targetPlayers);
         setMatchmakingFoundPlayers(msg.foundPlayers);
@@ -511,6 +559,8 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           setShellState('playing');
         }
       } else if (msg.type === 'ROOM_LEFT') {
+        lastAppliedVersionRef.current = 0;
+        pendingGameStateRef.current = null;
         setOnlineRoom(null);
         setAssignedColor(null);
         setShowLeaveMatchConfirm(false);
@@ -519,6 +569,20 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       } else if (msg.type === 'PLAYER_REPLACED_BY_BOT') {
         showTransientMatchBanner(`🤖 ${msg.message}`);
       } else if (msg.type === 'MATCH_TERMINATED') {
+        lastAppliedVersionRef.current = 0;
+        pendingGameStateRef.current = null;
+        if (rollTimerRef.current) {
+          window.clearTimeout(rollTimerRef.current);
+          rollTimerRef.current = null;
+        }
+        if (stepIntervalRef.current) {
+          window.clearInterval(stepIntervalRef.current);
+          stepIntervalRef.current = null;
+        }
+        animatingMoveRef.current = null;
+        setAnimatingMove(null);
+        setIsRolling(false);
+        localRollStartTimeRef.current = null;
         setOnlineRoom(null);
         setAssignedColor(null);
         setMatchmakingStatus('idle');
@@ -650,6 +714,12 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             soundManager.playStep(0);
             soundManager.triggerHaptic(10);
           }
+          if (pendingGameStateRef.current) {
+            setGameState(pendingGameStateRef.current);
+            pendingGameStateRef.current = null;
+          } else {
+            setGameState((prev) => executeTokenMove(prev, tokenId));
+          }
           return;
         }
 
@@ -693,6 +763,8 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             if (pendingGameStateRef.current) {
               setGameState(pendingGameStateRef.current);
               pendingGameStateRef.current = null;
+            } else {
+              setGameState((prev) => executeTokenMove(prev, tokenId));
             }
           }
         }, 115);

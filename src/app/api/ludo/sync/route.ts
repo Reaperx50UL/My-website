@@ -37,11 +37,17 @@ export async function GET(req: NextRequest) {
     // 1. If syncing a specific Room (Lobby or Active Game)
     if (roomCode) {
       const room = await multiplayerStore.getRoom(roomCode);
-      if (!room) {
-        return NextResponse.json(
-          { notFound: true, error: `Room "${roomCode}" was not found or expired.` },
-          { status: 404 }
-        );
+      if (!room || room.status === 'terminated') {
+        await multiplayerStore.clearMatchForClient(clientId);
+        return NextResponse.json({
+          terminated: true,
+          reasonCode: room?.terminatedReason || 'match_terminated',
+          title: room?.terminatedTitle || 'Match Terminated',
+          message: room?.terminatedMessage || 'The match has ended or was closed.',
+          returnTo: room?.returnTo || 'matchmaking',
+          onlineCount,
+          backend: backendStatus,
+        });
       }
 
       // Check if room needs an auto-tick (bot turn or transition)
@@ -75,7 +81,14 @@ export async function GET(req: NextRequest) {
     const matchRecord = await multiplayerStore.getMatchForClient(clientId);
     if (matchRecord) {
       const room = await multiplayerStore.getRoom(matchRecord.roomCode);
-      if (room) {
+      const myPlayer = room?.players.find((p) => p.id === clientId);
+      if (
+        room &&
+        room.status === 'playing' &&
+        myPlayer &&
+        !myPlayer.replacedByBot &&
+        myPlayer.connected
+      ) {
         return NextResponse.json({
           status: 'matched',
           room,
@@ -85,6 +98,20 @@ export async function GET(req: NextRequest) {
           onlineCount,
           backend: backendStatus,
         });
+      } else {
+        // Clear stale match record so client is never trapped
+        await multiplayerStore.clearMatchForClient(clientId);
+        if (room?.status === 'terminated') {
+          return NextResponse.json({
+            terminated: true,
+            reasonCode: room.terminatedReason || 'match_terminated',
+            title: room.terminatedTitle || 'Match Terminated',
+            message: room.terminatedMessage || 'The match has ended.',
+            returnTo: room.returnTo || 'matchmaking',
+            onlineCount,
+            backend: backendStatus,
+          });
+        }
       }
     }
 

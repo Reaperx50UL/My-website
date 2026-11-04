@@ -254,3 +254,73 @@ test('11. Ticket lifecycle: getTicket returns null after match or cancellation',
   await handleLeaveMatchmaking(pId);
   assert.equal(await multiplayerStore.getTicket(pId), null);
 });
+
+test('12. 2P Match Departure: terminates match, clears match records for both players, room status is terminated', async () => {
+  const p1 = `p2p-leave-1-${Date.now()}`;
+  const p2 = `p2p-leave-2-${Date.now()}`;
+
+  await handleJoinMatchmaking(p1, 'Player1', 'crown', 2);
+  const matched = await handleJoinMatchmaking(p2, 'Player2', 'shield', 2);
+  assert.equal(matched.status, 'matched');
+  const code = matched.room!.roomCode;
+
+  // Both have match records
+  assert.ok(await multiplayerStore.getMatchForClient(p1));
+  assert.ok(await multiplayerStore.getMatchForClient(p2));
+
+  // Player 1 leaves the active match
+  const leaveRes = await handleLeaveRoom(code, p1);
+  assert.equal(leaveRes.success, true);
+
+  // Match records cleared for both players so neither is trapped
+  assert.equal(await multiplayerStore.getMatchForClient(p1), null);
+  assert.equal(await multiplayerStore.getMatchForClient(p2), null);
+
+  // Room status is updated to terminated
+  const terminatedRoom = await multiplayerStore.getRoom(code);
+  assert.ok(terminatedRoom);
+  assert.equal(terminatedRoom!.status, 'terminated');
+  assert.equal(terminatedRoom!.terminatedReason, 'opponent_left_2p');
+  assert.equal(terminatedRoom!.returnTo, 'matchmaking');
+
+  // Player 1 can now immediately start fresh matchmaking without being forced back into previous room
+  const freshSearch = await handleJoinMatchmaking(p1, 'Player1', 'crown', 2);
+  assert.equal(freshSearch.status, 'searching');
+  await handleLeaveMatchmaking(p1);
+});
+
+test('13. 3P Match Departure: 1st human departure replaces seat with bot, 2nd departure terminates match', async () => {
+  const p1 = `p3p-1-${Date.now()}`;
+  const p2 = `p3p-2-${Date.now()}`;
+  const p3 = `p3p-3-${Date.now()}`;
+
+  await handleJoinMatchmaking(p1, 'P1', 'crown', 3);
+  await handleJoinMatchmaking(p2, 'P2', 'shield', 3);
+  const matched = await handleJoinMatchmaking(p3, 'P3', 'knight', 3);
+  assert.equal(matched.status, 'matched');
+  const code = matched.room!.roomCode;
+
+  // 1st player leaves -> seat converted to AI Bot, match continues for remaining 2 humans
+  await handleLeaveRoom(code, p1);
+  assert.equal(await multiplayerStore.getMatchForClient(p1), null);
+  assert.ok(await multiplayerStore.getMatchForClient(p2));
+  assert.ok(await multiplayerStore.getMatchForClient(p3));
+
+  const roomWithBot = await multiplayerStore.getRoom(code);
+  assert.ok(roomWithBot);
+  assert.equal(roomWithBot!.status, 'playing');
+  const seatP1 = roomWithBot!.players.find((p) => p.id === p1);
+  assert.ok(seatP1);
+  assert.equal(seatP1!.replacedByBot, true);
+  assert.equal(seatP1!.isAI, true);
+
+  // 2nd player leaves -> only 1 human remains -> match must terminate immediately!
+  await handleLeaveRoom(code, p2);
+  assert.equal(await multiplayerStore.getMatchForClient(p2), null);
+  assert.equal(await multiplayerStore.getMatchForClient(p3), null);
+
+  const finalRoom = await multiplayerStore.getRoom(code);
+  assert.ok(finalRoom);
+  assert.equal(finalRoom!.status, 'terminated');
+  assert.equal(finalRoom!.terminatedReason, 'last_human_remaining');
+});
