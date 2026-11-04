@@ -78,10 +78,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const queueSize = await multiplayerStore.getMatchmakingQueueSize();
+    const targetCount = (Number(searchParams.get('targetPlayers')) || 2) as 2 | 3 | 4;
+    const bracket = await multiplayerStore.getMatchmakingBracket(targetCount);
     return NextResponse.json({
       status: 'searching',
-      queueSize,
+      targetPlayers: targetCount,
+      foundPlayers: bracket.length,
+      queueSize: bracket.length,
+      queuedPlayers: bracket.map((b) => ({
+        id: b.id,
+        name: b.name,
+        avatar: b.avatar,
+      })),
       onlineCount,
       backend: backendStatus,
     });

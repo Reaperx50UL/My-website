@@ -1,4 +1,10 @@
-import { GameState, HouseRules, PlayerColor } from '../game/gameTypes';
+import {
+  GameState,
+  HouseRules,
+  MatchLifecycleState,
+  MatchmakingPlayerCount,
+  PlayerColor,
+} from '../game/gameTypes';
 
 export interface OnlineRoomPlayer {
   id: string;
@@ -9,16 +15,28 @@ export interface OnlineRoomPlayer {
   isHost: boolean;
   isAI: boolean;
   connected: boolean;
+  replacedByBot?: boolean;
+  originalHumanName?: string;
 }
 
 export interface OnlineRoomInfo {
   roomCode: string;
+  roomType?: 'friends' | 'matchmaking';
+  targetPlayers?: MatchmakingPlayerCount;
   hostId: string;
-  status: 'lobby' | 'playing' | 'finished';
+  status: 'lobby' | 'playing' | 'finished' | 'terminated';
+  lifecycle?: MatchLifecycleState;
+  humanCount?: number;
   players: OnlineRoomPlayer[];
   rules: HouseRules;
   gameState: GameState | null;
   version?: number;
+}
+
+export interface QueuedPlayerSummary {
+  id: string;
+  name: string;
+  avatar: string;
 }
 
 export interface BackendStatusInfo {
@@ -40,9 +58,29 @@ export type ServerMessage =
   | {
       type: 'MATCHMAKING_STATUS';
       status: 'idle' | 'searching' | 'matched';
+      targetPlayers: MatchmakingPlayerCount;
+      foundPlayers: number;
       queueSize: number;
+      queuedPlayers: QueuedPlayerSummary[];
       room?: OnlineRoomInfo;
       assignedColor?: PlayerColor;
+    }
+  | { type: 'ROOM_LEFT'; roomCode: string }
+  | { type: 'ROOM_NOTIFICATION'; message: string }
+  | {
+      type: 'PLAYER_REPLACED_BY_BOT';
+      playerName: string;
+      color: PlayerColor;
+      remainingHumans: number;
+      message: string;
+    }
+  | {
+      type: 'MATCH_TERMINATED';
+      roomCode: string;
+      reasonCode: string;
+      title: string;
+      message: string;
+      returnTo: 'matchmaking' | 'friends' | 'title';
     }
   | {
       type: 'TOKEN_MOVED';
@@ -72,6 +110,7 @@ class MultiplayerClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private transportMode: 'ws' | 'sse' = 'sse';
   private backendStatus: BackendStatusInfo | null = null;
+  private currentMatchmakingCount: MatchmakingPlayerCount = 2;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -328,7 +367,10 @@ class MultiplayerClient {
           this.notifyListeners({
             type: 'MATCHMAKING_STATUS',
             status: 'matched',
+            targetPlayers: data.room.targetPlayers || this.currentMatchmakingCount,
+            foundPlayers: data.room.players.length,
             queueSize: 0,
+            queuedPlayers: [],
             room: data.room,
             assignedColor: this.assignedColor,
           });
@@ -350,7 +392,10 @@ class MultiplayerClient {
           this.notifyListeners({
             type: 'MATCHMAKING_STATUS',
             status: 'searching',
+            targetPlayers: data.targetPlayers || this.currentMatchmakingCount,
+            foundPlayers: data.foundPlayers || 1,
             queueSize: data.queueSize || 1,
+            queuedPlayers: data.queuedPlayers || [],
           });
           return;
         }
@@ -484,7 +529,10 @@ class MultiplayerClient {
         this.notifyListeners({
           type: 'MATCHMAKING_STATUS',
           status: 'matched',
+          targetPlayers: result.room.targetPlayers || this.currentMatchmakingCount,
+          foundPlayers: result.room.players.length,
           queueSize: 0,
+          queuedPlayers: [],
           room: result.room,
           assignedColor: this.assignedColor,
         });
@@ -503,7 +551,10 @@ class MultiplayerClient {
         this.notifyListeners({
           type: 'MATCHMAKING_STATUS',
           status: 'searching',
+          targetPlayers: result.targetPlayers || this.currentMatchmakingCount,
+          foundPlayers: result.foundPlayers || 1,
           queueSize: result.queueSize || 1,
+          queuedPlayers: result.queuedPlayers || [],
         });
       }
 
@@ -562,10 +613,15 @@ class MultiplayerClient {
     this.send({ type: 'ADVANCE_TURN', roomCode: roomCode.trim().toUpperCase() });
   }
 
-  public joinMatchmaking(name: string, avatar: string): void {
+  public joinMatchmaking(
+    name: string,
+    avatar: string,
+    targetPlayers: MatchmakingPlayerCount = 2
+  ): void {
+    this.currentMatchmakingCount = targetPlayers;
     this.currentRoomCode = '';
     this.connect();
-    this.send({ type: 'JOIN_MATCHMAKING', name, avatar });
+    this.send({ type: 'JOIN_MATCHMAKING', name, avatar, targetPlayers });
   }
 
   public leaveMatchmaking(): void {
@@ -573,19 +629,24 @@ class MultiplayerClient {
     this.notifyListeners({
       type: 'MATCHMAKING_STATUS',
       status: 'idle',
+      targetPlayers: this.currentMatchmakingCount,
+      foundPlayers: 0,
       queueSize: 0,
+      queuedPlayers: [],
     });
   }
 
-  public leaveRoom(): void {
-    if (this.currentRoomCode) {
-      this.send({ type: 'LEAVE_ROOM', roomCode: this.currentRoomCode });
+  public leaveRoom(roomCode?: string): void {
+    const code = (roomCode || this.currentRoomCode || '').trim().toUpperCase();
+    if (code) {
+      this.send({ type: 'LEAVE_ROOM', roomCode: code });
       this.currentRoomCode = '';
       try {
         window.sessionStorage.removeItem('ludo_active_room');
       } catch {}
     }
     this.stopSyncLoop();
+    this.notifyListeners({ type: 'ROOM_LEFT', roomCode: code });
   }
 
   public disconnect(): void {

@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
         const result = await handleJoinMatchmaking(
           clientId,
           body.name,
-          body.avatar
+          body.avatar,
+          body.targetPlayers || 2
         );
         return NextResponse.json(result);
       }

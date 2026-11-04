@@ -36,13 +36,26 @@ import {
 import { PlayerConfig, PlayerStats, UserProfile } from './gameTypes';
 import { getLegalMovesForPlayer } from './legalMoves';
 import {
+  countConnectedHumanPlayers,
+  createMatchedOnlineRoom,
+  createPrivateLobbyRoom,
+  enqueueMatchmakingPlayer,
+  MatchmakingQueueEntry,
+  removeMatchmakingPlayer,
+  resolvePlayerDeparture,
+} from './multiplayerLogic';
+import {
   calculateMatchEarnedXP,
   calculatePlayerLevel,
   getAvatarUnlockProgress,
   isAvatarUnlocked,
 } from './progression';
 import { buildSetupPlayerRoster, getDefaultSeatName } from './rules';
-import { computeHapticDuration, soundManager } from '../services/sound';
+import {
+  computeHapticDuration,
+  getDiceAudioIdentity,
+  soundManager,
+} from '../services/sound';
 
 const twoPlayers: PlayerConfig[] = [
   { color: 'red', name: 'Alice', avatar: 'crown', type: 'human' },
@@ -397,7 +410,7 @@ test('15. XP calculation awards victory, completion, captures, and home tokens c
   assert.equal(lvl2.progressPercent, 20);
 });
 
-test('16. Dice design catalog provides 10 distinct styles with custom pip shapes and safe fallback', () => {
+test('16. Dice design catalog provides 10 distinct styles (6 classic + 4 VOIDNOD 2D animated cubes) with custom pip shapes and safe fallback', () => {
   assert.equal(DICE_STYLE_OPTIONS.length, 10);
   const uniqueIds = new Set(DICE_STYLE_OPTIONS.map((d) => d.id));
   assert.equal(uniqueIds.size, 10);
@@ -409,21 +422,26 @@ test('16. Dice design catalog provides 10 distinct styles with custom pip shapes
   const obsidian = getDiceStyleOption('obsidian_neon');
   assert.equal(obsidian.pipShape, 'hexagon');
 
+  // Verify the 4 new VOIDNOD 2D animated dice skins
   const lava = getDiceStyleOption('lava_cube');
   assert.equal(lava.label, 'Lava Cube');
   assert.equal(lava.pipShape, 'magma');
+  assert.equal(lava.isPremium2D, true);
 
   const electro = getDiceStyleOption('electro_cube');
   assert.equal(electro.label, 'Electro Cube');
   assert.equal(electro.pipShape, 'plasma');
+  assert.equal(electro.isPremium2D, true);
 
   const tesseract = getDiceStyleOption('tesseract_cube');
   assert.equal(tesseract.label, 'Tesseract Cube');
   assert.equal(tesseract.pipShape, 'tesseract');
+  assert.equal(tesseract.isPremium2D, true);
 
   const cosmo = getDiceStyleOption('cosmo_cube');
   assert.equal(cosmo.label, 'Cosmo Cube');
   assert.equal(cosmo.pipShape, 'cosmos');
+  assert.equal(cosmo.isPremium2D, true);
 
   // Fallback to classic_ivory when undefined
   const fallback = getDiceStyleOption(undefined);
@@ -707,7 +725,7 @@ test('23. Move indicator builder maps each playable token to its token number (1
   assert.equal(ind3.toSteps, FINISH_STEP);
 });
 
-test('24. Every 3D dice style defines a unique texture map, model geometry, animation profile, and roll physics transform', () => {
+test('24. Every dice style defines a unique texture map, model geometry, animation profile, and roll physics transform', () => {
   assert.equal(DICE_STYLE_OPTIONS.length, 10);
 
   const uniqueTextures = new Set(DICE_STYLE_OPTIONS.map((d) => d.texturePattern));
@@ -735,7 +753,7 @@ test('24. Every 3D dice style defines a unique texture map, model geometry, anim
   assert.equal(getDiceStyleOption('tesseract_cube').texturePattern, 'dimensional_tesseract');
   assert.equal(getDiceStyleOption('cosmo_cube').texturePattern, 'voidnod_cosmos');
 
-  // Verify style-specific 3D roll transform calculations
+  // Verify style-specific roll transform calculations
   const ivoryRoll = computeDiceRollTransform({
     diceStyle: 'classic_ivory',
     face: 6,
@@ -765,6 +783,283 @@ test('24. Every 3D dice style defines a unique texture map, model geometry, anim
   assert.ok(cyberRoll.nextSpinIncrement.y > ivoryRoll.nextSpinIncrement.y);
 });
 
+test('25. VOIDNOD 2D animated dice skins each expose a unique rolling animation class, landing effect class, tagline, and audio identity while preserving classic dice', () => {
+  const lavaOpt = getDiceStyleOption('lava_cube');
+  const electroOpt = getDiceStyleOption('electro_cube');
+  const tesseractOpt = getDiceStyleOption('tesseract_cube');
+  const cosmoOpt = getDiceStyleOption('cosmo_cube');
 
+  assert.equal(lavaOpt.tagline, 'FORGED IN VOLCANIC CORE');
+  assert.equal(electroOpt.tagline, 'POWERED BY PURE ENERGY');
+  assert.equal(tesseractOpt.tagline, 'BEYOND DIMENSIONS');
+  assert.equal(cosmoOpt.tagline, 'A UNIVERSE IN YOUR HANDS');
+
+  const uniqueRollClasses = new Set([
+    lavaOpt.rollPhysics.rollingEffectClass,
+    electroOpt.rollPhysics.rollingEffectClass,
+    tesseractOpt.rollPhysics.rollingEffectClass,
+    cosmoOpt.rollPhysics.rollingEffectClass,
+  ]);
+  const uniqueLandClasses = new Set([
+    lavaOpt.rollPhysics.landingEffectClass,
+    electroOpt.rollPhysics.landingEffectClass,
+    tesseractOpt.rollPhysics.landingEffectClass,
+    cosmoOpt.rollPhysics.landingEffectClass,
+  ]);
+  assert.equal(uniqueRollClasses.size, 4);
+  assert.equal(uniqueLandClasses.size, 4);
+
+  const lavaAudio = getDiceAudioIdentity('lava_cube');
+  const electroAudio = getDiceAudioIdentity('electro_cube');
+  const tesseractAudio = getDiceAudioIdentity('tesseract_cube');
+  const cosmoAudio = getDiceAudioIdentity('cosmo_cube');
+  const classicAudio = getDiceAudioIdentity('classic_ivory');
+
+  assert.equal(lavaAudio.assetFolder, '/audio/ludo/lava/');
+  assert.equal(electroAudio.assetFolder, '/audio/ludo/electro/');
+  assert.equal(tesseractAudio.assetFolder, '/audio/ludo/tesseract/');
+  assert.equal(cosmoAudio.assetFolder, '/audio/ludo/cosmo/');
+  assert.equal(classicAudio.assetFolder, '/audio/ludo/classic/');
+
+  const uniqueRollProfiles = new Set([
+    lavaAudio.rollProfile,
+    electroAudio.rollProfile,
+    tesseractAudio.rollProfile,
+    cosmoAudio.rollProfile,
+    classicAudio.rollProfile,
+  ]);
+  const uniqueLandProfiles = new Set([
+    lavaAudio.landProfile,
+    electroAudio.landProfile,
+    tesseractAudio.landProfile,
+    cosmoAudio.landProfile,
+    classicAudio.landProfile,
+  ]);
+  assert.equal(uniqueRollProfiles.size, 5);
+  assert.equal(uniqueLandProfiles.size, 5);
+});
+
+test('26. Two-player matchmaking pairs 2 players and immediately terminates the entire match when either player leaves', () => {
+  let queue: MatchmakingQueueEntry[] = [];
+
+  const r1 = enqueueMatchmakingPlayer(queue, {
+    id: 'plr-a',
+    name: 'Player A',
+    avatar: 'crown',
+    targetPlayers: 2,
+    joinedAt: 1000,
+  });
+  assert.equal(r1.matchedEntries, null);
+  assert.equal(r1.bracketQueue.length, 1);
+  queue = r1.remainingQueue;
+
+  const r2 = enqueueMatchmakingPlayer(queue, {
+    id: 'plr-b',
+    name: 'Player B',
+    avatar: 'knight',
+    targetPlayers: 2,
+    joinedAt: 1005,
+  });
+  assert.ok(r2.matchedEntries);
+  assert.equal(r2.matchedEntries.length, 2);
+  assert.equal(r2.remainingQueue.length, 0);
+
+  const room = createMatchedOnlineRoom({
+    roomCode: 'DUEL2P',
+    matchedEntries: r2.matchedEntries,
+    targetPlayers: 2,
+  });
+  assert.equal(room.status, 'playing');
+  assert.equal(room.players.length, 2);
+  assert.deepEqual(
+    room.players.map((p) => p.color),
+    ['red', 'yellow']
+  );
+  assert.equal(countConnectedHumanPlayers(room.players), 2);
+
+  // Player A clicks Leave Room -> entire 2-player match terminates immediately
+  const resolution = resolvePlayerDeparture(room, 'plr-a');
+  assert.equal(resolution.action, 'terminate_match');
+  if (resolution.action === 'terminate_match') {
+    assert.equal(resolution.reasonCode, 'opponent_left_2p');
+    assert.equal(
+      resolution.notifyMessage,
+      'Your opponent has left the match. Returning to matchmaking.'
+    );
+    assert.equal(resolution.returnTo, 'matchmaking');
+    assert.equal(resolution.room.status, 'terminated');
+  }
+});
+
+test('27. Three-player matchmaking replaces a departed player with an AI Bot preserving seat/tokens, and terminates when only 1 human remains', () => {
+  const entries: MatchmakingQueueEntry[] = [
+    { id: 'plr-a', name: 'Player A', avatar: 'crown', targetPlayers: 3, joinedAt: 1 },
+    { id: 'plr-b', name: 'Player B', avatar: 'knight', targetPlayers: 3, joinedAt: 2 },
+    { id: 'plr-c', name: 'Player C', avatar: 'shield', targetPlayers: 3, joinedAt: 3 },
+  ];
+
+  let room = createMatchedOnlineRoom({
+    roomCode: 'TRIO3P',
+    matchedEntries: entries,
+    targetPlayers: 3,
+  });
+  assert.equal(room.players.length, 3);
+  assert.deepEqual(
+    room.players.map((p) => p.color),
+    ['red', 'green', 'yellow']
+  );
+
+  // Advance Player B's (green) token 0 to step 14 on the board before leaving
+  room.gameState!.players[1].tokens[0].steps = 14;
+  room.gameState!.players[1].capturesMade = 2;
+
+  // 1. Player B leaves -> replaced by AI Bot in exact seat ('green'), 2 humans remain (Player A & Player C)
+  const step1 = resolvePlayerDeparture(room, 'plr-b');
+  assert.equal(step1.action, 'replace_with_bot');
+  room = step1.room;
+
+  assert.equal(room.status, 'playing');
+  assert.equal(countConnectedHumanPlayers(room.players), 2);
+  const bSeat = room.players.find((p) => p.color === 'green')!;
+  assert.equal(bSeat.isAI, true);
+  assert.equal(bSeat.replacedByBot, true);
+  assert.equal(bSeat.connected, false);
+
+  const gsGreen = room.gameState!.players.find((p) => p.color === 'green')!;
+  assert.equal(gsGreen.type, 'ai');
+  assert.equal(gsGreen.replacedByBot, true);
+  assert.equal(gsGreen.tokens[0].steps, 14); // Board position preserved!
+  assert.equal(gsGreen.capturesMade, 2);
+
+  // Duplicate leave call for Player B is a safe no-op
+  const dup = resolvePlayerDeparture(room, 'plr-b');
+  assert.equal(dup.action, 'noop');
+
+  // 2. Player C subsequently leaves -> only 1 human (Player A) remains -> match terminates immediately!
+  const step2 = resolvePlayerDeparture(room, 'plr-c');
+  assert.equal(step2.action, 'terminate_match');
+  if (step2.action === 'terminate_match') {
+    assert.equal(step2.reasonCode, 'last_human_remaining');
+    assert.equal(step2.room.status, 'terminated');
+    assert.equal(countConnectedHumanPlayers(step2.room.players), 1);
+  }
+});
+
+test('28. Four-player matchmaking replaces sequential departed players with AI Bots and terminates when human count drops to 1', () => {
+  const entries: MatchmakingQueueEntry[] = [
+    { id: 'plr-a', name: 'Player A', avatar: 'crown', targetPlayers: 4, joinedAt: 1 },
+    { id: 'plr-b', name: 'Player B', avatar: 'knight', targetPlayers: 4, joinedAt: 2 },
+    { id: 'plr-c', name: 'Player C', avatar: 'shield', targetPlayers: 4, joinedAt: 3 },
+    { id: 'plr-d', name: 'Player D', avatar: 'falcon', targetPlayers: 4, joinedAt: 4 },
+  ];
+
+  let room = createMatchedOnlineRoom({
+    roomCode: 'SQUAD4',
+    matchedEntries: entries,
+    targetPlayers: 4,
+  });
+  assert.equal(countConnectedHumanPlayers(room.players), 4);
+
+  // Player B leaves -> replaced with bot (3 humans remain: A, C, D)
+  const rB = resolvePlayerDeparture(room, 'plr-b');
+  assert.equal(rB.action, 'replace_with_bot');
+  room = rB.room;
+  assert.equal(countConnectedHumanPlayers(room.players), 3);
+
+  // Player D leaves -> replaced with bot (2 humans remain: A, C)
+  const rD = resolvePlayerDeparture(room, 'plr-d');
+  assert.equal(rD.action, 'replace_with_bot');
+  room = rD.room;
+  assert.equal(countConnectedHumanPlayers(room.players), 2);
+  assert.equal(room.status, 'playing');
+
+  // Verify both B (green) and D (blue) are now AI bots in gameState
+  assert.equal(room.gameState!.players[1].type, 'ai');
+  assert.equal(room.gameState!.players[3].type, 'ai');
+  assert.equal(room.gameState!.players[0].type, 'human');
+  assert.equal(room.gameState!.players[2].type, 'human');
+
+  // Player C leaves -> only Player A remains as human (1 human) -> match terminates!
+  const rC = resolvePlayerDeparture(room, 'plr-c');
+  assert.equal(rC.action, 'terminate_match');
+  if (rC.action === 'terminate_match') {
+    assert.equal(rC.reasonCode, 'last_human_remaining');
+    assert.equal(rC.room.status, 'terminated');
+  }
+});
+
+test('29. Private room ("Play With Friends") handles guest departure cleanly and closes room when host leaves', () => {
+  let room = createPrivateLobbyRoom({
+    roomCode: 'PRIV01',
+    hostId: 'host-1',
+    hostName: 'Host',
+    hostAvatar: 'crown',
+  });
+  room.players.push({
+    id: 'guest-1',
+    name: 'Guest One',
+    avatar: 'knight',
+    color: 'green',
+    ready: true,
+    isHost: false,
+    isAI: false,
+    connected: true,
+  });
+  room.players.push({
+    id: 'guest-2',
+    name: 'Guest Two',
+    avatar: 'shield',
+    color: 'yellow',
+    ready: true,
+    isHost: false,
+    isAI: false,
+    connected: true,
+  });
+
+  // Non-host guest-1 leaves lobby -> removed from room, lobby stays open for Host + Guest Two
+  const guestLeave = resolvePlayerDeparture(room, 'guest-1');
+  assert.equal(guestLeave.action, 'remove_lobby_player');
+  room = guestLeave.room;
+  assert.equal(room.players.length, 2);
+  assert.equal(room.status, 'lobby');
+
+  // Host leaves lobby -> room closes immediately and notifies Guest Two
+  const hostLeave = resolvePlayerDeparture(room, 'host-1');
+  assert.equal(hostLeave.action, 'terminate_match');
+  if (hostLeave.action === 'terminate_match') {
+    assert.equal(hostLeave.reasonCode, 'host_left_private_room');
+    assert.equal(hostLeave.room.status, 'terminated');
+    assert.equal(hostLeave.returnTo, 'friends');
+  }
+});
+
+test('30. Matchmaking cancellation removes player from queue and prevents ghost matching', () => {
+  let queue: MatchmakingQueueEntry[] = [];
+
+  queue = enqueueMatchmakingPlayer(queue, {
+    id: 'p1',
+    name: 'One',
+    avatar: 'crown',
+    targetPlayers: 4,
+    joinedAt: 10,
+  }).remainingQueue;
+
+  queue = enqueueMatchmakingPlayer(queue, {
+    id: 'p2',
+    name: 'Two',
+    avatar: 'knight',
+    targetPlayers: 4,
+    joinedAt: 20,
+  }).remainingQueue;
+
+  assert.equal(queue.length, 2);
+
+  // Player p1 cancels matchmaking before 4 players are found
+  const cancelRes = removeMatchmakingPlayer(queue, 'p1');
+  assert.equal(cancelRes.removedEntry?.id, 'p1');
+  queue = cancelRes.remainingQueue;
+  assert.equal(queue.length, 1);
+  assert.equal(queue[0].id, 'p2');
+});
 
 

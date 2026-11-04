@@ -12,6 +12,7 @@ import { LudoBoard } from './components/Board/LudoBoard';
 import { GameHUD } from './components/GameHUD/GameHUD';
 import { MainMenu } from './components/MainMenu/MainMenu';
 import {
+  LeaveMatchConfirmModal,
   OnlineModal,
   PauseModal,
   RulesModal,
@@ -39,6 +40,7 @@ import {
   GameState,
   GridCoord,
   HouseRules,
+  MatchmakingPlayerCount,
   PlayerColor,
   PlayerConfig,
   PlayerStats,
@@ -48,6 +50,7 @@ import {
 import {
   multiplayerClient,
   OnlineRoomInfo,
+  QueuedPlayerSummary,
   ServerMessage,
 } from './services/multiplayer';
 import { soundManager } from './services/sound';
@@ -157,14 +160,26 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const [onlineRoom, setOnlineRoom] = useState<OnlineRoomInfo | null>(null);
   const [assignedColor, setAssignedColor] = useState<PlayerColor | null>(null);
   const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [onlineStatusNotice, setOnlineStatusNotice] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
+  const [inMatchBanner, setInMatchBanner] = useState<string | null>(null);
+  const [showLeaveMatchConfirm, setShowLeaveMatchConfirm] = useState(false);
+
   const [matchmakingStatus, setMatchmakingStatus] = useState<
     'idle' | 'searching' | 'matched'
   >('idle');
+  const [selectedMatchmakingCount, setSelectedMatchmakingCount] =
+    useState<MatchmakingPlayerCount>(2);
+  const [matchmakingFoundPlayers, setMatchmakingFoundPlayers] = useState(0);
+  const [queuedPlayers, setQueuedPlayers] = useState<QueuedPlayerSummary[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'connecting' | 'offline'
   >(() => multiplayerClient.getConnectionStatus());
 
   const recordedMatchIdRef = useRef<string | null>(null);
+  const bannerTimerRef = useRef<number | null>(null);
   const localRollStartTimeRef = useRef<number | null>(null);
   const rollTimerRef = useRef<number | null>(null);
   const lastAnimatedEventIdRef = useRef<string | null>(null);
@@ -175,6 +190,32 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const pendingGameStateRef = useRef<GameState | null>(null);
   const animatingMoveRef = useRef<{ tokenId: string; coord: GridCoord } | null>(null);
 
+  const showTransientMatchBanner = useCallback((text: string) => {
+    setInMatchBanner(text);
+    if (bannerTimerRef.current) {
+      window.clearTimeout(bannerTimerRef.current);
+    }
+    bannerTimerRef.current = window.setTimeout(() => {
+      setInMatchBanner(null);
+    }, 5500);
+  }, []);
+
+  const handleConfirmLeaveOnlineMatch = useCallback(() => {
+    soundManager.playClick();
+    const activeCode = onlineRoom?.roomCode || gameState.roomCode;
+    multiplayerClient.leaveRoom(activeCode);
+    setOnlineRoom(null);
+    setAssignedColor(null);
+    setMatchmakingStatus('idle');
+    setMatchmakingFoundPlayers(0);
+    setQueuedPlayers([]);
+    setShowLeaveMatchConfirm(false);
+    setInMatchBanner(null);
+    setOnlineError(null);
+    setActiveModal(null);
+    setShellState('title');
+  }, [onlineRoom, gameState.roomCode]);
+
   // Clean up any pending roll or step animations on unmount
   useEffect(() => {
     return () => {
@@ -183,6 +224,9 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       }
       if (stepIntervalRef.current) {
         window.clearInterval(stepIntervalRef.current);
+      }
+      if (bannerTimerRef.current) {
+        window.clearTimeout(bannerTimerRef.current);
       }
     };
   }, []);
@@ -446,6 +490,9 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         }
       } else if (msg.type === 'MATCHMAKING_STATUS') {
         setMatchmakingStatus(msg.status);
+        setSelectedMatchmakingCount(msg.targetPlayers);
+        setMatchmakingFoundPlayers(msg.foundPlayers);
+        setQueuedPlayers(msg.queuedPlayers || []);
         if (msg.status === 'matched' && msg.room) {
           setOnlineRoom(msg.room);
           if (msg.assignedColor) setAssignedColor(msg.assignedColor);
@@ -454,8 +501,38 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
               setGameState(msg.room.gameState);
             }
           }
+          setOnlineStatusNotice(null);
           setActiveModal(null);
           setShellState('playing');
+        }
+      } else if (msg.type === 'ROOM_LEFT') {
+        setOnlineRoom(null);
+        setAssignedColor(null);
+        setShowLeaveMatchConfirm(false);
+      } else if (msg.type === 'ROOM_NOTIFICATION') {
+        showTransientMatchBanner(msg.message);
+      } else if (msg.type === 'PLAYER_REPLACED_BY_BOT') {
+        showTransientMatchBanner(`🤖 ${msg.message}`);
+      } else if (msg.type === 'MATCH_TERMINATED') {
+        setOnlineRoom(null);
+        setAssignedColor(null);
+        setMatchmakingStatus('idle');
+        setMatchmakingFoundPlayers(0);
+        setQueuedPlayers([]);
+        setShowLeaveMatchConfirm(false);
+        setInMatchBanner(null);
+        setOnlineError(null);
+        setOnlineStatusNotice({
+          title: msg.title,
+          message: msg.message,
+        });
+        setShellState('title');
+        if (msg.returnTo === 'matchmaking') {
+          setActiveModal('online_matchmaking');
+        } else if (msg.returnTo === 'friends') {
+          setActiveModal('online_friends');
+        } else {
+          setActiveModal(null);
         }
       } else if (msg.type === 'ERROR') {
         setOnlineError(msg.message);
@@ -468,7 +545,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       }
     });
     return unsubscribe;
-  }, [triggerOnlineDiceRollAnimation, settings.reducedMotion]);
+  }, [triggerOnlineDiceRollAnimation, settings.reducedMotion, showTransientMatchBanner]);
 
   // Start a quick 4-player match vs AI immediately
   const handleQuickPlay = useCallback(() => {
@@ -959,14 +1036,18 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           onOpenOnlineRoom={() => {
             soundManager.playClick();
             setOnlineError(null);
+            setOnlineStatusNotice(null);
             multiplayerClient.connect();
             setActiveModal('online_friends');
           }}
           onOpenMatchmaking={() => {
             soundManager.playClick();
             setOnlineError(null);
-            setMatchmakingStatus('searching');
-            multiplayerClient.joinMatchmaking(profile.nickname, profile.avatar);
+            setOnlineStatusNotice(null);
+            setMatchmakingStatus('idle');
+            setMatchmakingFoundPlayers(0);
+            setQueuedPlayers([]);
+            multiplayerClient.connect();
             setActiveModal('online_matchmaking');
           }}
           onOpenRules={() => {
@@ -985,7 +1066,25 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         />
       ) : (
         /* Full-Viewport Game Shell (Zero-Scroll Portrait & Landscape Layout) */
-        <main className="h-[100dvh] w-full overflow-hidden flex flex-col landscape:flex-row lg:flex-row items-center justify-between landscape:justify-center lg:justify-center gap-2 sm:gap-3 lg:gap-6 px-2.5 py-2 sm:px-4 sm:py-3 lg:p-6 max-w-[1440px] mx-auto">
+        <main className="relative h-[100dvh] w-full overflow-hidden flex flex-col landscape:flex-row lg:flex-row items-center justify-between landscape:justify-center lg:justify-center gap-2 sm:gap-3 lg:gap-6 px-2.5 py-2 sm:px-4 sm:py-3 lg:p-6 max-w-[1440px] mx-auto">
+          {/* Live Online Notification Toast Banner (Bot Replacement / Player Left) */}
+          {inMatchBanner && (
+            <div
+              data-testid="in-match-notification-banner"
+              className="fixed top-3 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-amber-400/60 text-amber-200 text-xs sm:text-sm font-display font-bold shadow-2xl flex items-center gap-2.5 max-w-[92vw]"
+            >
+              <span>{inMatchBanner}</span>
+              <button
+                type="button"
+                onClick={() => setInMatchBanner(null)}
+                aria-label="Dismiss Notification"
+                className="text-slate-400 hover:text-white text-xs font-bold px-1.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           <div className="flex-1 flex items-center justify-center w-full min-h-0 min-w-0">
             {(() => {
               const activePlayer =
@@ -1077,7 +1176,16 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             onOpenRules={() => setActiveModal('rules')}
             onPause={() => setShellState('paused')}
             onRestart={handleRestartMatch}
-            onRequestExit={() => setShellState('paused')}
+            onRequestExit={() => {
+              if (
+                gameState.mode === 'friends' ||
+                gameState.mode === 'matchmaking'
+              ) {
+                setShowLeaveMatchConfirm(true);
+              } else {
+                setShellState('paused');
+              }
+            }}
           />
         </main>
       )}
@@ -1086,9 +1194,21 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       {shellState === 'paused' && (
         <PauseModal
           turnNumber={gameState.turnNumber}
+          isOnline={
+            gameState.mode === 'friends' || gameState.mode === 'matchmaking'
+          }
+          roomCode={onlineRoom?.roomCode || gameState.roomCode}
           onResume={() => setShellState('playing')}
           onRestart={handleRestartMatch}
+          onRequestLeaveOnlineMatch={() => setShowLeaveMatchConfirm(true)}
           onSaveAndExit={() => {
+            if (
+              gameState.mode === 'friends' ||
+              gameState.mode === 'matchmaking'
+            ) {
+              setShowLeaveMatchConfirm(true);
+              return;
+            }
             saveActiveGame(gameState);
             setSavedGame(loadSavedGame());
             setShellState('title');
@@ -1097,11 +1217,36 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         />
       )}
 
+      {showLeaveMatchConfirm && (
+        <LeaveMatchConfirmModal
+          onStayInMatch={() => setShowLeaveMatchConfirm(false)}
+          onConfirmLeaveMatch={handleConfirmLeaveOnlineMatch}
+        />
+      )}
+
       {shellState === 'gameover' && (
         <VictoryModal
           gameState={gameState}
-          onPlayAgain={handleRestartMatch}
-          onMainMenu={() => setShellState('title')}
+          onPlayAgain={() => {
+            if (
+              gameState.mode === 'friends' ||
+              gameState.mode === 'matchmaking'
+            ) {
+              handleConfirmLeaveOnlineMatch();
+              return;
+            }
+            handleRestartMatch();
+          }}
+          onMainMenu={() => {
+            if (
+              gameState.mode === 'friends' ||
+              gameState.mode === 'matchmaking'
+            ) {
+              handleConfirmLeaveOnlineMatch();
+              return;
+            }
+            setShellState('title');
+          }}
           onExitWebLab={onExit}
         />
       )}
@@ -1138,11 +1283,34 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           room={onlineRoom}
           assignedColor={assignedColor}
           errorMessage={onlineError}
+          statusNotice={onlineStatusNotice}
+          onDismissNotice={() => setOnlineStatusNotice(null)}
           matchmakingStatus={matchmakingStatus}
-          connectionStatus={connectionStatus}
-          backendStatus={multiplayerClient.getBackendStatus()}
+          selectedPlayerCount={selectedMatchmakingCount}
+          matchmakingFoundPlayers={matchmakingFoundPlayers}
+          queuedPlayers={queuedPlayers}
+          onSelectPlayerCount={(count) => setSelectedMatchmakingCount(count)}
+          onFindMatch={(count) => {
+            setOnlineError(null);
+            setOnlineStatusNotice(null);
+            setMatchmakingStatus('searching');
+            setMatchmakingFoundPlayers(1);
+            setQueuedPlayers([
+              {
+                id: profile.nickname,
+                name: profile.nickname,
+                avatar: profile.avatar,
+              },
+            ]);
+            multiplayerClient.joinMatchmaking(
+              profile.nickname,
+              profile.avatar,
+              count
+            );
+          }}
           onCreateRoom={() => {
             setOnlineError(null);
+            setOnlineStatusNotice(null);
             multiplayerClient.createRoom(
               profile.nickname,
               profile.avatar,
@@ -1151,6 +1319,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           }}
           onJoinRoom={(code) => {
             setOnlineError(null);
+            setOnlineStatusNotice(null);
             multiplayerClient.joinRoom(code, profile.nickname, profile.avatar);
           }}
           onAddBot={() => {
@@ -1182,7 +1351,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             pendingGameStateRef.current = null;
             localRollStartTimeRef.current = null;
             setIsRolling(false);
-            multiplayerClient.leaveRoom();
+            multiplayerClient.leaveRoom(onlineRoom?.roomCode);
             setOnlineRoom(null);
             setOnlineError(null);
           }}
@@ -1202,18 +1371,18 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             setIsRolling(false);
             multiplayerClient.leaveMatchmaking();
             setMatchmakingStatus('idle');
+            setMatchmakingFoundPlayers(0);
+            setQueuedPlayers([]);
             setActiveModal(null);
-          }}
-          onRetryMatchmaking={() => {
-            setOnlineError(null);
-            setMatchmakingStatus('searching');
-            multiplayerClient.joinMatchmaking(profile.nickname, profile.avatar);
           }}
           onClose={() => {
             if (activeModal === 'online_matchmaking') {
               multiplayerClient.leaveMatchmaking();
               setMatchmakingStatus('idle');
+              setMatchmakingFoundPlayers(0);
+              setQueuedPlayers([]);
             }
+            setOnlineStatusNotice(null);
             setActiveModal(null);
           }}
         />

@@ -4,7 +4,19 @@
  * with a resilient in-memory fallback for local development or when credentials are not yet configured.
  */
 
-import { GameState, HouseRules, PlayerColor } from '../game/gameTypes';
+import {
+  GameState,
+  HouseRules,
+  MatchLifecycleState,
+  MatchmakingPlayerCount,
+  PlayerColor,
+} from '../game/gameTypes';
+
+export interface BackendStatusInfo {
+  type: 'upstash' | 'memory';
+  configured: boolean;
+  description: string;
+}
 
 export interface RoomPlayer {
   id: string;
@@ -15,16 +27,23 @@ export interface RoomPlayer {
   isHost: boolean;
   isAI: boolean;
   connected: boolean;
-  lastSeen: number;
+  lastSeen?: number;
+  replacedByBot?: boolean;
+  originalHumanName?: string;
 }
 
 export interface ServerRoom {
   roomCode: string;
+  roomType?: 'friends' | 'matchmaking';
+  targetPlayers?: MatchmakingPlayerCount;
   hostId: string;
-  status: 'lobby' | 'playing' | 'finished';
+  status: 'lobby' | 'playing' | 'finished' | 'terminated';
+  lifecycle?: MatchLifecycleState;
+  humanCount?: number;
   players: RoomPlayer[];
   rules: HouseRules;
   gameState: GameState | null;
+  terminatedReason?: string;
   updatedAt: number;
   version: number;
 }
@@ -33,6 +52,7 @@ export interface MatchmakingTicket {
   id: string;
   name: string;
   avatar: string;
+  targetPlayers: MatchmakingPlayerCount;
   timestamp: number;
 }
 
@@ -42,8 +62,14 @@ export interface MatchedClientRecord {
   matchedAt: number;
 }
 
+export interface QueuedPlayerSummary {
+  id: string;
+  name: string;
+  avatar: string;
+}
+
 export type ServerMessage =
-  | { type: 'WELCOME'; clientId: string; onlineCount: number }
+  | { type: 'WELCOME'; clientId: string; onlineCount: number; backend?: BackendStatusInfo }
   | { type: 'ROOM_UPDATED'; room: ServerRoom; assignedColor: PlayerColor }
   | { type: 'GAME_STATE_SYNC'; gameState: GameState }
   | {
@@ -61,7 +87,34 @@ export type ServerMessage =
       reachesHome: boolean;
       gameState: GameState;
     }
-  | { type: 'MATCHMAKING_STATUS'; status: 'searching' | 'matched'; queueSize: number }
+  | {
+      type: 'MATCHMAKING_STATUS';
+      status: 'idle' | 'searching' | 'matched';
+      targetPlayers: MatchmakingPlayerCount;
+      foundPlayers: number;
+      queueSize: number;
+      queuedPlayers: QueuedPlayerSummary[];
+      room?: ServerRoom;
+      assignedColor?: PlayerColor;
+    }
+  | { type: 'ROOM_LEFT'; roomCode: string }
+  | { type: 'ROOM_NOTIFICATION'; message: string }
+  | {
+      type: 'PLAYER_REPLACED_BY_BOT';
+      playerName: string;
+      color: PlayerColor;
+      remainingHumans: number;
+      message: string;
+    }
+  | {
+      type: 'MATCH_TERMINATED';
+      roomCode: string;
+      reasonCode: string;
+      title: string;
+      message: string;
+      returnTo: 'matchmaking' | 'friends' | 'title';
+    }
+  | { type: 'CONNECTION_STATUS'; status: 'connected' | 'connecting' | 'offline' }
   | { type: 'ERROR'; message: string };
 
 type EventListener = (msg: ServerMessage) => void;
@@ -240,34 +293,52 @@ class MultiplayerStore {
     return memoryMatchmakingQueue.length;
   }
 
-  public async dequeueMatchmakingPair(): Promise<[MatchmakingTicket, MatchmakingTicket] | null> {
+  public async getMatchmakingBracket(
+    targetPlayers: MatchmakingPlayerCount
+  ): Promise<MatchmakingTicket[]> {
     const now = Date.now();
-    // Filter fresh tickets
-    const validTickets = memoryMatchmakingQueue.filter(
-      (t) => now - t.timestamp <= 120000
+    return memoryMatchmakingQueue.filter(
+      (t) => t.targetPlayers === targetPlayers && now - t.timestamp <= 120000
+    );
+  }
+
+  public async dequeueMatchmakingGroup(
+    targetPlayers: MatchmakingPlayerCount
+  ): Promise<MatchmakingTicket[] | null> {
+    const now = Date.now();
+    const valid = memoryMatchmakingQueue.filter(
+      (t) => t.targetPlayers === targetPlayers && now - t.timestamp <= 120000
     );
 
-    // Find two distinct players
-    if (validTickets.length >= 2) {
-      const p1 = validTickets[0];
-      const p2 = validTickets.find((t) => t.id !== p1.id);
-
-      if (p2) {
-        // Remove both from queue
-        const idx1 = memoryMatchmakingQueue.indexOf(p1);
-        if (idx1 !== -1) memoryMatchmakingQueue.splice(idx1, 1);
-        const idx2 = memoryMatchmakingQueue.indexOf(p2);
-        if (idx2 !== -1) memoryMatchmakingQueue.splice(idx2, 1);
-
-        if (this.isUpstashConfigured()) {
-          await this.executeRedisCommand(['DEL', `ludo:ticket:${p1.id}`]);
-          await this.executeRedisCommand(['DEL', `ludo:ticket:${p2.id}`]);
-        }
-
-        return [p1, p2];
+    // Group distinct player IDs
+    const distinct: MatchmakingTicket[] = [];
+    const seen = new Set<string>();
+    for (const t of valid) {
+      if (!seen.has(t.id)) {
+        seen.add(t.id);
+        distinct.push(t);
+        if (distinct.length === targetPlayers) break;
       }
     }
 
+    if (distinct.length >= targetPlayers) {
+      for (const t of distinct) {
+        const idx = memoryMatchmakingQueue.indexOf(t);
+        if (idx !== -1) memoryMatchmakingQueue.splice(idx, 1);
+        if (this.isUpstashConfigured()) {
+          await this.executeRedisCommand(['DEL', `ludo:ticket:${t.id}`]);
+        }
+      }
+      return distinct;
+    }
+    return null;
+  }
+
+  public async dequeueMatchmakingPair(): Promise<[MatchmakingTicket, MatchmakingTicket] | null> {
+    const group = await this.dequeueMatchmakingGroup(2);
+    if (group && group.length === 2) {
+      return [group[0], group[1]];
+    }
     return null;
   }
 

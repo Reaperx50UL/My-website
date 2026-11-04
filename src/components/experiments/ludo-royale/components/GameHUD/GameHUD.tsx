@@ -79,21 +79,24 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <aside
       aria-label="Game Controls and Player Status"
-      className="relative flex flex-col justify-between gap-2 sm:gap-2.5 lg:gap-3 w-full landscape:w-[330px] md:landscape:w-[360px] lg:w-[380px] xl:w-[400px] shrink-0 bg-[#111827] border border-slate-800/90 rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 lg:p-4 shadow-2xl"
+      className="relative flex flex-col justify-between gap-2 sm:gap-2.5 lg:gap-3 w-full landscape:w-[330px] md:landscape:w-[360px] lg:w-[385px] lg:landscape:w-[385px] xl:w-[405px] xl:landscape:w-[405px] shrink-0 bg-[#111827] border border-slate-800/90 rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 lg:p-4 shadow-2xl"
     >
       {/* Top Bar: Turn Counter & Quick Utility Controls */}
-      <div className="flex items-center justify-between gap-2 pb-1.5 sm:pb-2 border-b border-slate-800">
-        <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex items-center justify-between gap-1.5 pb-1.5 sm:pb-2 border-b border-slate-800">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className="text-xs font-mono-tabular font-semibold text-slate-200 whitespace-nowrap shrink-0">
             Turn {Math.round(gameState.turnNumber)}
           </span>
           {gameState.roomCode && (
             <>
-              <span aria-hidden="true" className="text-slate-600">
+              <span aria-hidden="true" className="text-slate-600 shrink-0">
                 ·
               </span>
-              <span className="text-xs font-mono-tabular text-amber-300 whitespace-nowrap shrink-0">
-                Room {gameState.roomCode}
+              <span
+                title={`Online Room ${gameState.roomCode}`}
+                className="text-[11px] font-mono-tabular font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0"
+              >
+                #{gameState.roomCode}
               </span>
             </>
           )}
@@ -111,12 +114,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               }}
               aria-label={`Switch Board & Token Theme (Current: ${activeBoardTheme.label})`}
               title={`Board: ${activeBoardTheme.label} · Token: ${activeBoardTheme.tokenStyleLabel} (Click to switch)`}
-              className="h-8 px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-amber-300 flex items-center gap-1 text-[10px] font-semibold transition-colors cursor-pointer"
+              className={`${
+                isOnline ? 'w-7 h-7 justify-center' : 'h-8 px-2'
+              } rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-amber-300 flex items-center gap-1 text-[10px] font-semibold transition-colors cursor-pointer`}
             >
               <Palette className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden xl:inline max-w-[78px] truncate">
-                {activeBoardTheme.label}
-              </span>
+              {!isOnline && (
+                <span className="hidden xl:inline max-w-[78px] truncate">
+                  {activeBoardTheme.label}
+                </span>
+              )}
             </button>
           )}
           <button
@@ -128,12 +135,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label={settings.soundEnabled ? 'Mute Audio [M]' : 'Unmute Audio [M]'}
             title={settings.soundEnabled ? 'Mute Audio [M]' : 'Unmute Audio [M]'}
-            className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            className={`${
+              isOnline ? 'w-7 h-7' : 'w-8 h-8'
+            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
           >
             {settings.soundEnabled ? (
-              <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Volume2 className="w-3.5 h-3.5" />
             ) : (
-              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
+              <VolumeX className="w-3.5 h-3.5 text-slate-500" />
             )}
           </button>
 
@@ -146,9 +155,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label="Toggle Match Chronicle Log"
             title="Match Chronicle Log"
-            className="lg:hidden w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            className={`lg:hidden ${
+              isOnline ? 'w-7 h-7' : 'w-8 h-8'
+            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
           >
-            <ScrollText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <ScrollText className="w-3.5 h-3.5" />
           </button>
 
           <button
@@ -160,9 +171,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label="Game Rules [H]"
             title="Game Rules [H]"
-            className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            className={`${
+              isOnline ? 'w-7 h-7' : 'w-8 h-8'
+            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
           >
-            <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <HelpCircle className="w-3.5 h-3.5" />
           </button>
 
           {!isOnline && (
@@ -190,24 +203,44 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label="Pause Game [P]"
             title="Pause Game [P]"
-            className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+            className={`${
+              isOnline ? 'w-7 h-7' : 'w-8 h-8'
+            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
           >
-            <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Pause className="w-3.5 h-3.5" />
           </button>
 
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onRequestExit();
-            }}
-            aria-label="Exit Match"
-            title="Exit Match"
-            className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
+          {isOnline ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              data-testid="hud-leave-room-btn"
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onRequestExit();
+              }}
+              aria-label="Leave Room"
+              title="Leave Online Room"
+              className="h-7 px-2.5 rounded-lg bg-rose-950/85 hover:bg-rose-900 border border-rose-500/50 text-rose-200 flex items-center gap-1 text-[11px] font-display font-bold transition-colors cursor-pointer shrink-0 shadow-sm"
+            >
+              <LogOut className="w-3 h-3 shrink-0" />
+              <span>Leave Room</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onRequestExit();
+              }}
+              aria-label="Exit Match"
+              title="Exit Match"
+              className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -237,6 +270,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           return (
             <div
               key={player.color}
+              data-testid={`hud-player-card-${player.color}`}
               className={`flex flex-col justify-between p-1.5 sm:p-2 lg:p-2.5 rounded-xl border transition-all ${
                 isTurn
                   ? 'bg-slate-800/95 border-slate-500 shadow-lg'
@@ -272,15 +306,32 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                       <span className="block text-[11px] lg:text-xs font-bold text-slate-100 truncate">
                         {player.name}
                       </span>
-                      {player.type === 'ai' && (
-                        <span className="px-1 py-0.2 rounded bg-indigo-500/25 border border-indigo-400/40 text-[8px] font-bold uppercase tracking-wider text-indigo-200 shrink-0">
-                          AI
+                      {player.replacedByBot ? (
+                        <span
+                          data-testid={`bot-badge-${player.color}`}
+                          title={`${player.originalHumanName || player.name} left — AI Bot is now controlling this seat`}
+                          className="px-1.5 py-0.2 rounded bg-amber-500/25 border border-amber-400/60 text-[8px] font-extrabold uppercase tracking-wider text-amber-200 shrink-0"
+                        >
+                          BOT
                         </span>
+                      ) : (
+                        player.type === 'ai' && (
+                          <span
+                            data-testid={`bot-badge-${player.color}`}
+                            className="px-1 py-0.2 rounded bg-indigo-500/25 border border-indigo-400/40 text-[8px] font-bold uppercase tracking-wider text-indigo-200 shrink-0"
+                          >
+                            AI
+                          </span>
+                        )
                       )}
                     </div>
                     <span className="hidden lg:block text-[10px] text-slate-400 truncate">
                       {meta.symbol} {territoryLabel}
-                      {player.type === 'ai' ? ` · ${player.aiDifficulty || 'medium'}` : ''}
+                      {player.replacedByBot
+                        ? ' · AI Bot Takeover'
+                        : player.type === 'ai'
+                        ? ` · ${player.aiDifficulty || 'medium'}`
+                        : ''}
                     </span>
                   </div>
                 </div>
@@ -384,12 +435,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                       className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-800/95 hover:bg-slate-700 border border-slate-700 hover:border-amber-400/60 text-xs font-semibold text-slate-100 transition-colors text-left truncate cursor-pointer"
                     >
                       <span
-                        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black text-white shrink-0 border border-white/30 font-mono-tabular"
+                        className="inline-flex items-center justify-center px-1.5 h-5 rounded-md text-[11px] font-black text-white shrink-0 border border-white/40 font-mono-tabular shadow-sm"
                         style={{
                           backgroundColor: COLOR_META[activePlayer.color].primaryHex,
                         }}
                       >
-                        {tokenNumber}
+                        #{tokenNumber}
                       </span>
                       <span className="truncate font-mono-tabular">
                         {actionText}

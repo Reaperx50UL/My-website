@@ -201,10 +201,12 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   onSelectToken,
 }) => {
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
+  const [inspectedTokenId, setInspectedTokenId] = useState<string | null>(null);
   const [captureBursts, setCaptureBursts] = useState<BurstEffect[]>([]);
   const [homeBursts, setHomeBursts] = useState<BurstEffect[]>([]);
 
   const prevTokensRef = useRef<Record<string, Token>>({});
+  const inspectTimerRef = useRef<number | null>(null);
 
   const themeConfig = useMemo(() => getBoardThemeOption(theme), [theme]);
   const effectiveThemeId = themeConfig.id;
@@ -296,7 +298,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
       }
     >();
 
-    for (const [, group] of Array.from(grouped.entries())) {
+    grouped.forEach((group: Token[]) => {
       group.sort((a: Token, b: Token) => {
         const aLegal = legalMoveByTokenId.has(a.id) ? 1 : 0;
         const bLegal = legalMoveByTokenId.has(b.id) ? 1 : 0;
@@ -331,7 +333,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           });
         }
       });
-    }
+    });
 
     return result;
   }, [allTokens, legalMoveByTokenId]);
@@ -3808,29 +3810,41 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           />
         )}
 
-        {/* 7. 3D Engraved Token Number Medallion (`1`, `2`, `3`, `4`) on Chest */}
+        {/* 7. Large High-Contrast 3D Token Number Medallion (`1`, `2`, `3`, `4`) on Chest */}
         <g transform="translate(0, -1)" data-testid={`token-number-${tokenId}`}>
           <circle
             cx={0}
-            cy={1.4}
-            r={11.8}
-            fill="rgba(0, 0, 0, 0.8)"
+            cy={2}
+            r={isLegal ? 17.8 : 16.5}
+            fill="rgba(0, 0, 0, 0.88)"
           />
           <circle
             cx={0}
             cy={0}
-            r={11.2}
-            fill="#060A17"
-            stroke={isLegal ? '#FFFFFF' : palette.trimLight}
-            strokeWidth={isLegal ? 2.4 : 1.8}
+            r={isLegal ? 16.8 : 15.5}
+            fill="#050914"
+            stroke={isLegal ? '#FEF08A' : palette.specHighlight}
+            strokeWidth={isLegal ? 3.2 : 2.4}
+          />
+          <circle
+            cx={0}
+            cy={0}
+            r={isLegal ? 13.8 : 12.6}
+            fill={palette.abyssMetal}
+            stroke={palette.lightMetal}
+            strokeWidth={1.1}
+            strokeDasharray={isLegal ? '3 2.5' : undefined}
           />
           <text
             x={0}
-            y={0.8}
+            y={1}
             textAnchor="middle"
             dominantBaseline="central"
             fill={isLegal ? '#FEF08A' : '#FFFFFF'}
-            fontSize="14"
+            stroke="#020617"
+            strokeWidth={3.4}
+            paintOrder="stroke"
+            fontSize={isLegal ? '22' : '20'}
             fontWeight="900"
             className="font-mono-tabular"
           >
@@ -3842,14 +3856,14 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   };
 
   /**
-   * Renders Ground Trajectory Paths & Target Reticle Rings beneath the tokens.
+   * Renders Animated Dotted Ground Trajectory Paths & Rotating Dotted Target Reticle Rings beneath the tokens.
    */
   const renderMoveTrajectoriesAndReticles = () => {
     if (!showMoveHints || moveIndicators.length === 0) return null;
 
     return (
       <g className="pointer-events-none" data-testid="board-move-trajectories">
-        {/* 1. Trajectory Paths connecting each playable token to its target square */}
+        {/* 1. Animated Marching Dotted Trajectory Paths connecting each playable token to its target square */}
         {moveIndicators.map((ind) => {
           const isHovered =
             hoveredTokenId === ind.tokenId || selectedTokenId === ind.tokenId;
@@ -3863,54 +3877,105 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           const polylineStr = allPts.map((p) => `${p.x},${p.y}`).join(' ');
 
           const strokeColor = ind.capturesOpponent
-            ? '#EF4444'
+            ? '#F87171'
             : ind.reachesHome
             ? '#FDE047'
             : palette.specHighlight;
+          const glowColor = ind.capturesOpponent
+            ? '#EF4444'
+            : ind.reachesHome
+            ? '#F59E0B'
+            : COLOR_META[ind.color].primaryHex;
 
           return (
             <g
               key={`traj-${ind.tokenId}`}
-              opacity={isDimmed ? 0.28 : isHovered ? 1 : 0.82}
+              opacity={isDimmed ? 0.25 : isHovered ? 1 : 0.92}
               data-testid={`move-path-${ind.tokenId}`}
             >
-              {/* Outer dark shadow path for high contrast on any tile */}
+              {/* Soft Luminous Ground Path Aura */}
               <polyline
                 points={polylineStr}
                 fill="none"
-                stroke="rgba(2, 6, 23, 0.88)"
-                strokeWidth={isHovered ? 9.5 : 7}
+                stroke={glowColor}
+                strokeWidth={isHovered ? 18 : 13}
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                opacity={isHovered ? 0.34 : 0.22}
               />
-              {/* Luminous dashed trajectory line */}
+              {/* Dark Contrast Drop-Shadow Dots */}
+              <polyline
+                points={polylineStr}
+                fill="none"
+                stroke="rgba(2, 6, 23, 0.92)"
+                strokeWidth={isHovered ? 13.5 : 11}
+                strokeDasharray="1 21"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={reducedMotion ? '' : 'animate-dotted-path-flow'}
+              />
+              {/* Primary Animated Marching Glowing Dots */}
               <polyline
                 points={polylineStr}
                 fill="none"
                 stroke={strokeColor}
-                strokeWidth={isHovered ? 5.2 : 3.8}
-                strokeDasharray={isHovered ? '14 8' : '10 8'}
+                strokeWidth={isHovered ? 10 : 8}
+                strokeDasharray="1 21"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                className={reducedMotion ? '' : 'animate-dotted-path-flow'}
               />
-              {/* Intermediate step breadcrumbs when hovered or single move */}
-              {(isHovered || moveIndicators.length === 1) &&
-                stepPts.slice(0, -1).map((pt, sIdx) => (
+              {/* Specular White-Hot Core Dots Marching in Sync */}
+              <polyline
+                points={polylineStr}
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth={isHovered ? 4.6 : 3.4}
+                strokeDasharray="1 21"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={reducedMotion ? '' : 'animate-dotted-path-flow'}
+              />
+              {/* Pulsing Step Waypoint Orbs on Every Intermediate Tile */}
+              {stepPts.slice(0, -1).map((pt, sIdx) => (
+                <g
+                  key={sIdx}
+                  transform={`translate(${pt.x}, ${pt.y})`}
+                  className={reducedMotion ? '' : 'animate-step-dot-wave'}
+                  style={
+                    reducedMotion
+                      ? undefined
+                      : { animationDelay: `${sIdx * 110}ms` }
+                  }
+                >
                   <circle
-                    key={sIdx}
-                    cx={pt.x}
-                    cy={pt.y}
-                    r={6}
+                    cx={0}
+                    cy={0}
+                    r={isHovered ? 10.5 : 8.5}
+                    fill={glowColor}
+                    opacity={0.38}
+                  />
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={isHovered ? 7.2 : 5.8}
                     fill={strokeColor}
                     stroke="#020617"
-                    strokeWidth={1.6}
+                    strokeWidth={2}
                   />
-                ))}
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={isHovered ? 3.2 : 2.5}
+                    fill="#FFFFFF"
+                  />
+                </g>
+              ))}
             </g>
           );
         })}
 
-        {/* 2. Ground Target Reticle Rings on Destination Squares */}
+        {/* 2. Animated Dotted Target Reticle Rings on Destination Squares */}
         {moveIndicators.map((ind) => {
           if (ind.sharedTargetIndex !== 0) return null;
           const isHovered =
@@ -3935,33 +4000,74 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             <g
               key={`reticle-${ind.tokenId}`}
               transform={`translate(${destPt.x}, ${destPt.y})`}
-              opacity={isDimmed ? 0.35 : 1}
+              opacity={isDimmed ? 0.32 : 1}
             >
+              {/* Expanding Target Shockwave Ripple */}
+              <circle
+                cx={0}
+                cy={0}
+                r={isHovered ? 40 : 36}
+                fill="none"
+                stroke={borderHex}
+                strokeWidth={3.5}
+                className={reducedMotion ? '' : 'animate-target-ripple'}
+              />
+              {/* Soft Glowing Landing Pad Fill */}
               <circle
                 cx={0}
                 cy={0}
                 r={isHovered ? 38 : 34}
                 fill={badgeColor}
-                opacity={0.25}
+                opacity={0.28}
                 className="animate-token-pulse"
               />
+              {/* Outer Clockwise Rotating Dotted Ring */}
+              <g className={reducedMotion ? '' : 'animate-orbit-cw-fast'}>
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={isHovered ? 36 : 32.5}
+                  fill="none"
+                  stroke="#020617"
+                  strokeWidth={isHovered ? 8.5 : 7}
+                  strokeDasharray="1 14"
+                  strokeLinecap="round"
+                />
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={isHovered ? 36 : 32.5}
+                  fill="none"
+                  stroke={borderHex}
+                  strokeWidth={isHovered ? 5.8 : 4.6}
+                  strokeDasharray="1 14"
+                  strokeLinecap="round"
+                />
+              </g>
+              {/* Inner Counter-Clockwise Dotted Ring */}
+              <g className={reducedMotion ? '' : 'animate-orbit-ccw'}>
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={isHovered ? 23 : 20}
+                  fill="none"
+                  stroke="#FFFFFF"
+                  strokeWidth={3.2}
+                  strokeDasharray="1 11"
+                  strokeLinecap="round"
+                  opacity={0.9}
+                />
+              </g>
+              {/* Central Target Bullseye Core */}
               <circle
                 cx={0}
                 cy={0}
-                r={isHovered ? 35 : 31}
-                fill="none"
-                stroke={borderHex}
-                strokeWidth={isHovered ? 4 : 3.2}
-                strokeDasharray="10 6"
-              />
-              <circle
-                cx={0}
-                cy={0}
-                r={9.5}
+                r={10.5}
                 fill={badgeColor}
                 stroke="#FFFFFF"
-                strokeWidth={2.2}
+                strokeWidth={2.5}
               />
+              <circle cx={0} cy={0} r={4.2} fill="#FFFFFF" />
             </g>
           );
         })}
@@ -3970,7 +4076,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   };
 
   /**
-   * Renders Floating Numbered Destination Badges (`→#1`, `→#2`, `⚔#3`, `👑#4`)
+   * Renders Floating Animated Numbered Destination Badges (`→ #1`, `⚔ #2`, `👑 #3`)
    * ON TOP of the tokens layer so they are never occluded by opponent pawns on capture squares.
    */
   const renderMoveDestinationBadges = () => {
@@ -3990,7 +4096,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             ? '#DC2626'
             : ind.reachesHome
             ? '#D97706'
-            : '#070B19';
+            : '#060B19';
           const borderHex = ind.capturesOpponent
             ? '#FEF08A'
             : ind.reachesHome
@@ -3998,7 +4104,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             : palette.specHighlight;
 
           // Stagger horizontally when multiple tokens share the same target square
-          const spreadWidth = 48;
+          const spreadWidth = 58;
           const badgeOffsetX =
             ind.sharedTargetCount > 1
               ? (ind.sharedTargetIndex - (ind.sharedTargetCount - 1) / 2) *
@@ -4006,10 +4112,10 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               : 0;
           // Elevate higher when capturing an opponent token so the badge floats clearly above the opponent pawn's head
           const badgeOffsetY = ind.capturesOpponent
-            ? -50
+            ? -56
             : ind.sharedTargetCount > 1
-            ? -28
-            : -22;
+            ? -34
+            : -28;
 
           return (
             <g
@@ -4029,46 +4135,220 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             >
               {/* Generous clickable hitbox on the destination square */}
               {ind.sharedTargetCount === 1 && (
-                <circle cx={0} cy={0} r={34} fill="transparent" />
+                <circle cx={0} cy={0} r={38} fill="transparent" />
               )}
 
-              {/* Floating 3D Numbered Token Destination Pill (`→#1`, `⚔#2`, `👑#3`) */}
+              {/* Floating Animated 3D Numbered Token Destination Pill (`→ #1`, `⚔ #2`, `👑 #3`) */}
               <g transform={`translate(${badgeOffsetX}, ${badgeOffsetY})`}>
+                <g className={reducedMotion ? '' : 'animate-token-popup-float'}>
+                  <rect
+                    x={-38}
+                    y={-20}
+                    width={76}
+                    height={38}
+                    rx={19}
+                    fill="rgba(0, 0, 0, 0.92)"
+                    transform="translate(2, 4)"
+                  />
+                  <rect
+                    x={-38}
+                    y={-20}
+                    width={76}
+                    height={38}
+                    rx={19}
+                    fill={badgeColor}
+                    stroke={borderHex}
+                    strokeWidth={isHovered ? 3.8 : 2.8}
+                  />
+                  {/* Dotted inner accent frame */}
+                  <rect
+                    x={-33}
+                    y={-15}
+                    width={66}
+                    height={28}
+                    rx={14}
+                    fill="none"
+                    stroke={borderHex}
+                    strokeWidth={1.5}
+                    strokeDasharray="2.5 4"
+                    opacity={0.82}
+                  />
+                  <polygon points="-7.5,18 7.5,18 0,27" fill={borderHex} />
+                  <text
+                    x={0}
+                    y={-0.5}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#FFFFFF"
+                    stroke="#020617"
+                    strokeWidth={2.5}
+                    paintOrder="stroke"
+                    fontSize="18.5"
+                    fontWeight="900"
+                    className="font-mono-tabular"
+                  >
+                    {ind.capturesOpponent
+                      ? `⚔ #${ind.tokenNumber}`
+                      : ind.reachesHome
+                      ? `👑 #${ind.tokenNumber}`
+                      : `→ #${ind.tokenNumber}`}
+                  </text>
+                </g>
+              </g>
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
+
+  /**
+   * Renders Floating Pop-Up Token Number Callout Bubbles (`#1`, `#2`, `#3`, `#4`)
+   * directly above playable tokens AND above any token hovered or tapped by the player.
+   */
+  const renderTokenNumberPopups = () => {
+    return (
+      <g className="pointer-events-auto" data-testid="board-token-popups">
+        {allTokens.map((token) => {
+          const pos = tokenPositions.get(token.id);
+          if (!pos) return null;
+
+          const isAnimatingThis =
+            animatingMove && animatingMove.tokenId === token.id;
+          if (isAnimatingThis) return null;
+
+          const isLegal = legalMoveByTokenId.has(token.id);
+          const isHovered = hoveredTokenId === token.id;
+          const isInspected = inspectedTokenId === token.id;
+          const isSelected = selectedTokenId === token.id;
+
+          const shouldShowPopup =
+            (isLegal && showMoveHints) || isHovered || isInspected || isSelected;
+          if (!shouldShowPopup) return null;
+
+          const meta = COLOR_META[token.color];
+          const palette = METALLIC_PAWN_PALETTE[token.color];
+          const tokenNumber = token.index + 1;
+          const move = legalMoveByTokenId.get(token.id);
+
+          const isExpanded = isHovered || isInspected || isSelected;
+          const statusShort = move
+            ? move.fromSteps < 0
+              ? 'DEPLOY'
+              : move.capturesTokenIds.length > 0
+              ? 'CAPTURE!'
+              : move.reachesHome
+              ? 'FINISH!'
+              : `+${move.toSteps - move.fromSteps}`
+            : token.steps < 0
+            ? 'YARD'
+            : token.steps >= FINISH_STEP
+            ? 'HOME'
+            : `STEP ${token.steps + 1}`;
+
+          const labelText = isExpanded
+            ? `TOKEN #${tokenNumber} · ${statusShort}`
+            : `#${tokenNumber}`;
+          const pillW = isExpanded
+            ? Math.max(152, labelText.length * 11.8 + 26)
+            : 64;
+          const pillH = isExpanded ? 38 : 36;
+
+          // Stagger horizontally when multiple tokens are stacked on the same cell
+          const stackSpread =
+            pos.stackCount > 1
+              ? (pos.stackIndex - (pos.stackCount - 1) / 2) * 52
+              : 0;
+          // Flip below the token if it sits on the top row of the board so the pop-up never clips
+          const flipBelow = pos.y < 90;
+          const rawPopupY = flipBelow ? pos.y + 52 : pos.y - 72;
+          const popupY = Math.max(
+            pillH / 2 + 10,
+            Math.min(BOARD_VIEWBOX_SIZE - pillH / 2 - 10, rawPopupY)
+          );
+          const popupX = Math.max(
+            pillW / 2 + 10,
+            Math.min(BOARD_VIEWBOX_SIZE - pillW / 2 - 10, pos.x + stackSpread)
+          );
+
+          return (
+            <g
+              key={`token-popup-${token.id}`}
+              transform={`translate(${popupX}, ${popupY})`}
+              className={isLegal ? 'cursor-pointer' : 'pointer-events-none'}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isLegal) {
+                  onSelectToken(token.id);
+                }
+              }}
+              onMouseEnter={() => setHoveredTokenId(token.id)}
+              onMouseLeave={() => {
+                if (hoveredTokenId === token.id) setHoveredTokenId(null);
+              }}
+              data-testid={`token-popup-${token.id}`}
+            >
+              <g
+                className={
+                  reducedMotion
+                    ? ''
+                    : isLegal
+                    ? 'animate-token-popup-float'
+                    : 'animate-token-popup-in'
+                }
+              >
+                {/* Pop-Up Drop Shadow */}
                 <rect
-                  x={-23}
-                  y={-14}
-                  width={46}
-                  height={26}
-                  rx={13}
-                  fill="rgba(0, 0, 0, 0.88)"
-                  transform="translate(1.5, 3)"
+                  x={-pillW / 2}
+                  y={-pillH / 2}
+                  width={pillW}
+                  height={pillH}
+                  rx={pillH / 2}
+                  fill="rgba(0, 0, 0, 0.9)"
+                  transform="translate(2, 3.5)"
                 />
+                {/* Pop-Up Pill Body */}
                 <rect
-                  x={-23}
-                  y={-14}
-                  width={46}
-                  height={26}
-                  rx={13}
-                  fill={badgeColor}
-                  stroke={borderHex}
-                  strokeWidth={isHovered ? 3 : 2.2}
+                  x={-pillW / 2}
+                  y={-pillH / 2}
+                  width={pillW}
+                  height={pillH}
+                  rx={pillH / 2}
+                  fill={isLegal ? meta.primaryHex : '#0B1120'}
+                  stroke={isLegal ? '#FEF08A' : palette.specHighlight}
+                  strokeWidth={isExpanded ? 3.5 : 2.8}
                 />
-                <polygon points="-5.5,12 5.5,12 0,19.5" fill={borderHex} />
+                {/* Pointer Arrow to Token Crown/Base */}
+                {flipBelow ? (
+                  <polygon
+                    points={`-7,${-pillH / 2 + 1} 7,${-pillH / 2 + 1} 0,${
+                      -pillH / 2 - 9
+                    }`}
+                    fill={isLegal ? '#FEF08A' : palette.specHighlight}
+                  />
+                ) : (
+                  <polygon
+                    points={`-7,${pillH / 2 - 1} 7,${pillH / 2 - 1} 0,${
+                      pillH / 2 + 9
+                    }`}
+                    fill={isLegal ? '#FEF08A' : palette.specHighlight}
+                  />
+                )}
+                {/* Crisp Pop-Up Text */}
                 <text
                   x={0}
-                  y={-0.5}
+                  y={0.5}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fill="#FFFFFF"
-                  fontSize="13"
+                  stroke="#020617"
+                  strokeWidth={3.2}
+                  paintOrder="stroke"
+                  fontSize={isExpanded ? '17.5' : '20'}
                   fontWeight="900"
                   className="font-mono-tabular"
                 >
-                  {ind.capturesOpponent
-                    ? `⚔#${ind.tokenNumber}`
-                    : ind.reachesHome
-                    ? `👑#${ind.tokenNumber}`
-                    : `→#${ind.tokenNumber}`}
+                  {labelText}
                 </text>
               </g>
             </g>
@@ -4624,18 +4904,24 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                       ? 'transform 95ms cubic-bezier(0.22, 1, 0.36, 1)'
                       : 'transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)',
                   }}
-                  className={
-                    isLegal
-                      ? 'cursor-pointer pointer-events-auto'
-                      : 'pointer-events-none'
-                  }
+                  className="cursor-pointer pointer-events-auto"
                   onClick={() => {
                     if (isLegal) {
                       onSelectToken(token.id);
+                    } else {
+                      setInspectedTokenId(token.id);
+                      if (inspectTimerRef.current) {
+                        window.clearTimeout(inspectTimerRef.current);
+                      }
+                      inspectTimerRef.current = window.setTimeout(() => {
+                        setInspectedTokenId((prev) =>
+                          prev === token.id ? null : prev
+                        );
+                      }, 2400);
                     }
                   }}
                   onMouseEnter={() => {
-                    if (isLegal) setHoveredTokenId(token.id);
+                    setHoveredTokenId(token.id);
                   }}
                   onMouseLeave={() => {
                     if (hoveredTokenId === token.id) setHoveredTokenId(null);
@@ -4662,20 +4948,21 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                       <ellipse
                         cx={0}
                         cy={21}
-                        rx={35}
-                        ry={13.5}
+                        rx={37}
+                        ry={14.5}
                         fill="none"
                         stroke={palette.specHighlight}
-                        strokeWidth={3.5}
+                        strokeWidth={4}
+                        strokeDasharray="6 5"
                         className="animate-token-pulse"
                       />
                       <ellipse
                         cx={0}
                         cy={21}
-                        rx={28}
-                        ry={10.5}
+                        rx={29}
+                        ry={11}
                         fill={palette.lightMetal}
-                        opacity={0.32}
+                        opacity={0.36}
                       />
                     </g>
                   )}
@@ -4715,14 +5002,14 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                     {/* Stack Count Badge when Multiple Tokens Share a Tile */}
                     {pos.stackCount > 1 &&
                       pos.stackIndex === pos.stackCount - 1 && (
-                        <g transform="translate(20, -36)">
+                        <g transform="translate(22, -38)">
                           <circle
                             cx={0}
                             cy={0}
-                            r={12}
+                            r={13.5}
                             fill="#090D1A"
                             stroke={palette.specHighlight}
-                            strokeWidth={2}
+                            strokeWidth={2.2}
                           />
                           <text
                             x={0}
@@ -4730,7 +5017,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                             textAnchor="middle"
                             dominantBaseline="central"
                             fill="#F8FAFC"
-                            fontSize="11"
+                            fontSize="12"
                             fontWeight="800"
                             className="font-mono-tabular"
                           >
@@ -4744,8 +5031,11 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             })}
           </g>
 
-          {/* 10. Floating Numbered Destination Badges (`→#1`, `⚔#2`, `👑#3`) Rendered Over Pawns */}
+          {/* 10. Floating Numbered Destination Badges (`→ #1`, `⚔ #2`, `👑 #3`) Rendered Over Pawns */}
           {renderMoveDestinationBadges()}
+
+          {/* 11. Floating Token Number Pop-Up Callout Bubbles Above Playable & Inspected/Hovered Pawns */}
+          {renderTokenNumberPopups()}
         </svg>
       </div>
     </div>

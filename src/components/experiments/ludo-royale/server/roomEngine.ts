@@ -15,13 +15,23 @@ import {
 import {
   GameState,
   HouseRules,
+  MatchLifecycleState,
+  MatchmakingPlayerCount,
   PlayerColor,
   PlayerConfig,
 } from '../game/gameTypes';
+import {
+  AuthoritativeRoom,
+  countConnectedHumanPlayers,
+  createMatchedOnlineRoom,
+  createPrivateLobbyRoom,
+  resolvePlayerDeparture,
+} from '../game/multiplayerLogic';
 import { normalizeRules } from '../game/rules';
 import {
   MatchmakingTicket,
   multiplayerStore,
+  QueuedPlayerSummary,
   RoomPlayer,
   ServerMessage,
   ServerRoom,
@@ -249,27 +259,111 @@ export async function handleLeaveRoom(
   const room = await multiplayerStore.getRoom(code);
   if (!room) return { success: true };
 
-  const playerIdx = room.players.findIndex((p) => p.id === playerId);
-  if (playerIdx === -1) return { success: true };
+  // Notify the leaving player directly
+  multiplayerStore.broadcast(`client:${playerId}`, {
+    type: 'ROOM_LEFT',
+    roomCode: code,
+  });
 
-  const isHost = room.players[playerIdx].isHost;
-  room.players.splice(playerIdx, 1);
+  // Ensure roomType and targetPlayers exist on room
+  if (!room.roomType) {
+    room.roomType =
+      room.gameState?.mode === 'matchmaking' ? 'matchmaking' : 'friends';
+  }
+  if (!room.targetPlayers) {
+    room.targetPlayers = (
+      room.players.length >= 3 ? room.players.length : 2
+    ) as MatchmakingPlayerCount;
+  }
 
-  // If room is empty of human players, delete room
-  const remainingHumans = room.players.filter((p) => !p.isAI);
-  if (remainingHumans.length === 0) {
+  const res = resolvePlayerDeparture(room as unknown as AuthoritativeRoom, playerId);
+
+  if (res.action === 'terminate_match') {
+    multiplayerStore.broadcast(`room:${code}`, {
+      type: 'MATCH_TERMINATED',
+      roomCode: code,
+      reasonCode: res.reasonCode,
+      title: res.notifyTitle,
+      message: res.notifyMessage,
+      returnTo: res.returnTo,
+    });
     await multiplayerStore.deleteRoom(code);
     return { success: true };
   }
 
-  // If host left, assign host to first remaining human player
-  if (isHost && remainingHumans.length > 0) {
-    remainingHumans[0].isHost = true;
-    room.hostId = remainingHumans[0].id;
+  if (res.action === 'replace_with_bot') {
+    const updatedRoom: ServerRoom = {
+      ...room,
+      players: res.room.players.map((p) => ({
+        ...p,
+        lastSeen: Date.now(),
+      })),
+      gameState: res.room.gameState,
+      status: res.room.status,
+      lifecycle: res.room.lifecycle,
+      version: (room.version || 1) + 1,
+      updatedAt: Date.now(),
+    };
+    await multiplayerStore.saveRoom(updatedRoom);
+
+    multiplayerStore.broadcast(`room:${code}`, {
+      type: 'PLAYER_REPLACED_BY_BOT',
+      playerName: res.departingPlayer.name,
+      color: res.replacedColor,
+      remainingHumans: res.remainingHumans,
+      message: res.notifyMessage,
+    });
+
+    broadcastRoomUpdate(updatedRoom);
+    broadcastGameState(updatedRoom);
+
+    await processRoomTick(updatedRoom);
+    return { success: true };
   }
 
-  await multiplayerStore.saveRoom(room);
-  broadcastRoomUpdate(room);
+  if (res.action === 'remove_lobby_player') {
+    const updatedRoom: ServerRoom = {
+      ...room,
+      players: res.room.players.map((p) => ({
+        ...p,
+        lastSeen: Date.now(),
+      })),
+      version: (room.version || 1) + 1,
+      updatedAt: Date.now(),
+    };
+    await multiplayerStore.saveRoom(updatedRoom);
+
+    multiplayerStore.broadcast(`room:${code}`, {
+      type: 'ROOM_NOTIFICATION',
+      message: res.notifyMessage,
+    });
+
+    broadcastRoomUpdate(updatedRoom);
+    return { success: true };
+  }
+
+  if (res.action === 'remove_private_match_player') {
+    const updatedRoom: ServerRoom = {
+      ...room,
+      players: res.room.players.map((p) => ({
+        ...p,
+        lastSeen: Date.now(),
+      })),
+      gameState: res.room.gameState,
+      version: (room.version || 1) + 1,
+      updatedAt: Date.now(),
+    };
+    await multiplayerStore.saveRoom(updatedRoom);
+
+    multiplayerStore.broadcast(`room:${code}`, {
+      type: 'ROOM_NOTIFICATION',
+      message: res.notifyMessage,
+    });
+
+    broadcastRoomUpdate(updatedRoom);
+    broadcastGameState(updatedRoom);
+    return { success: true };
+  }
 
   return { success: true };
 }
@@ -500,10 +594,14 @@ export async function handleAdvanceTurn(
 export async function handleJoinMatchmaking(
   playerId: string,
   name: string,
-  avatar: string
+  avatar: string,
+  targetPlayers: MatchmakingPlayerCount = 2
 ): Promise<{
   status: 'searching' | 'matched';
+  targetPlayers: MatchmakingPlayerCount;
+  foundPlayers: number;
   queueSize: number;
+  queuedPlayers: QueuedPlayerSummary[];
   room?: ServerRoom;
   assignedColor?: PlayerColor;
 }> {
@@ -514,7 +612,10 @@ export async function handleJoinMatchmaking(
     if (existingRoom) {
       return {
         status: 'matched',
+        targetPlayers,
+        foundPlayers: existingRoom.players.length,
         queueSize: 0,
+        queuedPlayers: [],
         room: existingRoom,
         assignedColor: existingMatch.color,
       };
@@ -525,83 +626,92 @@ export async function handleJoinMatchmaking(
     id: playerId,
     name: String(name || 'Player').trim().slice(0, 20) || 'Player',
     avatar: String(avatar || 'crown'),
+    targetPlayers,
     timestamp: Date.now(),
   };
 
-  const queueSize = await multiplayerStore.enqueueMatchmaking(ticket);
-  const pair = await multiplayerStore.dequeueMatchmakingPair();
+  await multiplayerStore.enqueueMatchmaking(ticket);
+  const matchedGroup = await multiplayerStore.dequeueMatchmakingGroup(targetPlayers);
 
-  if (pair) {
-    const [p1, p2] = pair;
+  if (matchedGroup && matchedGroup.length === targetPlayers) {
     const roomCode = generateRoomCode();
+    const matchedRoom = createMatchedOnlineRoom({
+      roomCode,
+      matchedEntries: matchedGroup.map((t) => ({
+        id: t.id,
+        name: t.name,
+        avatar: t.avatar,
+        targetPlayers: t.targetPlayers,
+        joinedAt: t.timestamp,
+      })),
+      targetPlayers,
+      rules: DEFAULT_HOUSE_RULES,
+    });
 
     const room: ServerRoom = {
-      roomCode,
-      hostId: p1.id,
-      status: 'playing',
-      rules: DEFAULT_HOUSE_RULES,
-      players: [
-        {
-          id: p1.id,
-          name: p1.name,
-          avatar: p1.avatar,
-          color: 'red',
-          ready: true,
-          isHost: true,
-          isAI: false,
-          connected: true,
-          lastSeen: Date.now(),
-        },
-        {
-          id: p2.id,
-          name: p2.name,
-          avatar: p2.avatar,
-          color: 'yellow',
-          ready: true,
-          isHost: false,
-          isAI: false,
-          connected: true,
-          lastSeen: Date.now(),
-        },
-      ],
-      gameState: null,
+      ...matchedRoom,
+      players: matchedRoom.players.map((p) => ({
+        ...p,
+        lastSeen: Date.now(),
+      })),
       updatedAt: Date.now(),
       version: 1,
     };
 
-    room.gameState = createInitialGameState({
-      id: `mm-${roomCode}-${Date.now()}`,
-      mode: 'matchmaking',
-      roomCode,
-      players: [
-        { color: 'red', name: p1.name, avatar: p1.avatar, type: 'human' },
-        { color: 'yellow', name: p2.name, avatar: p2.avatar, type: 'human' },
-      ],
-      rules: DEFAULT_HOUSE_RULES,
-    });
-
     await multiplayerStore.saveRoom(room);
 
-    // Save match records for both players so each client can sync and join
-    await multiplayerStore.setMatchForClient(p1.id, {
-      roomCode,
-      color: 'red',
-      matchedAt: Date.now(),
-    });
-    await multiplayerStore.setMatchForClient(p2.id, {
-      roomCode,
-      color: 'yellow',
-      matchedAt: Date.now(),
-    });
+    for (const player of room.players) {
+      await multiplayerStore.setMatchForClient(player.id, {
+        roomCode,
+        color: player.color,
+        matchedAt: Date.now(),
+      });
+    }
 
     broadcastRoomUpdate(room);
     broadcastGameState(room);
 
-    const myColor: PlayerColor = playerId === p1.id ? 'red' : 'yellow';
-    return { status: 'matched', queueSize: 0, room, assignedColor: myColor };
+    const myPlayer = room.players.find((p) => p.id === playerId);
+    const myColor = myPlayer?.color || 'red';
+
+    return {
+      status: 'matched',
+      targetPlayers,
+      foundPlayers: targetPlayers,
+      queueSize: 0,
+      queuedPlayers: [],
+      room,
+      assignedColor: myColor,
+    };
   }
 
-  return { status: 'searching', queueSize };
+  const bracket = await multiplayerStore.getMatchmakingBracket(targetPlayers);
+  const queuedPlayers: QueuedPlayerSummary[] = bracket.map((b) => ({
+    id: b.id,
+    name: b.name,
+    avatar: b.avatar,
+  }));
+
+  const searchMsg: ServerMessage = {
+    type: 'MATCHMAKING_STATUS',
+    status: 'searching',
+    targetPlayers,
+    foundPlayers: bracket.length,
+    queueSize: bracket.length,
+    queuedPlayers,
+  };
+
+  for (const b of bracket) {
+    multiplayerStore.broadcast(`client:${b.id}`, searchMsg);
+  }
+
+  return {
+    status: 'searching',
+    targetPlayers,
+    foundPlayers: bracket.length,
+    queueSize: bracket.length,
+    queuedPlayers,
+  };
 }
 
 export async function handleLeaveMatchmaking(playerId: string): Promise<void> {

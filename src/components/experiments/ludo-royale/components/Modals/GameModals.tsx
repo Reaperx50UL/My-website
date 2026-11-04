@@ -1,26 +1,20 @@
 import {
-  AlertCircle,
   Award,
   Bot,
   Check,
-  Clock,
   Copy,
   Crown,
   Globe,
-  Loader2,
   Lock,
   LogOut,
   Play,
   Plus,
-  RefreshCw,
   RotateCcw,
   Shield,
-  Signal,
   Sparkles,
   Trophy,
   Unlock,
   Users,
-  Wifi,
   X,
 } from 'lucide-react';
 import React, { useState } from 'react';
@@ -48,6 +42,7 @@ import {
   GameState,
   HapticIntensity,
   HouseRules,
+  MatchmakingPlayerCount,
   PlayerColor,
   PlayerConfig,
   PlayerStats,
@@ -60,7 +55,10 @@ import {
   getColorsForPlayerCount,
   getDefaultSeatName,
 } from '../../game/rules';
-import { BackendStatusInfo, OnlineRoomInfo } from '../../services/multiplayer';
+import {
+  OnlineRoomInfo,
+  QueuedPlayerSummary,
+} from '../../services/multiplayer';
 import { soundManager } from '../../services/sound';
 
 /* ============================================================================
@@ -631,55 +629,94 @@ interface OnlineModalProps {
   room: OnlineRoomInfo | null;
   assignedColor: PlayerColor | null;
   errorMessage: string | null;
+  statusNotice?: { title: string; message: string } | null;
+  onDismissNotice?: () => void;
   matchmakingStatus: 'idle' | 'searching' | 'matched';
-  connectionStatus?: 'connected' | 'connecting' | 'offline';
-  backendStatus?: BackendStatusInfo | null;
+  selectedPlayerCount: MatchmakingPlayerCount;
+  matchmakingFoundPlayers: number;
+  queuedPlayers: QueuedPlayerSummary[];
+  onSelectPlayerCount: (count: MatchmakingPlayerCount) => void;
+  onFindMatch: (count: MatchmakingPlayerCount) => void;
+  onCancelMatchmaking: () => void;
   onCreateRoom: () => void;
   onJoinRoom: (code: string) => void;
+  onLeaveRoom: () => void;
   onAddBot: () => void;
   onToggleReady: () => void;
   onStartOnlineMatch: () => void;
-  onLeaveRoom?: () => void;
-  onCancelMatchmaking?: () => void;
-  onRetryMatchmaking?: () => void;
   onClose: () => void;
 }
+
+const MATCHMAKING_MODE_CARDS: {
+  count: MatchmakingPlayerCount;
+  headerBadge: string;
+  label: string;
+  description: string;
+  indicator: string;
+  ruleSummary: string;
+  accentHex: string;
+  borderActiveClass: string;
+  bgActiveClass: string;
+}[] = [
+  {
+    count: 2,
+    headerBadge: '2 PLAYER',
+    label: 'Duel',
+    description: 'Challenge one opponent.',
+    indicator: '2 Players',
+    ruleSummary: '1v1 Showdown · Match terminates immediately if either player leaves.',
+    accentHex: '#F59E0B',
+    borderActiveClass: 'border-2 border-amber-400 ring-2 ring-amber-400/30',
+    bgActiveClass: 'bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950',
+  },
+  {
+    count: 3,
+    headerBadge: '3 PLAYER',
+    label: 'Trio',
+    description: 'Battle against two opponents.',
+    indicator: '3 Players',
+    ruleSummary: 'AI Bot replaces any departed player while 2+ humans remain.',
+    accentHex: '#38BDF8',
+    borderActiveClass: 'border-2 border-amber-400 ring-2 ring-sky-400/30',
+    bgActiveClass: 'bg-gradient-to-br from-sky-500/25 via-slate-900 to-slate-950',
+  },
+  {
+    count: 4,
+    headerBadge: '4 PLAYER',
+    label: 'Squad',
+    description: 'Full four-player Ludo battle.',
+    indicator: '4 Players',
+    ruleSummary: 'Full 4-corner arena · AI Bots take over departed seats until 1 human remains.',
+    accentHex: '#10B981',
+    borderActiveClass: 'border-2 border-amber-400 ring-2 ring-emerald-400/30',
+    bgActiveClass: 'bg-gradient-to-br from-emerald-500/25 via-slate-900 to-slate-950',
+  },
+];
 
 export const OnlineModal: React.FC<OnlineModalProps> = ({
   mode,
   room,
   assignedColor,
   errorMessage,
+  statusNotice,
+  onDismissNotice,
   matchmakingStatus,
-  connectionStatus = 'connected',
-  backendStatus,
+  selectedPlayerCount,
+  matchmakingFoundPlayers,
+  queuedPlayers,
+  onSelectPlayerCount,
+  onFindMatch,
+  onCancelMatchmaking,
   onCreateRoom,
   onJoinRoom,
+  onLeaveRoom,
   onAddBot,
   onToggleReady,
   onStartOnlineMatch,
-  onLeaveRoom,
-  onCancelMatchmaking,
-  onRetryMatchmaking,
   onClose,
 }) => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [copied, setCopied] = useState(false);
-  const [searchSeconds, setSearchSeconds] = useState(0);
-
-  // Timer for searching state
-  React.useEffect(() => {
-    let timer: any = null;
-    if (mode === 'matchmaking' && matchmakingStatus === 'searching') {
-      setSearchSeconds(0);
-      timer = setInterval(() => {
-        setSearchSeconds((s) => s + 1);
-      }, 1000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [mode, matchmakingStatus]);
 
   const handleCopyCode = () => {
     if (!room) return;
@@ -688,174 +725,470 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
     setTimeout(() => setCopied(false), 1800);
   };
 
-  const normalizedJoinCode = joinCodeInput.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
-  const isJoinCodeValid = normalizedJoinCode.length === 6;
-
-  const formatTimer = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  const getAvatarEmoji = (avatarId: string) => {
+    return AVATAR_OPTIONS.find((a) => a.id === avatarId)?.icon || '👑';
   };
+
+  const selectedCardMeta =
+    MATCHMAKING_MODE_CARDS.find((c) => c.count === selectedPlayerCount) ||
+    MATCHMAKING_MODE_CARDS[0];
+
+  const isSearchingOrMatched =
+    matchmakingStatus === 'searching' || matchmakingStatus === 'matched';
+  const liveFoundCount = isSearchingOrMatched
+    ? Math.min(selectedPlayerCount, Math.max(1, matchmakingFoundPlayers))
+    : 0;
+  const seatColors = getColorsForPlayerCount(selectedPlayerCount);
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="online-modal-title"
     >
-      <div className="w-full max-w-lg bg-[#111827] border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
-        {/* Header */}
+      <div className="w-full max-w-2xl bg-[#111827] border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl my-auto">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <Globe className="w-5 h-5 text-sky-400" />
+            <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+              <Globe className="w-5 h-5" />
+            </div>
             <div>
               <h2
                 id="online-modal-title"
                 className="font-display font-bold text-lg sm:text-xl text-white"
               >
                 {mode === 'matchmaking'
-                  ? 'Public Online Matchmaking'
-                  : 'Play With Friends · Room Lobby'}
+                  ? 'Online Multiplayer Matchmaking'
+                  : 'Play With Friends · Private Room'}
               </h2>
+              <p className="text-[11px] sm:text-xs text-slate-400">
+                {mode === 'matchmaking'
+                  ? isSearchingOrMatched
+                    ? `${selectedCardMeta.label} (${selectedCardMeta.indicator}) · Live Queue`
+                    : 'Choose your battle size and queue into a live server-authoritative match'
+                  : 'Create or join a 6-character room code with live synced turns'}
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close Online Modal"
-            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer transition-colors"
+            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Real-time Connection Status Indicator Pill */}
-        <div className="flex items-center justify-between gap-2 pt-3 text-[11px]">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected'
-                  ? 'bg-emerald-400 animate-pulse'
-                  : connectionStatus === 'connecting'
-                  ? 'bg-amber-400 animate-ping'
-                  : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-slate-300 font-medium capitalize">
-              {connectionStatus === 'connected'
-                ? 'Server Synced'
-                : connectionStatus === 'connecting'
-                ? 'Connecting...'
-                : 'Offline'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800/80 text-[10px] text-slate-400">
-            <Signal className="w-3 h-3 text-sky-400" />
-            <span>
-              {backendStatus?.type === 'upstash'
-                ? 'Cloud Sync (Upstash Redis)'
-                : 'Local Sync Engine'}
-            </span>
-          </div>
-        </div>
-
-        <div className="py-4 space-y-4">
-          {errorMessage && (
-            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-200 flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1 font-medium">{errorMessage}</div>
+        <div className="py-5 space-y-4">
+          {/* Status / Termination Notice Banner */}
+          {statusNotice && (
+            <div
+              data-testid="online-status-notice"
+              className="flex items-start justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/50 text-amber-100 shadow-lg"
+            >
+              <div className="space-y-0.5">
+                <div className="font-display font-bold text-xs sm:text-sm text-amber-300">
+                  {statusNotice.title}
+                </div>
+                <p className="text-xs text-slate-200 leading-relaxed">
+                  {statusNotice.message}
+                </p>
+              </div>
+              {onDismissNotice && (
+                <button
+                  type="button"
+                  onClick={onDismissNotice}
+                  aria-label="Dismiss Notice"
+                  className="w-7 h-7 rounded-lg bg-slate-900/70 hover:bg-slate-800 text-slate-300 flex items-center justify-center shrink-0 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 
-          {/* MODE: PUBLIC ONLINE MATCHMAKING */}
+          {errorMessage && (
+            <div
+              data-testid="online-error-banner"
+              className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/40 text-xs text-rose-200"
+            >
+              {errorMessage}
+            </div>
+          )}
+
           {mode === 'matchmaking' ? (
-            <div className="py-4 space-y-5 text-center">
-              {matchmakingStatus === 'matched' ? (
-                <div className="space-y-3">
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-500/10">
-                    <Check className="w-8 h-8 animate-bounce" />
-                  </div>
-                  <div>
-                    <div className="font-display font-bold text-lg text-emerald-300">
-                      Opponent Found!
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Joining matched game session... Launching board.
-                    </p>
+            !isSearchingOrMatched ? (
+              /* ============================================================
+                 MATCHMAKING STEP 1: PLAYER-COUNT SELECTION CARDS (2P, 3P, 4P)
+                 ============================================================ */
+              <div className="space-y-5" data-testid="matchmaking-selection-view">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {MATCHMAKING_MODE_CARDS.map((card) => {
+                    const isSelected = selectedPlayerCount === card.count;
+                    const cardColors = getColorsForPlayerCount(card.count);
+
+                    return (
+                      <button
+                        key={card.count}
+                        type="button"
+                        data-testid={`matchmaking-card-${card.count}p`}
+                        aria-pressed={isSelected}
+                        onClick={() => {
+                          soundManager.playClick();
+                          onSelectPlayerCount(card.count);
+                        }}
+                        className={`group relative flex flex-col justify-between p-4 rounded-2xl border text-left cursor-pointer ${
+                          isSelected
+                            ? `${card.bgActiveClass} ${card.borderActiveClass} shadow-xl scale-[1.01]`
+                            : 'bg-slate-900/90 border-slate-800 hover:border-slate-600 hover:bg-slate-800/80'
+                        }`}
+                      >
+                        <div>
+                          {/* Top Row: Mode Kicker Badge & Active Check */}
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-mono-tabular font-extrabold tracking-wider uppercase ${
+                                isSelected
+                                  ? 'bg-white/15 text-white border border-white/30'
+                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              }`}
+                            >
+                              {card.headerBadge}
+                            </span>
+
+                            <span
+                              className={`w-5 h-5 rounded-full flex items-center justify-center border ${
+                                isSelected
+                                  ? 'bg-amber-400 border-amber-300 text-slate-950'
+                                  : 'border-slate-700 bg-slate-950/60 text-transparent group-hover:border-slate-500'
+                              }`}
+                            >
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </span>
+                          </div>
+
+                          {/* Custom Mode Illustration / Player Silhouette Icon */}
+                          <div className="w-12 h-12 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-center mb-3 shadow-inner group-hover:scale-105 transition-transform">
+                            {card.count === 2 && (
+                              <svg
+                                viewBox="0 0 40 40"
+                                className="w-7 h-7"
+                                aria-hidden="true"
+                              >
+                                <circle
+                                  cx="13"
+                                  cy="14"
+                                  r="5"
+                                  fill="#EF4444"
+                                />
+                                <path
+                                  d="M5 29 C5 23 21 23 21 29"
+                                  fill="#EF4444"
+                                />
+                                <circle
+                                  cx="27"
+                                  cy="14"
+                                  r="5"
+                                  fill="#F59E0B"
+                                />
+                                <path
+                                  d="M19 29 C19 23 35 23 35 29"
+                                  fill="#F59E0B"
+                                />
+                              </svg>
+                            )}
+                            {card.count === 3 && (
+                              <svg
+                                viewBox="0 0 40 40"
+                                className="w-7 h-7"
+                                aria-hidden="true"
+                              >
+                                <circle
+                                  cx="20"
+                                  cy="10"
+                                  r="4.5"
+                                  fill="#10B981"
+                                />
+                                <circle
+                                  cx="11"
+                                  cy="24"
+                                  r="4.5"
+                                  fill="#EF4444"
+                                />
+                                <circle
+                                  cx="29"
+                                  cy="24"
+                                  r="4.5"
+                                  fill="#F59E0B"
+                                />
+                                <polygon
+                                  points="20,16 14,26 26,26"
+                                  fill="none"
+                                  stroke="#38BDF8"
+                                  strokeWidth="1.8"
+                                />
+                              </svg>
+                            )}
+                            {card.count === 4 && (
+                              <svg
+                                viewBox="0 0 40 40"
+                                className="w-7 h-7"
+                                aria-hidden="true"
+                              >
+                                <rect
+                                  x="7"
+                                  y="7"
+                                  width="11"
+                                  height="11"
+                                  rx="3"
+                                  fill="#EF4444"
+                                />
+                                <rect
+                                  x="22"
+                                  y="7"
+                                  width="11"
+                                  height="11"
+                                  rx="3"
+                                  fill="#10B981"
+                                />
+                                <rect
+                                  x="22"
+                                  y="22"
+                                  width="11"
+                                  height="11"
+                                  rx="3"
+                                  fill="#F59E0B"
+                                />
+                                <rect
+                                  x="7"
+                                  y="22"
+                                  width="11"
+                                  height="11"
+                                  rx="3"
+                                  fill="#3B82F6"
+                                />
+                              </svg>
+                            )}
+                          </div>
+
+                          {/* Label & Description */}
+                          <div className="font-display font-extrabold text-lg text-white">
+                            {card.label}
+                          </div>
+                          <p className="text-xs text-slate-300 mt-0.5 leading-snug">
+                            {card.description}
+                          </p>
+                        </div>
+
+                        {/* Bottom Player Indicator & Color Dots */}
+                        <div className="mt-4 pt-3 border-t border-slate-800/90 flex items-center justify-between">
+                          <span className="text-xs font-display font-bold text-amber-300">
+                            {card.indicator}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {cardColors.map((col) => (
+                              <span
+                                key={col}
+                                className="w-3 h-3 rounded-full border border-white/30"
+                                style={{
+                                  backgroundColor: COLOR_META[col].primaryHex,
+                                }}
+                                title={COLOR_META[col].label}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Mode Match Rules Callout */}
+                <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-slate-300">
+                      <strong className="text-white">
+                        {selectedCardMeta.label} ({selectedCardMeta.indicator}):
+                      </strong>{' '}
+                      {selectedCardMeta.ruleSummary}
+                    </span>
                   </div>
                 </div>
-              ) : matchmakingStatus === 'searching' ? (
-                <div className="space-y-4">
-                  <div className="w-16 h-16 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center mx-auto text-sky-400 relative">
-                    <Globe className="w-8 h-8 animate-spin" />
-                    <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-sky-400 animate-ping" />
-                  </div>
-                  <div>
-                    <div className="font-display font-bold text-lg text-white">
-                      Searching for Opponent...
+
+                {/* Prominent Find Match CTA */}
+                <div className="flex items-center justify-end gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="find-match-btn"
+                    onClick={() => {
+                      soundManager.playClick();
+                      onFindMatch(selectedPlayerCount);
+                    }}
+                    className="flex items-center justify-center gap-2 px-7 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-extrabold text-sm shadow-xl transition-all cursor-pointer"
+                    style={{
+                      boxShadow: '0 8px 22px -6px rgba(245, 158, 11, 0.5)',
+                    }}
+                  >
+                    <Play className="w-4 h-4 fill-slate-950" />
+                    <span>Find Match ({selectedCardMeta.indicator})</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ============================================================
+                 MATCHMAKING STEP 2: LIVE QUEUE & PLAYER SLOTS FILLING SCREEN
+                 ============================================================ */
+              <div
+                className="space-y-5 py-2"
+                data-testid="matchmaking-queue-view"
+              >
+                {/* Top Radar Banner & Live Found Counter */}
+                <div className="p-5 rounded-2xl bg-slate-900/95 border border-slate-800 text-center space-y-3">
+                  <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+                    <span className="absolute inset-0 rounded-2xl bg-sky-500/20 border border-sky-400/40 animate-ping" />
+                    <div className="relative w-16 h-16 rounded-2xl bg-sky-500/15 border border-sky-400/50 flex items-center justify-center text-sky-400 shadow-lg">
+                      <Globe className="w-8 h-8 animate-spin" />
                     </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono text-amber-300 mt-2">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{formatTimer(searchSeconds)}</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
-                      Looking for an active online challenger. You can test matchmaking instantly by opening a second browser tab or window!
-                    </p>
                   </div>
 
-                  <div className="pt-2 flex justify-center gap-3">
-                    <button
-                      type="button"
-                      onClick={onCancelMatchmaking || onClose}
-                      className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
-                    >
-                      Cancel Search
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-slate-400">
-                    <Loader2 className="w-8 h-8 animate-spin" />
-                  </div>
                   <div>
-                    <div className="font-display font-bold text-base text-white">
-                      Connecting to Matchmaking Queue...
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-400/30 text-sky-300 text-xs font-mono-tabular font-bold mb-1.5">
+                      <span>
+                        {selectedCardMeta.label.toUpperCase()} ·{' '}
+                        {selectedCardMeta.indicator.toUpperCase()}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Establishing server synchronization...
-                    </p>
-                  </div>
-                  {onRetryMatchmaking && (
-                    <button
-                      type="button"
-                      onClick={onRetryMatchmaking}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-display font-bold text-xs cursor-pointer"
+                    <div className="font-display font-extrabold text-xl text-white">
+                      {matchmakingStatus === 'matched'
+                        ? 'Match Found! Launching Arena...'
+                        : 'Searching for Online Players...'}
+                    </div>
+                    <div
+                      data-testid="matchmaking-found-count"
+                      className="text-sm font-mono-tabular font-bold text-amber-400 mt-1"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Retry</span>
-                    </button>
-                  )}
+                      {liveFoundCount}/{selectedPlayerCount} players found
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Live Player Slots Grid (2, 3, or 4 slots) */}
+                <div
+                  className={`grid gap-2.5 ${
+                    selectedPlayerCount === 2
+                      ? 'grid-cols-2'
+                      : selectedPlayerCount === 3
+                      ? 'grid-cols-1 sm:grid-cols-3'
+                      : 'grid-cols-2 sm:grid-cols-4'
+                  }`}
+                >
+                  {seatColors.map((seatColor, idx) => {
+                    const meta = COLOR_META[seatColor];
+                    const queuedPlayer = queuedPlayers[idx];
+                    const isFilled = Boolean(queuedPlayer);
+
+                    return (
+                      <div
+                        key={seatColor}
+                        data-testid={`queue-slot-${idx}`}
+                        className={`p-3.5 rounded-2xl border transition-all flex flex-col items-center text-center gap-2 ${
+                          isFilled
+                            ? 'bg-slate-900 border-emerald-500/50 shadow-md'
+                            : 'bg-slate-950/70 border-slate-800/90 border-dashed'
+                        }`}
+                      >
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold shadow-inner"
+                          style={
+                            isFilled
+                              ? {
+                                  backgroundColor: meta.darkHex,
+                                  border: `1.5px solid ${meta.primaryHex}`,
+                                  color: '#FFFFFF',
+                                }
+                              : {
+                                  backgroundColor: '#0F172A',
+                                  border: '1px solid #334155',
+                                  color: '#64748B',
+                                }
+                          }
+                        >
+                          {isFilled ? (
+                            getAvatarEmoji(queuedPlayer.avatar)
+                          ) : (
+                            <Users className="w-4 h-4 animate-pulse" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 w-full">
+                          <div className="text-xs font-bold text-white truncate">
+                            {isFilled
+                              ? queuedPlayer.name
+                              : `Slot ${idx + 1} · Waiting`}
+                          </div>
+                          <div className="text-[10px] font-semibold mt-0.5 flex items-center justify-center gap-1">
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: meta.primaryHex }}
+                            />
+                            <span
+                              className={
+                                isFilled ? 'text-emerald-400' : 'text-slate-400'
+                              }
+                            >
+                              {isFilled ? 'Player Ready' : 'Searching...'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Cancel Matchmaking Button */}
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                  <span className="text-[11px] text-slate-400">
+                    Match starts automatically once all {selectedPlayerCount}{' '}
+                    slots fill.
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="cancel-matchmaking-btn"
+                    onClick={() => {
+                      soundManager.playClick();
+                      onCancelMatchmaking();
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-xs font-display font-bold text-rose-200 transition-colors cursor-pointer shrink-0"
+                  >
+                    Cancel Matchmaking
+                  </button>
+                </div>
+              </div>
+            )
           ) : !room ? (
-            /* MODE: PRIVATE ROOM - NO ACTIVE ROOM */
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="font-display font-bold text-sm text-white flex items-center gap-2">
-                  <Crown className="w-4 h-4 text-amber-400" />
-                  <span>Create a New Private Room</span>
+                <div className="font-display font-bold text-sm text-white">
+                  Create a New Private Room
                 </div>
                 <p className="text-xs text-slate-400">
                   Generate a unique 6-character room code with server-authoritative turns and dice validation.
                 </p>
                 <button
                   type="button"
+                  data-testid="create-room-btn"
                   onClick={onCreateRoom}
-                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm cursor-pointer transition-colors"
+                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm cursor-pointer"
                 >
                   Create Room Code
                 </button>
@@ -864,8 +1197,8 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (isJoinCodeValid) {
-                    onJoinRoom(normalizedJoinCode);
+                  if (joinCodeInput.trim()) {
+                    onJoinRoom(joinCodeInput.trim());
                   }
                 }}
                 className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3"
@@ -877,30 +1210,25 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   <input
                     type="text"
                     maxLength={6}
-                    placeholder="6-character code"
+                    placeholder="Enter 6-character code"
                     value={joinCodeInput}
                     onChange={(e) =>
-                      setJoinCodeInput(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase())
+                      setJoinCodeInput(e.target.value.toUpperCase())
                     }
-                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono tracking-widest uppercase text-white focus:outline-none focus:border-sky-400"
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono-tabular uppercase text-white focus:outline-none focus:border-sky-400"
                   />
                   <button
                     type="submit"
-                    disabled={!isJoinCodeValid}
-                    className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-display font-bold text-sm cursor-pointer transition-colors"
+                    data-testid="join-room-submit-btn"
+                    disabled={joinCodeInput.trim().length < 4}
+                    className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 font-display font-bold text-sm cursor-pointer"
                   >
                     Join Room
                   </button>
                 </div>
-                {joinCodeInput.length > 0 && !isJoinCodeValid && (
-                  <span className="text-[11px] text-amber-400/90 block">
-                    Room code must be exactly 6 alphanumeric characters.
-                  </span>
-                )}
               </form>
             </div>
           ) : (
-            /* MODE: PRIVATE ROOM - IN LOBBY */
             <div className="space-y-4">
               {/* Active Room Code Header */}
               <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900 border border-slate-800">
@@ -908,14 +1236,17 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   <span className="text-xs text-slate-400 block">
                     Share Room Code
                   </span>
-                  <span className="font-mono font-bold text-2xl tracking-widest text-amber-400">
+                  <span
+                    data-testid="private-room-code"
+                    className="font-mono-tabular font-bold text-2xl tracking-widest text-amber-400"
+                  >
                     {room.roomCode}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopyCode}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer"
                 >
                   {copied ? (
                     <>
@@ -937,7 +1268,7 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   <span>Players in Lobby ({room.players.length}/4)</span>
                   {assignedColor && (
                     <span>
-                      Your Seat:{' '}
+                      Your Color:{' '}
                       <strong className="text-white">
                         {COLOR_META[assignedColor].label}
                       </strong>
@@ -981,12 +1312,21 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
               </div>
 
               {/* Room Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    data-testid="lobby-leave-room-btn"
+                    onClick={onLeaveRoom}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-xs font-semibold text-rose-200 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Leave Room</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={onToggleReady}
-                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer transition-colors"
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 cursor-pointer"
                   >
                     Toggle Ready
                   </button>
@@ -994,30 +1334,20 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                     <button
                       type="button"
                       onClick={onAddBot}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 cursor-pointer transition-colors"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add Bot</span>
-                    </button>
-                  )}
-                  {onLeaveRoom && (
-                    <button
-                      type="button"
-                      onClick={onLeaveRoom}
-                      title="Leave Room Lobby"
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-xs font-semibold text-rose-300 cursor-pointer transition-colors"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Leave</span>
+                      <span>Add AI Bot</span>
                     </button>
                   )}
                 </div>
 
                 <button
                   type="button"
+                  data-testid="start-online-match-btn"
                   disabled={room.players.length < 2}
                   onClick={onStartOnlineMatch}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-display font-bold text-sm cursor-pointer transition-colors"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-display font-bold text-sm cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-slate-950" />
                   <span>Start Online Match</span>
@@ -1032,21 +1362,27 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
 };
 
 /* ============================================================================
-   3. PAUSE MODAL (`document.body.dataset.state = 'paused'`)
+   3. PAUSE MODAL & LEAVE MATCH CONFIRMATION DIALOG
    ============================================================================ */
 interface PauseModalProps {
   turnNumber: number;
+  isOnline?: boolean;
+  roomCode?: string;
   onResume: () => void;
   onRestart: () => void;
   onSaveAndExit: () => void;
+  onRequestLeaveOnlineMatch?: () => void;
   onExitWebLab?: () => void;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
   turnNumber,
+  isOnline,
+  roomCode,
   onResume,
   onRestart,
   onSaveAndExit,
+  onRequestLeaveOnlineMatch,
   onExitWebLab,
 }) => {
   return (
@@ -1062,10 +1398,12 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             id="pause-modal-title"
             className="font-display font-extrabold text-2xl text-white"
           >
-            Match Paused
+            {isOnline ? 'Online Match Options' : 'Match Paused'}
           </h2>
           <p className="text-xs text-slate-400 mt-1 font-mono-tabular">
-            Turn {turnNumber} · Local progress automatically saved
+            {isOnline
+              ? `Turn ${turnNumber}${roomCode ? ` · Room ${roomCode}` : ''} · Live Synchronized Match`
+              : `Turn ${turnNumber} · Local progress automatically saved`}
           </p>
         </div>
 
@@ -1077,29 +1415,103 @@ export const PauseModal: React.FC<PauseModalProps> = ({
           >
             Resume Match [Esc / P]
           </button>
-          <button
-            type="button"
-            onClick={onRestart}
-            className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-display font-bold text-sm cursor-pointer"
-          >
-            Restart Match
-          </button>
-          <button
-            type="button"
-            onClick={onSaveAndExit}
-            className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-rose-950/70 border border-slate-800 text-slate-300 hover:text-rose-200 font-display font-semibold text-sm cursor-pointer"
-          >
-            Save & Return to Title
-          </button>
+
+          {!isOnline && (
+            <button
+              type="button"
+              onClick={onRestart}
+              className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-display font-bold text-sm cursor-pointer"
+            >
+              Restart Match
+            </button>
+          )}
+
+          {isOnline ? (
+            <button
+              type="button"
+              data-testid="pause-leave-room-btn"
+              onClick={onRequestLeaveOnlineMatch || onSaveAndExit}
+              className="w-full py-3 px-4 rounded-xl bg-rose-950/85 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-display font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Leave Room</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSaveAndExit}
+              className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-rose-950/70 border border-slate-800 text-slate-300 hover:text-rose-200 font-display font-semibold text-sm cursor-pointer"
+            >
+              Save &amp; Return to Title
+            </button>
+          )}
+
           {onExitWebLab && (
             <button
               type="button"
               onClick={onExitWebLab}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-amber-600/30 hover:border-amber-400 text-amber-300 font-display font-semibold text-xs cursor-pointer transition-colors"
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white font-display font-medium text-xs cursor-pointer transition-colors"
             >
               Exit to Web Lab
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface LeaveMatchConfirmModalProps {
+  onStayInMatch: () => void;
+  onConfirmLeaveMatch: () => void;
+}
+
+export const LeaveMatchConfirmModal: React.FC<LeaveMatchConfirmModalProps> = ({
+  onStayInMatch,
+  onConfirmLeaveMatch,
+}) => {
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="leave-match-confirm-title"
+      data-testid="leave-match-confirm-dialog"
+    >
+      <div className="w-full max-w-md bg-[#111827] border border-slate-800 rounded-3xl p-6 text-center shadow-2xl space-y-5">
+        <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-center mx-auto text-rose-400">
+          <LogOut className="w-6 h-6" />
+        </div>
+
+        <div>
+          <h2
+            id="leave-match-confirm-title"
+            className="font-display font-extrabold text-2xl text-white"
+          >
+            Leave Match?
+          </h2>
+          <p className="text-sm text-slate-300 mt-1.5">
+            Are you sure you want to leave this match?
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            data-testid="stay-in-match-btn"
+            onClick={onStayInMatch}
+            className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-display font-bold text-sm cursor-pointer"
+          >
+            Stay in Match
+          </button>
+          <button
+            type="button"
+            data-testid="confirm-leave-match-btn"
+            onClick={onConfirmLeaveMatch}
+            className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-display font-bold text-sm shadow-lg cursor-pointer"
+          >
+            Leave Match
+          </button>
         </div>
       </div>
     </div>
@@ -1253,34 +1665,33 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 pt-1">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onMainMenu}
-              className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-display font-bold text-sm cursor-pointer"
-            >
-              Main Menu
-            </button>
-            <button
-              type="button"
-              data-start="true"
-              onClick={onPlayAgain}
-              className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm shadow-lg cursor-pointer"
-            >
-              Play Again
-            </button>
-          </div>
-          {onExitWebLab && (
-            <button
-              type="button"
-              onClick={onExitWebLab}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-amber-600/30 hover:border-amber-400 text-amber-300 font-display font-semibold text-xs cursor-pointer transition-colors"
-            >
-              Exit to Web Lab
-            </button>
-          )}
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={onMainMenu}
+            className="flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-display font-bold text-sm cursor-pointer"
+          >
+            Main Menu
+          </button>
+          <button
+            type="button"
+            data-start="true"
+            onClick={onPlayAgain}
+            className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm shadow-lg cursor-pointer"
+          >
+            Play Again
+          </button>
         </div>
+
+        {onExitWebLab && (
+          <button
+            type="button"
+            onClick={onExitWebLab}
+            className="w-full py-2 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white font-display font-medium text-xs cursor-pointer transition-colors"
+          >
+            Exit to Web Lab
+          </button>
+        )}
       </div>
     </div>
   );

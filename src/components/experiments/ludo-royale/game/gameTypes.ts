@@ -71,6 +71,18 @@ export interface Token {
   steps: number;
 }
 
+export type MatchmakingPlayerCount = 2 | 3 | 4;
+
+export type MatchLifecycleState =
+  | 'waiting_for_players'
+  | 'match_found'
+  | 'starting_match'
+  | 'in_progress'
+  | 'player_leaving'
+  | 'replacing_with_bot'
+  | 'match_terminated'
+  | 'room_closed';
+
 export interface PlayerConfig {
   color: PlayerColor;
   name: string;
@@ -79,6 +91,8 @@ export interface PlayerConfig {
   aiDifficulty?: AIDifficulty;
   connected?: boolean;
   ready?: boolean;
+  replacedByBot?: boolean;
+  originalHumanName?: string;
 }
 
 export interface PlayerState extends PlayerConfig {

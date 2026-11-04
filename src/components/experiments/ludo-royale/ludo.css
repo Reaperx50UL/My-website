@@ -1321,7 +1321,92 @@
   animation: diceImpactRipple 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* ==========================================================================
+   ANIMATED DOTTED MOVE TRAJECTORY & FLOATING TOKEN POP-UP CALLOUTS
+   ========================================================================== */
+@keyframes dottedPathFlow {
+  0% {
+    stroke-dashoffset: 44;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes stepDotWave {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.26);
+    opacity: 1;
+  }
+}
+
+@keyframes targetRingRipple {
+  0% {
+    transform: scale(0.76);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.38);
+    opacity: 0;
+  }
+}
+
+@keyframes tokenPopupFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes tokenPopupPopIn {
+  0% {
+    transform: scale(0.75) translateY(8px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0px);
+    opacity: 1;
+  }
+}
+
+.animate-dotted-path-flow {
+  animation: dottedPathFlow 0.78s linear infinite;
+}
+
+.animate-step-dot-wave {
+  animation: stepDotWave 1.15s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-target-ripple {
+  animation: targetRingRipple 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-token-popup-float {
+  animation: tokenPopupFloat 1.6s ease-in-out infinite;
+}
+
+.animate-token-popup-in {
+  animation: tokenPopupPopIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .animate-dotted-path-flow,
+  .animate-step-dot-wave,
+  .animate-target-ripple,
+  .animate-token-popup-float,
+  .animate-token-popup-in,
   .animate-dice-roll-2d,
   .animate-dice-roll-ivory,
   .animate-dice-roll-bullion,
