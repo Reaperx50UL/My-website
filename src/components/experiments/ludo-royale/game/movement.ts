@@ -1,8 +1,23 @@
-import { FINISH_STEP } from './constants';
-import { HouseRules, LegalMove, PlayerColor, PlayerState } from './gameTypes';
+import { getGlobalTrackIndex } from './boardLayout';
+import { FINISH_STEP, MAX_TRACK_STEPS } from './constants';
+import type {
+  BlockadePassingEntitlement,
+  HouseRules,
+  LegalMove,
+  PlayerColor,
+  PlayerState,
+  TokenPair,
+} from './gameTypes';
+import {
+  getOpposingPairsAtTrackIndex,
+  reconcileTokenPairs,
+} from './legalMoves';
 
 export interface MoveExecutionResult {
   updatedPlayers: PlayerState[];
+  updatedPairs: TokenPair[];
+  newlyFormedPairs: TokenPair[];
+  updatedPassingEntitlements: BlockadePassingEntitlement[];
   grantsExtraRoll: boolean;
   playerJustFinished: boolean;
   newRankings: PlayerColor[];
@@ -11,8 +26,12 @@ export interface MoveExecutionResult {
 }
 
 /**
- * Applies a validated LegalMove to the players array, sending captured tokens back to their yard (-1),
- * checking if the player finished all 4 tokens, and calculating whether the player earns an extra roll.
+ * Applies a validated LegalMove (single token or paired group) to the players array:
+ * - Moves single token or both paired tokens together.
+ * - Sends captured single tokens or captured opposing pairs back to their Home Yard (-1).
+ * - Automatically forms pairs when two same-color tokens occupy the same eligible position.
+ * - Grants or consumes temporary BlockadePassingEntitlement records according to Part 7 rules.
+ * - Checks if the player finished all 4 tokens and calculates whether an extra roll is earned.
  */
 export function applyMoveToPlayers(
   players: PlayerState[],
@@ -20,15 +39,31 @@ export function applyMoveToPlayers(
   move: LegalMove,
   diceValue: number,
   currentRankings: PlayerColor[],
-  rules: HouseRules
+  rules: HouseRules,
+  existingPairs: TokenPair[] = [],
+  existingEntitlements: BlockadePassingEntitlement[] = [],
+  brokenPairTokenIdsThisRoll: string[] = [],
+  turnNumber: number = 1
 ): MoveExecutionResult {
   const activeColor = players[activePlayerIndex].color;
   const capturedSet = new Set(move.capturesTokenIds);
+  const movingTokenIds = new Set<string>(
+    move.isPairMove && move.pairedTokenIds
+      ? move.pairedTokenIds
+      : [move.tokenId]
+  );
 
-  const updatedPlayers: PlayerState[] = players.map((player) => {
+  // 1. Update token positions for active player and reset captured opponent tokens to yard (-1)
+  const rawUpdatedPlayers: PlayerState[] = players.map((player) => {
     if (player.color === activeColor) {
       const updatedTokens = player.tokens.map((t) =>
-        t.id === move.tokenId ? { ...t, steps: move.toSteps } : t
+        movingTokenIds.has(t.id)
+          ? {
+              ...t,
+              steps: move.toSteps,
+              yardSlot: move.toSteps === -1 ? t.index : undefined,
+            }
+          : t
       );
       const allHome = updatedTokens.every((t) => t.steps === FINISH_STEP);
       return {
@@ -44,7 +79,6 @@ export function applyMoveToPlayers(
       };
     }
 
-    // Check if any of this opponent's tokens were captured
     const hasCapturedToken = player.tokens.some((t) => capturedSet.has(t.id));
     if (!hasCapturedToken) {
       return player;
@@ -53,12 +87,110 @@ export function applyMoveToPlayers(
     return {
       ...player,
       tokens: player.tokens.map((t) =>
-        capturedSet.has(t.id) ? { ...t, steps: -1 } : t
+        capturedSet.has(t.id)
+          ? { ...t, steps: -1, pairId: null, yardSlot: t.index }
+          : t
       ),
     };
   });
 
-  const activePlayerAfter = updatedPlayers[activePlayerIndex];
+  // 2. Filter out any pairs whose tokens were captured
+  const survivingPairs = existingPairs
+    .filter(
+      (p) =>
+        !capturedSet.has(p.tokenIds[0]) && !capturedSet.has(p.tokenIds[1])
+    )
+    .map((p) =>
+      move.isPairMove && p.id === move.pairId
+        ? { ...p, steps: move.toSteps }
+        : p
+    );
+
+  // Any token that just moved is no longer prevented from forming a new pair at its destination
+  const remainingBrokenIds = brokenPairTokenIdsThisRoll.filter(
+    (id) => !movingTokenIds.has(id)
+  );
+
+  // 3. Reconcile pairs across all players (auto-forming pairs on same eligible square)
+  const reconciled = reconcileTokenPairs(
+    rawUpdatedPlayers,
+    survivingPairs,
+    remainingBrokenIds
+  );
+
+  // 4. Update BlockadePassingEntitlements:
+  // - Remove entitlements for any token that just moved or was captured
+  // - Remove entitlements for any pair that just moved or was captured or no longer exists at its trackIndex
+  let nextEntitlements = existingEntitlements.filter((ent) => {
+    if (movingTokenIds.has(ent.tokenId)) return false;
+    if (capturedSet.has(ent.tokenId)) return false;
+    if (move.isPairMove && move.pairId === ent.pairId) return false;
+
+    const currentPair = reconciled.pairs.find((p) => p.id === ent.pairId);
+    if (!currentPair) return false;
+    const currentPairTrackIdx = getGlobalTrackIndex(
+      currentPair.color,
+      currentPair.steps
+    );
+    if (currentPairTrackIdx !== ent.trackIndex) return false;
+
+    // Also ensure the entitled token is still an unpaired single token
+    const owner = reconciled.players.find((pl) => pl.color === ent.color);
+    const tok = owner?.tokens.find((t) => t.id === ent.tokenId);
+    if (!tok || tok.pairId || tok.steps < 0 || tok.steps > MAX_TRACK_STEPS) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // - If a single token just landed on a track square occupied by one or more opposing pairs,
+  //   record a temporary BlockadePassingEntitlement for that specific single token & opposing pair(s).
+  if (
+    !move.isPairMove &&
+    move.toSteps >= 0 &&
+    move.toSteps <= MAX_TRACK_STEPS
+  ) {
+    const movedOwner = reconciled.players[activePlayerIndex];
+    const movedTokenAfter = movedOwner.tokens.find(
+      (t) => t.id === move.tokenId
+    );
+    // Only grant single-token passing entitlement if the moved token remains a single token
+    if (movedTokenAfter && !movedTokenAfter.pairId) {
+      const targetTrackIdx = getGlobalTrackIndex(activeColor, move.toSteps);
+      if (targetTrackIdx !== null) {
+        const oppPairsAtDest = getOpposingPairsAtTrackIndex(
+          activeColor,
+          targetTrackIdx,
+          reconciled.pairs
+        );
+        for (const oppPair of oppPairsAtDest) {
+          const alreadyExists = nextEntitlements.some(
+            (e) =>
+              e.tokenId === move.tokenId &&
+              e.pairId === oppPair.id &&
+              e.trackIndex === targetTrackIdx
+          );
+          if (!alreadyExists) {
+            nextEntitlements = [
+              ...nextEntitlements,
+              {
+                tokenId: move.tokenId,
+                color: activeColor,
+                pairId: oppPair.id,
+                pairColor: oppPair.color,
+                trackIndex: targetTrackIdx,
+                grantedAtTurn: turnNumber,
+              },
+            ];
+          }
+        }
+      }
+    }
+  }
+
+  // 5. Check rankings & match completion
+  const activePlayerAfter = reconciled.players[activePlayerIndex];
   const playerJustFinished =
     activePlayerAfter.hasFinished && !players[activePlayerIndex].hasFinished;
 
@@ -67,29 +199,24 @@ export function applyMoveToPlayers(
     newRankings.push(activeColor);
   }
 
-  // Check if game is over:
-  // The match continues until only 1 unfinished player remains, deciding 1st, 2nd, 3rd, and 4th place!
-  // (In a 2-player match, when 1st finishes, 1 unfinished player remains -> 2nd place is decided immediately.
-  //  In a 3-player match, play continues after 1st finishes until 2nd finishes -> 3rd place is decided.
-  //  In a 4-player match, play continues after 1st & 2nd finish until 3rd finishes -> 4th place is decided.)
-  const unfinishedPlayers = updatedPlayers.filter((p) => !p.hasFinished);
+  const unfinishedPlayers = reconciled.players.filter((p) => !p.hasFinished);
   const isGameOver = unfinishedPlayers.length <= 1;
 
-  let finalPlayers = updatedPlayers;
+  let finalPlayers = reconciled.players;
   if (isGameOver && unfinishedPlayers.length === 1) {
     const lastColor = unfinishedPlayers[0].color;
     if (!newRankings.includes(lastColor)) {
       newRankings.push(lastColor);
     }
     const finalRank = newRankings.indexOf(lastColor) + 1;
-    finalPlayers = updatedPlayers.map((p) =>
+    finalPlayers = reconciled.players.map((p) =>
       p.color === lastColor ? { ...p, finishRank: finalRank } : p
     );
   }
 
   const winner = newRankings.length > 0 ? newRankings[0] : null;
 
-  // Determine whether the active player receives an extra turn
+  // 6. Determine whether the active player receives an extra roll
   let grantsExtraRoll = false;
   if (!activePlayerAfter.hasFinished && !isGameOver) {
     if (diceValue === 6) {
@@ -103,6 +230,9 @@ export function applyMoveToPlayers(
 
   return {
     updatedPlayers: finalPlayers,
+    updatedPairs: reconciled.pairs,
+    newlyFormedPairs: reconciled.newlyFormedPairs,
+    updatedPassingEntitlements: nextEntitlements,
     grantsExtraRoll,
     playerJustFinished,
     newRankings,

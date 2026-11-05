@@ -695,6 +695,23 @@ class MultiplayerClient {
     this.send({ type: 'ADVANCE_TURN', roomCode: roomCode.trim().toUpperCase() });
   }
 
+  public requestBreakPair(roomCode: string, pairId: string): void {
+    this.send({ type: 'BREAK_PAIR', roomCode: roomCode.trim().toUpperCase(), pairId });
+  }
+
+  public requestFormYardPair(
+    roomCode: string,
+    tokenAId?: string,
+    tokenBId?: string
+  ): void {
+    this.send({
+      type: 'FORM_YARD_PAIR',
+      roomCode: roomCode.trim().toUpperCase(),
+      tokenAId,
+      tokenBId,
+    });
+  }
+
   public joinMatchmaking(
     name: string,
     avatar: string,

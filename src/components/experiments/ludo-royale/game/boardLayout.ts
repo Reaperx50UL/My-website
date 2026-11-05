@@ -9,7 +9,7 @@ import {
   TOTAL_TRACK_CELLS,
   getBoardThemeOption,
 } from './constants';
-import {
+import type {
   BoardTheme,
   GridCoord,
   HouseRules,
@@ -211,15 +211,38 @@ export function isSafeTrackIndex(trackIndex: number, rules: HouseRules): boolean
 }
 
 /**
+ * Determines whether a token position (color, steps) is on a Home Yard (-1) or a Safe Star square.
+ */
+export function isYardOrSafeStarPosition(
+  color: PlayerColor,
+  steps: number
+): boolean {
+  if (steps < 0) {
+    return true;
+  }
+  const trackIdx = getGlobalTrackIndex(color, steps);
+  if (
+    trackIdx !== null &&
+    (STAR_SAFE_INDICES.includes(trackIdx) ||
+      START_SAFE_INDICES.includes(trackIdx))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Returns the exact 15x15 GridCoord for any token state (yard, track, home path, or finish).
  */
 export function getTokenGridCoord(
   color: PlayerColor,
   steps: number,
-  tokenIndex: number = 0
+  tokenIndex: number = 0,
+  yardSlot?: number
 ): GridCoord {
   if (steps < 0) {
-    return YARD_SLOT_COORDS[color][tokenIndex] ?? YARD_SLOT_COORDS[color][0];
+    const slot = yardSlot !== undefined ? yardSlot : tokenIndex;
+    return YARD_SLOT_COORDS[color][slot] ?? YARD_SLOT_COORDS[color][0];
   }
   if (steps <= MAX_TRACK_STEPS) {
     const globalIdx = getGlobalTrackIndex(color, steps)!;
@@ -295,7 +318,13 @@ export function groupTokensByCell(tokens: Token[]): Map<string, Token[]> {
   for (const token of tokens) {
     let key: string;
     if (token.steps < 0) {
-      key = `yard-${token.color}-${token.index}`;
+      const slot =
+        token.yardSlot !== undefined
+          ? token.yardSlot
+          : token.pairId
+          ? `pair-${token.pairId}`
+          : token.index;
+      key = `yard-${token.color}-${slot}`;
     } else if (token.steps >= FINISH_STEP) {
       key = `finish-${token.color}-${token.index}`;
     } else if (token.steps >= HOME_PATH_START_STEP) {

@@ -21,7 +21,7 @@ import {
   StatsModal,
   VictoryModal,
 } from './components/Modals/GameModals';
-import { chooseAIMove } from './game/aiStrategy';
+import { chooseAIMove, chooseAITurnDecision } from './game/aiStrategy';
 import { getStepPathCoords } from './game/boardLayout';
 import {
   BOARD_THEME_OPTIONS,
@@ -29,10 +29,12 @@ import {
   getBoardThemeOption,
 } from './game/constants';
 import {
+  breakTokenPair,
   commitDiceRoll,
   completeTurnTransition,
   createInitialGameState,
   executeTokenMove,
+  formTokenPair,
   generateFairDiceRoll,
 } from './game/gameEngine';
 import {
@@ -203,6 +205,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
   const pendingRollGameStateRef = useRef<GameState | null>(null);
   const animatingMoveRef = useRef<{ tokenId: string; coord: GridCoord } | null>(null);
   const lastAppliedVersionRef = useRef<number>(0);
+  const aiPairActionRollKeyRef = useRef<string | null>(null);
 
   const showTransientMatchBanner = useCallback((text: string) => {
     setInMatchBanner(text);
@@ -213,6 +216,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       setInMatchBanner(null);
     }, 5500);
   }, []);
+
+  // Display rollback toast banner when three consecutive sixes rollback triggers
+  useEffect(() => {
+    if (gameState.lastRollbackNotice) {
+      showTransientMatchBanner(gameState.lastRollbackNotice.message);
+    }
+  }, [gameState.lastRollbackNotice, showTransientMatchBanner]);
 
   const handleConfirmLeaveOnlineMatch = useCallback(() => {
     soundManager.playClick();
@@ -715,15 +725,21 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         return;
       }
 
-      const move = gameState.legalMoves.find((m) => m.tokenId === tokenId);
+      const move = gameState.legalMoves.find(
+        (m) =>
+          m.tokenId === tokenId ||
+          m.pairId === tokenId ||
+          (m.isPairMove && m.pairedTokenIds?.includes(tokenId))
+      );
       if (!move) return;
+      const resolvedTokenId = move.tokenId;
 
       // Online mode delegates move execution to the authoritative server
       if (
         (gameState.mode === 'friends' || gameState.mode === 'matchmaking') &&
         gameState.roomCode
       ) {
-        multiplayerClient.requestMoveToken(gameState.roomCode, tokenId);
+        multiplayerClient.requestMoveToken(gameState.roomCode, resolvedTokenId);
 
         const coords = move.pathCoords;
         if (settings.reducedMotion || coords.length <= 1) {
@@ -743,7 +759,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             setGameState(pendingGameStateRef.current);
             pendingGameStateRef.current = null;
           } else {
-            setGameState((prev) => executeTokenMove(prev, tokenId));
+            setGameState((prev) => executeTokenMove(prev, resolvedTokenId));
           }
           return;
         }
@@ -754,7 +770,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         }
 
         let stepIdx = 0;
-        const initialAnim = { tokenId, coord: coords[0] };
+        const initialAnim = { tokenId: resolvedTokenId, coord: coords[0] };
         animatingMoveRef.current = initialAnim;
         setAnimatingMove(initialAnim);
         soundManager.playStep(0);
@@ -763,7 +779,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         stepIntervalRef.current = window.setInterval(() => {
           stepIdx += 1;
           if (stepIdx < coords.length) {
-            const nextAnim = { tokenId, coord: coords[stepIdx] };
+            const nextAnim = { tokenId: resolvedTokenId, coord: coords[stepIdx] };
             animatingMoveRef.current = nextAnim;
             setAnimatingMove(nextAnim);
             soundManager.playStep(stepIdx);
@@ -789,7 +805,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
               setGameState(pendingGameStateRef.current);
               pendingGameStateRef.current = null;
             } else {
-              setGameState((prev) => executeTokenMove(prev, tokenId));
+              setGameState((prev) => executeTokenMove(prev, resolvedTokenId));
             }
           }
         }, 115);
@@ -809,7 +825,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
           soundManager.playStep(0);
           soundManager.triggerHaptic(10);
         }
-        setGameState((prev) => executeTokenMove(prev, tokenId));
+        setGameState((prev) => executeTokenMove(prev, resolvedTokenId));
         return;
       }
 
@@ -819,7 +835,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       }
 
       let stepIdx = 0;
-      const initialAnim = { tokenId, coord: coords[0] };
+      const initialAnim = { tokenId: resolvedTokenId, coord: coords[0] };
       animatingMoveRef.current = initialAnim;
       setAnimatingMove(initialAnim);
       soundManager.playStep(0);
@@ -828,7 +844,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       stepIntervalRef.current = window.setInterval(() => {
         stepIdx += 1;
         if (stepIdx < coords.length) {
-          const nextAnim = { tokenId, coord: coords[stepIdx] };
+          const nextAnim = { tokenId: resolvedTokenId, coord: coords[stepIdx] };
           animatingMoveRef.current = nextAnim;
           setAnimatingMove(nextAnim);
           soundManager.playStep(stepIdx);
@@ -846,11 +862,83 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             soundManager.playReachHome();
             soundManager.triggerHaptic(25);
           }
-          setGameState((prev) => executeTokenMove(prev, tokenId));
+          setGameState((prev) => executeTokenMove(prev, resolvedTokenId));
         }
       }, 115);
     },
     [shellState, gameState, animatingMove, settings.reducedMotion]
+  );
+
+  const handleBreakPair = useCallback(
+    (pairId: string) => {
+      if (
+        shellState !== 'playing' ||
+        (gameState.turnPhase !== 'SELECTING_TOKEN' &&
+          gameState.turnPhase !== 'WAITING_FOR_ROLL') ||
+        isRolling ||
+        animatingMove !== null
+      ) {
+        return;
+      }
+      soundManager.playClick();
+      soundManager.triggerHaptic(15);
+
+      if (
+        (gameState.mode === 'friends' || gameState.mode === 'matchmaking') &&
+        gameState.roomCode
+      ) {
+        multiplayerClient.requestBreakPair(gameState.roomCode, pairId);
+        return;
+      }
+
+      setGameState((prev) => breakTokenPair(prev, pairId));
+    },
+    [
+      shellState,
+      gameState.turnPhase,
+      gameState.mode,
+      gameState.roomCode,
+      isRolling,
+      animatingMove,
+    ]
+  );
+
+  const handleFormYardPair = useCallback(
+    (tokenAId?: string, tokenBId?: string) => {
+      if (
+        shellState !== 'playing' ||
+        (gameState.turnPhase !== 'SELECTING_TOKEN' &&
+          gameState.turnPhase !== 'WAITING_FOR_ROLL') ||
+        isRolling ||
+        animatingMove !== null
+      ) {
+        return;
+      }
+      soundManager.playClick();
+      soundManager.triggerHaptic(15);
+
+      if (
+        (gameState.mode === 'friends' || gameState.mode === 'matchmaking') &&
+        gameState.roomCode
+      ) {
+        multiplayerClient.requestFormYardPair(
+          gameState.roomCode,
+          tokenAId,
+          tokenBId
+        );
+        return;
+      }
+
+      setGameState((prev) => formTokenPair(prev, tokenAId, tokenBId));
+    },
+    [
+      shellState,
+      gameState.turnPhase,
+      isRolling,
+      animatingMove,
+      gameState.mode,
+      gameState.roomCode,
+    ]
   );
 
   // Trigger a dice roll for the current player
@@ -966,6 +1054,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       .every((p) => p.type === 'ai');
 
     if (gameState.turnPhase === 'WAITING_FOR_ROLL') {
+      aiPairActionRollKeyRef.current = null;
       const timer = window.setTimeout(
         () => {
           handleRollDice();
@@ -976,15 +1065,38 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
     }
 
     if (gameState.turnPhase === 'SELECTING_TOKEN') {
+      const rollKey = `${gameState.turnNumber}-${gameState.activePlayerIndex}-${gameState.consecutiveSixes}-${gameState.diceValue}`;
+      const alreadyToggledPairThisRoll =
+        aiPairActionRollKeyRef.current === rollKey;
+
       const timer = window.setTimeout(
         () => {
-          const chosenMove = chooseAIMove(
-            gameState.legalMoves,
-            activePlayer.aiDifficulty || 'medium',
-            activePlayer.color,
-            gameState.players,
-            gameState.rules
-          );
+          const decision = chooseAITurnDecision(gameState);
+          if (!alreadyToggledPairThisRoll && decision?.formPairTokenIds) {
+            aiPairActionRollKeyRef.current = rollKey;
+            setGameState((prev) =>
+              formTokenPair(
+                prev,
+                decision.formPairTokenIds![0],
+                decision.formPairTokenIds![1]
+              )
+            );
+            return;
+          }
+          if (!alreadyToggledPairThisRoll && decision?.breakPairId) {
+            aiPairActionRollKeyRef.current = rollKey;
+            setGameState((prev) => breakTokenPair(prev, decision.breakPairId!));
+            return;
+          }
+          const chosenMove =
+            (!alreadyToggledPairThisRoll ? decision?.move : undefined) ||
+            chooseAIMove(
+              gameState.legalMoves,
+              activePlayer.aiDifficulty || 'medium',
+              activePlayer.color,
+              gameState.players,
+              gameState.rules
+            );
           if (chosenMove) {
             handleSelectToken(chosenMove.tokenId);
           }
@@ -1209,6 +1321,10 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
                   players={gameState.players}
                   activeColor={activePlayer.color}
                   legalMoves={gameState.legalMoves}
+                  breakablePairIds={
+                    isLocalPlayersTurn ? gameState.breakablePairIds : []
+                  }
+                  turnPhase={gameState.turnPhase}
                   selectedTokenId={gameState.selectedTokenId}
                   theme={settings.boardTheme}
                   colorBlindMode={settings.colorBlindMode}
@@ -1224,6 +1340,12 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
                     if (activePlayer?.type === 'ai') return;
                     handleSelectToken(tokenId);
                   }}
+                  onBreakPair={(pairId) => {
+                    if (activePlayer?.type === 'ai' || !isLocalPlayersTurn) {
+                      return;
+                    }
+                    handleBreakPair(pairId);
+                  }}
                 />
               );
             })()}
@@ -1237,6 +1359,8 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             localAssignedColor={effectiveAssignedColor}
             onRollDice={handleRollDice}
             onSelectToken={handleSelectToken}
+            onBreakPair={handleBreakPair}
+            onFormYardPair={handleFormYardPair}
             onToggleSound={() => {
               const next = {
                 ...settings,

@@ -1,4 +1,4 @@
-import {
+import type {
   AppSettings,
   AvatarOption,
   BoardTheme,
@@ -109,6 +109,7 @@ export const DEFAULT_HOUSE_RULES: HouseRules = {
   bonusRollOnHome: true,
   safeStarSquares: true,
   fastStart: false,
+  allowBreakPairOnYardAndStar: true,
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {

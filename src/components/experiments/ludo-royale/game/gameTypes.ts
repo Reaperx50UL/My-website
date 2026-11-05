@@ -69,6 +69,44 @@ export interface Token {
    * 56 = reached central finishing triangle (home)
    */
   steps: number;
+  /** Unique pair ID when this token is paired with another same-color token */
+  pairId?: string | null;
+  /** Optional Home Yard slot (0..3); two yard tokens sharing a slot form a Home Yard pair */
+  yardSlot?: number;
+}
+
+export interface TokenPair {
+  id: string; // e.g. 'pair-red-0-1'
+  color: PlayerColor;
+  tokenIds: [string, string];
+  steps: number;
+}
+
+export interface BlockadePassingEntitlement {
+  tokenId: string;
+  color: PlayerColor;
+  pairId: string;
+  pairColor: PlayerColor;
+  trackIndex: number;
+  grantedAtTurn: number;
+}
+
+export interface SixSequenceSnapshot {
+  players: PlayerState[];
+  pairs: TokenPair[];
+  passingEntitlements: BlockadePassingEntitlement[];
+  rankings: PlayerColor[];
+  winner: PlayerColor | null;
+  lastMove: {
+    tokenId: string;
+    fromSteps: number;
+    toSteps: number;
+    capturedIds: string[];
+    isPairMove?: boolean;
+    pairedTokenIds?: [string, string];
+  } | null;
+  turnNumber: number;
+  eventLog: GameEventLog[];
 }
 
 export type MatchmakingPlayerCount = 2 | 3 | 4;
@@ -105,7 +143,7 @@ export interface PlayerState extends PlayerConfig {
 }
 
 export interface HouseRules {
-  /** Maximum consecutive sixes allowed before turn is forfeited (e.g. 3 in standard rules, or 0 for unlimited) */
+  /** Maximum consecutive sixes allowed before three-sixes rollback triggers (3 in standard rules, or 0 for unlimited) */
   maxConsecutiveSixes: 3 | 0;
   /** Whether capturing an opponent's token grants a bonus dice roll */
   bonusRollOnCapture: boolean;
@@ -115,6 +153,8 @@ export interface HouseRules {
   safeStarSquares: boolean;
   /** Whether each player starts with 1 token already on their starting square for faster games */
   fastStart: boolean;
+  /** Whether paired tokens can be voluntarily separated while occupying Home Yard or Safe Star positions (Default: true) */
+  allowBreakPairOnYardAndStar: boolean;
 }
 
 export interface LegalMove {
@@ -126,7 +166,12 @@ export interface LegalMove {
   capturesTokenIds: string[];
   entersHomePath: boolean;
   reachesHome: boolean;
-   reachesSafeSquare: boolean;
+  reachesSafeSquare: boolean;
+  isPairMove?: boolean;
+  pairId?: string;
+  pairedTokenIds?: [string, string];
+  moveDistance?: number;
+  consumesPassingEntitlement?: boolean;
 }
 
 export interface GridCoord {
@@ -139,7 +184,17 @@ export interface GameEventLog {
   timestamp: number;
   playerColor: PlayerColor;
   playerName: string;
-  type: 'roll' | 'move' | 'capture' | 'home' | 'forfeit_sixes' | 'skip' | 'win';
+  type:
+    | 'roll'
+    | 'move'
+    | 'capture'
+    | 'home'
+    | 'forfeit_sixes'
+    | 'rollback_sixes'
+    | 'pair_form'
+    | 'pair_break'
+    | 'skip'
+    | 'win';
   message: string;
 }
 
@@ -159,6 +214,8 @@ export interface GameState {
     fromSteps: number;
     toSteps: number;
     capturedIds: string[];
+    isPairMove?: boolean;
+    pairedTokenIds?: [string, string];
   } | null;
   rules: HouseRules;
   rankings: PlayerColor[];
@@ -166,6 +223,18 @@ export interface GameState {
   turnNumber: number;
   startedAt: number;
   eventLog: GameEventLog[];
+  pairs?: TokenPair[];
+  passingEntitlements?: BlockadePassingEntitlement[];
+  breakablePairIds?: string[];
+  brokenPairTokenIdsThisRoll?: string[];
+  sixSequenceSnapshot?: SixSequenceSnapshot | null;
+  lastRollbackNotice?: {
+    id: string;
+    playerColor: PlayerColor;
+    playerName: string;
+    message: string;
+    timestamp: number;
+  } | null;
 }
 
 export type AvatarUnlockMetric = 'wins' | 'experiencePoints' | 'tokensCaptured' | 'streak';

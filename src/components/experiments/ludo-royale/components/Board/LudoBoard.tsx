@@ -34,6 +34,8 @@ export interface LudoBoardProps {
   players: PlayerState[];
   activeColor?: PlayerColor;
   legalMoves: LegalMove[];
+  breakablePairIds?: string[];
+  turnPhase?: string;
   selectedTokenId: string | null;
   theme: BoardTheme;
   colorBlindMode: boolean;
@@ -49,6 +51,7 @@ export interface LudoBoardProps {
   canRoll?: boolean;
   onRollDice?: () => void;
   onSelectToken: (tokenId: string) => void;
+  onBreakPair?: (pairId: string) => void;
 }
 
 interface BurstEffect {
@@ -192,6 +195,8 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   players,
   activeColor = 'red',
   legalMoves,
+  breakablePairIds = [],
+  turnPhase,
   selectedTokenId,
   theme,
   colorBlindMode,
@@ -199,14 +204,22 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   showMoveHints,
   animatingMove,
   onSelectToken,
+  onBreakPair,
 }) => {
   const [hoveredTokenId, setHoveredTokenId] = useState<string | null>(null);
   const [inspectedTokenId, setInspectedTokenId] = useState<string | null>(null);
+  const [activePairMenuTokenId, setActivePairMenuTokenId] = useState<
+    string | null
+  >(null);
   const [captureBursts, setCaptureBursts] = useState<BurstEffect[]>([]);
   const [homeBursts, setHomeBursts] = useState<BurstEffect[]>([]);
 
   const prevTokensRef = useRef<Record<string, Token>>({});
   const inspectTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setActivePairMenuTokenId(null);
+  }, [turnPhase, activeColor, players, legalMoves]);
 
   const themeConfig = useMemo(() => getBoardThemeOption(theme), [theme]);
   const effectiveThemeId = themeConfig.id;
@@ -239,7 +252,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
         if (curr.steps === FINISH_STEP && prev.steps < FINISH_STEP) {
           const pt = gridCoordToSvgPoint(
-            getTokenGridCoord(curr.color, FINISH_STEP, curr.index)
+            getTokenGridCoord(curr.color, FINISH_STEP, curr.index, curr.yardSlot)
           );
           const id = `home-${curr.id}-${Date.now()}`;
           setHomeBursts((b) => [...b, { id, x: pt.x, y: pt.y, color: curr.color }]);
@@ -250,7 +263,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
         if (prev.steps >= 0 && curr.steps === -1) {
           const pt = gridCoordToSvgPoint(
-            getTokenGridCoord(prev.color, prev.steps, prev.index)
+            getTokenGridCoord(prev.color, prev.steps, prev.index, prev.yardSlot)
           );
           const id = `cap-${curr.id}-${Date.now()}`;
           setCaptureBursts((b) => [
@@ -298,7 +311,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
       }
     >();
 
-    grouped.forEach((group: Token[]) => {
+    for (const [, group] of Array.from(grouped.entries())) {
       group.sort((a: Token, b: Token) => {
         const aLegal = legalMoveByTokenId.has(a.id) ? 1 : 0;
         const bLegal = legalMoveByTokenId.has(b.id) ? 1 : 0;
@@ -310,11 +323,12 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         const baseCoord = getTokenGridCoord(
           token.color,
           token.steps,
-          token.index
+          token.index,
+          token.yardSlot
         );
         const basePt = gridCoordToSvgPoint(baseCoord);
 
-        if (token.steps < 0 || count === 1) {
+        if (count === 1) {
           result.set(token.id, {
             x: basePt.x,
             y: basePt.y,
@@ -333,7 +347,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           });
         }
       });
-    });
+    }
 
     return result;
   }, [allTokens, legalMoveByTokenId]);
@@ -3867,8 +3881,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         {moveIndicators.map((ind) => {
           const isHovered =
             hoveredTokenId === ind.tokenId || selectedTokenId === ind.tokenId;
-          const isDimmed =
-            (hoveredTokenId !== null || selectedTokenId !== null) && !isHovered;
+          const isDimmed = hoveredTokenId !== null && !isHovered;
           const palette = METALLIC_PAWN_PALETTE[ind.color];
 
           const startPt = gridCoordToSvgPoint(ind.fromCoord);
@@ -3980,8 +3993,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           if (ind.sharedTargetIndex !== 0) return null;
           const isHovered =
             hoveredTokenId === ind.tokenId || selectedTokenId === ind.tokenId;
-          const isDimmed =
-            (hoveredTokenId !== null || selectedTokenId !== null) && !isHovered;
+          const isDimmed = hoveredTokenId !== null && !isHovered;
           const destPt = gridCoordToSvgPoint(ind.toCoord);
           const palette = METALLIC_PAWN_PALETTE[ind.color];
 
@@ -4087,8 +4099,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         {moveIndicators.map((ind) => {
           const isHovered =
             hoveredTokenId === ind.tokenId || selectedTokenId === ind.tokenId;
-          const isDimmed =
-            (hoveredTokenId !== null || selectedTokenId !== null) && !isHovered;
+          const isDimmed = hoveredTokenId !== null && !isHovered;
           const destPt = gridCoordToSvgPoint(ind.toCoord);
           const palette = METALLIC_PAWN_PALETTE[ind.color];
 
@@ -4278,6 +4289,20 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               className={isLegal ? 'cursor-pointer' : 'pointer-events-none'}
               onClick={(e) => {
                 e.stopPropagation();
+                if (
+                  token.pairId &&
+                  token.steps >= 0 &&
+                  token.steps < FINISH_STEP &&
+                  token.color === activeColor &&
+                  onBreakPair &&
+                  (turnPhase === 'SELECTING_TOKEN' ||
+                    turnPhase === 'WAITING_FOR_ROLL')
+                ) {
+                  setActivePairMenuTokenId((prev) =>
+                    prev === token.id ? null : token.id
+                  );
+                  return;
+                }
                 if (isLegal) {
                   onSelectToken(token.id);
                 }
@@ -4883,6 +4908,16 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               const renderY = animPt ? animPt.y - 12 : pos.y;
 
               const isLegal = legalMoveByTokenId.has(token.id);
+              const isBreakablePair = Boolean(
+                token.pairId &&
+                  token.steps >= 0 &&
+                  token.steps < FINISH_STEP &&
+                  token.color === activeColor &&
+                  onBreakPair &&
+                  (turnPhase === 'SELECTING_TOKEN' ||
+                    turnPhase === 'WAITING_FOR_ROLL')
+              );
+              const isInteractive = isLegal || isBreakablePair;
               const meta = COLOR_META[token.color];
               const palette = METALLIC_PAWN_PALETTE[token.color];
               const tokenNumber = token.index + 1;
@@ -4906,6 +4941,12 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                   }}
                   className="cursor-pointer pointer-events-auto"
                   onClick={() => {
+                    if (isBreakablePair) {
+                      setActivePairMenuTokenId((prev) =>
+                        prev === token.id ? null : token.id
+                      );
+                      return;
+                    }
                     if (isLegal) {
                       onSelectToken(token.id);
                     } else {
@@ -4926,15 +4967,24 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                   onMouseLeave={() => {
                     if (hoveredTokenId === token.id) setHoveredTokenId(null);
                   }}
-                  role={isLegal ? 'button' : undefined}
-                  tabIndex={isLegal ? 0 : undefined}
+                  role={isInteractive ? 'button' : undefined}
+                  tabIndex={isInteractive ? 0 : undefined}
                   aria-label={`${meta.label} token ${tokenNumber} (${tokenStateLabel})${
-                    isLegal ? ' - playable' : ''
-                  }`}
+                    token.pairId ? ' - paired' : ''
+                  }${isLegal ? ' - playable' : ''}`}
                   onKeyDown={(e) => {
-                    if (isLegal && (e.key === 'Enter' || e.key === ' ')) {
+                    if (
+                      isInteractive &&
+                      (e.key === 'Enter' || e.key === ' ')
+                    ) {
                       e.preventDefault();
-                      onSelectToken(token.id);
+                      if (isBreakablePair) {
+                        setActivePairMenuTokenId((prev) =>
+                          prev === token.id ? null : token.id
+                        );
+                      } else if (isLegal) {
+                        onSelectToken(token.id);
+                      }
                     }
                   }}
                   data-testid={`token-${token.id}`}
@@ -4942,8 +4992,21 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                   {/* Generous Transparent Touch/Click Hitbox (88x88) */}
                   <circle cx={0} cy={-6} r={44} fill="transparent" />
 
+                  {/* Linked Pair Base Aura Ring */}
+                  {token.pairId && (
+                    <ellipse
+                      cx={0}
+                      cy={21}
+                      rx={34}
+                      ry={13}
+                      fill="rgba(250, 204, 21, 0.16)"
+                      stroke="#FACC15"
+                      strokeWidth={3}
+                    />
+                  )}
+
                   {/* Playable Ground Selection Halo Ring */}
-                  {isLegal && showMoveHints && (
+                  {isInteractive && showMoveHints && (
                     <g>
                       <ellipse
                         cx={0}
@@ -4951,7 +5014,9 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                         rx={37}
                         ry={14.5}
                         fill="none"
-                        stroke={palette.specHighlight}
+                        stroke={
+                          token.pairId ? '#FDE047' : palette.specHighlight
+                        }
                         strokeWidth={4}
                         strokeDasharray="6 5"
                         className="animate-token-pulse"
@@ -4970,13 +5035,15 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                   {/* Levitating 3D Pawn Wrapper when Playable */}
                   <g
                     className={
-                      isLegal && !reducedMotion ? 'animate-token-levitate' : ''
+                      isInteractive && !reducedMotion
+                        ? 'animate-token-levitate'
+                        : ''
                     }
                   >
                     {/* 3D Sculpted Metallic Pawn with Engraved Token Number (1..4) */}
                     {render3DMetallicPawn(
                       token.color,
-                      isLegal,
+                      isInteractive,
                       tokenNumber,
                       token.id
                     )}
@@ -4999,8 +5066,39 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                       </text>
                     )}
 
-                    {/* Stack Count Badge when Multiple Tokens Share a Tile */}
-                    {pos.stackCount > 1 &&
+                    {/* Prominent "2" Pair Indicator Badge for Paired Tokens (rendered once per pair on the topmost paired token) */}
+                    {token.pairId ? (
+                      allTokens.filter((t) => t.pairId === token.pairId)[1]
+                        ?.id === token.id && (
+                        <g
+                          transform="translate(22, -40)"
+                          data-testid={`pair-badge-${token.pairId}`}
+                        >
+                          <circle
+                            cx={0}
+                            cy={0}
+                            r={14.5}
+                            fill="#F59E0B"
+                            stroke="#FEF08A"
+                            strokeWidth={2.6}
+                          />
+                          <text
+                            x={0}
+                            y={0.5}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill="#020617"
+                            fontSize="14.5"
+                            fontWeight="900"
+                            className="font-mono-tabular"
+                          >
+                            2
+                          </text>
+                        </g>
+                      )
+                    ) : (
+                      /* Stack Count Badge when Multiple Unpaired Tokens Share a Tile */
+                      pos.stackCount > 1 &&
                       pos.stackIndex === pos.stackCount - 1 && (
                         <g transform="translate(22, -38)">
                           <circle
@@ -5024,7 +5122,8 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                             ×{pos.stackCount}
                           </text>
                         </g>
-                      )}
+                      )
+                    )}
                   </g>
                 </g>
               );
@@ -5036,6 +5135,150 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
           {/* 11. Floating Token Number Pop-Up Callout Bubbles Above Playable & Inspected/Hovered Pawns */}
           {renderTokenNumberPopups()}
+
+          {/* 12. Interactive On-Board Pair Action Popover (1. Move Pair / 2. Break Pair) */}
+          {(() => {
+            if (!activePairMenuTokenId) return null;
+            const targetToken = allTokens.find(
+              (t) => t.id === activePairMenuTokenId
+            );
+            if (!targetToken || !targetToken.pairId) return null;
+            const pos = tokenPositions.get(targetToken.id);
+            if (!pos) return null;
+
+            const pairMove =
+              legalMoveByTokenId.get(targetToken.id) ||
+              legalMoves.find((m) => m.pairId === targetToken.pairId);
+            const canBreak =
+              Boolean(onBreakPair) &&
+              Boolean(targetToken.pairId) &&
+              targetToken.steps >= 0 &&
+              targetToken.steps < FINISH_STEP &&
+              (turnPhase === 'SELECTING_TOKEN' ||
+                turnPhase === 'WAITING_FOR_ROLL');
+
+            const menuW = 240;
+            const menuH = 122;
+            const rawX = pos.x;
+            const rawY = pos.y < 210 ? pos.y + 92 : pos.y - 115;
+            const clampedX = Math.max(
+              menuW / 2 + 16,
+              Math.min(BOARD_VIEWBOX_SIZE - menuW / 2 - 16, rawX)
+            );
+            const clampedY = Math.max(
+              menuH / 2 + 16,
+              Math.min(BOARD_VIEWBOX_SIZE - menuH / 2 - 16, rawY)
+            );
+
+            return (
+              <g
+                transform={`translate(${clampedX}, ${clampedY})`}
+                className="pointer-events-auto"
+                data-testid="pair-action-popover"
+              >
+                <rect
+                  x={-menuW / 2}
+                  y={-menuH / 2}
+                  width={menuW}
+                  height={menuH}
+                  rx={18}
+                  fill="#0B1120"
+                  stroke="#FACC15"
+                  strokeWidth={3}
+                />
+                <text
+                  x={0}
+                  y={-menuH / 2 + 20}
+                  textAnchor="middle"
+                  fill="#FDE047"
+                  fontSize="14"
+                  fontWeight="800"
+                >
+                  PAIRED TOKENS (2)
+                </text>
+
+                {/* Option 1: Move Pair */}
+                <g
+                  transform="translate(0, -8)"
+                  className={
+                    pairMove ? 'cursor-pointer' : 'opacity-45 cursor-not-allowed'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (pairMove) {
+                      setActivePairMenuTokenId(null);
+                      onSelectToken(pairMove.tokenId);
+                    }
+                  }}
+                  data-testid="popover-move-pair-btn"
+                >
+                  <rect
+                    x={-menuW / 2 + 14}
+                    y={-16}
+                    width={menuW - 28}
+                    height={32}
+                    rx={10}
+                    fill={pairMove ? '#F59E0B' : '#1E293B'}
+                    stroke={pairMove ? '#FEF08A' : '#475569'}
+                    strokeWidth={1.8}
+                  />
+                  <text
+                    x={0}
+                    y={1}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill={pairMove ? '#020617' : '#94A3B8'}
+                    fontSize="13.5"
+                    fontWeight="900"
+                  >
+                    {pairMove
+                      ? pairMove.fromSteps === -1
+                        ? '1. Move Pair (Deploy)'
+                        : `1. Move Pair (+${pairMove.moveDistance || pairMove.toSteps - pairMove.fromSteps})`
+                      : '1. Move Pair (Even Roll Only)'}
+                  </text>
+                </g>
+
+                {/* Option 2: Break Pair */}
+                <g
+                  transform="translate(0, 32)"
+                  className={
+                    canBreak ? 'cursor-pointer' : 'opacity-45 cursor-not-allowed'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (canBreak && onBreakPair && targetToken.pairId) {
+                      setActivePairMenuTokenId(null);
+                      onBreakPair(targetToken.pairId);
+                    }
+                  }}
+                  data-testid="popover-break-pair-btn"
+                >
+                  <rect
+                    x={-menuW / 2 + 14}
+                    y={-16}
+                    width={menuW - 28}
+                    height={32}
+                    rx={10}
+                    fill={canBreak ? '#0EA5E9' : '#1E293B'}
+                    stroke={canBreak ? '#BAE6FD' : '#475569'}
+                    strokeWidth={1.8}
+                  />
+                  <text
+                    x={0}
+                    y={1}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill={canBreak ? '#020617' : '#94A3B8'}
+                    fontSize="13.5"
+                    fontWeight="900"
+                  >
+                    2. Break Pair
+                  </text>
+                </g>
+              </g>
+            );
+          })()}
         </svg>
       </div>
     </div>

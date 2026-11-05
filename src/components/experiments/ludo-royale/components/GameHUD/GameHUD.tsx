@@ -18,6 +18,10 @@ import {
   getBoardThemeOption,
 } from '../../game/constants';
 import { AppSettings, GameState, PlayerColor } from '../../game/gameTypes';
+import {
+  canBreakPairAtPosition,
+  getFormablePairOptionsForPlayer,
+} from '../../game/legalMoves';
 import { DiceRoller } from '../Dice/DiceRoller';
 
 interface GameHUDProps {
@@ -28,6 +32,8 @@ interface GameHUDProps {
   localAssignedColor?: PlayerColor | null;
   onRollDice: () => void;
   onSelectToken: (tokenId: string) => void;
+  onBreakPair?: (pairId: string) => void;
+  onFormYardPair?: (tokenAId?: string, tokenBId?: string) => void;
   onToggleSound: () => void;
   onCycleDiceStyle?: () => void;
   onCycleBoardTheme?: () => void;
@@ -45,6 +51,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   localAssignedColor,
   onRollDice,
   onSelectToken,
+  onBreakPair,
+  onFormYardPair,
   onToggleSound,
   onCycleDiceStyle,
   onCycleBoardTheme,
@@ -70,6 +78,58 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     !isRolling &&
     !isAnimatingMove;
 
+  // Manual Pair Formation ON/OFF Switch: available whenever two unpaired same-color tokens share any board square (0..55, outside Home Yard -1),
+  // regardless of dice roll (1..6 or before rolling), supporting all 2-token combinations when >2 same-color tokens share a square.
+  const pairableGroups = (() => {
+    if (
+      !isLocalPlayersTurn ||
+      !onFormYardPair ||
+      (gameState.turnPhase !== 'SELECTING_TOKEN' &&
+        gameState.turnPhase !== 'WAITING_FOR_ROLL') ||
+      isRolling ||
+      isAnimatingMove
+    ) {
+      return [];
+    }
+    const options = getFormablePairOptionsForPlayer(
+      activePlayer.color,
+      gameState.diceValue,
+      gameState.players,
+      gameState.pairs || [],
+      gameState.brokenPairTokenIdsThisRoll || []
+    );
+    return options.map((opt) => {
+      const locLabel =
+        opt.steps === 0
+          ? 'Start Point'
+          : opt.steps >= 51
+          ? `Home Stretch ${opt.steps - 50}`
+          : `Step ${opt.steps}`;
+      return {
+        steps: opt.steps,
+        tokenAId: opt.tokenIds[0],
+        tokenBId: opt.tokenIds[1],
+        label: `FORM PAIR #${opt.tokenIndices[0] + 1} & #${opt.tokenIndices[1] + 1} (${locLabel})`,
+      };
+    });
+  })();
+
+  const canFormYardPair = pairableGroups.length > 0;
+
+  // Voluntary Pair Breaking: allowed at ANY board location (0..55) during the player's turn
+  const breakablePairs =
+    isLocalPlayersTurn &&
+    !isRolling &&
+    !isAnimatingMove &&
+    (gameState.turnPhase === 'WAITING_FOR_ROLL' ||
+      gameState.turnPhase === 'SELECTING_TOKEN')
+      ? (gameState.pairs || []).filter(
+          (p) =>
+            p.color === activePlayer.color &&
+            canBreakPairAtPosition(p, gameState.rules)
+        )
+      : [];
+
   const getAvatarEmoji = (avatarId: string) => {
     return AVATAR_OPTIONS.find((a) => a.id === avatarId)?.icon || '👑';
   };
@@ -87,6 +147,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <span className="text-xs font-mono-tabular font-semibold text-slate-200 whitespace-nowrap shrink-0">
             Turn {Math.round(gameState.turnNumber)}
           </span>
+          {gameState.consecutiveSixes > 0 && (
+            <span
+              data-testid="hud-consecutive-sixes-badge"
+              title="Three consecutive sixes will cancel all moves in this sequence!"
+              className="text-[10px] font-mono-tabular font-bold text-amber-300 bg-amber-500/15 border border-amber-400/40 px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0"
+            >
+              6×{gameState.consecutiveSixes}/3
+            </span>
+          )}
           {gameState.roomCode && (
             <>
               <span aria-hidden="true" className="text-slate-600 shrink-0">
@@ -406,51 +475,135 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           onRoll={onRollDice}
         />
 
-        {/* Quick Playable Token Selector Buttons when legal moves exist */}
-        {gameState.turnPhase === 'SELECTING_TOKEN' &&
-          isLocalPlayersTurn &&
-          gameState.legalMoves.length > 0 && (
-            <div
-              className="mt-2 pt-2 border-t border-slate-800"
-              data-testid="hud-quick-moves"
-            >
-              <div className="grid grid-cols-2 gap-1.5">
-                {gameState.legalMoves.map((move) => {
-                  const tokenNumber = move.tokenIndex + 1;
-                  const actionText =
-                    move.fromSteps === -1
+        {/* Quick Playable Token & Pair Switch Actions */}
+        {(canFormYardPair ||
+          (breakablePairs.length > 0 && Boolean(onBreakPair)) ||
+          (gameState.turnPhase === 'SELECTING_TOKEN' &&
+            isLocalPlayersTurn &&
+            gameState.legalMoves.length > 0)) && (
+          <div
+            className="mt-2 pt-2 border-t border-slate-800 space-y-1.5"
+            data-testid="hud-quick-moves"
+          >
+            {/* Token Pair ON/OFF Switch Controls (Form Pair & Break Pair stay in the same top slot) */}
+            {((canFormYardPair && Boolean(onFormYardPair)) ||
+              (isLocalPlayersTurn &&
+                breakablePairs.length > 0 &&
+                Boolean(onBreakPair))) && (
+              <div
+                className="grid grid-cols-1 gap-1"
+                data-testid="hud-pair-switch-group"
+              >
+                {canFormYardPair &&
+                  onFormYardPair &&
+                  pairableGroups.map((grp, idx) => (
+                    <button
+                      key={`form-${grp.tokenAId}-${grp.tokenBId}`}
+                      type="button"
+                      onClick={() => onFormYardPair(grp.tokenAId, grp.tokenBId)}
+                      data-testid={
+                        idx === 0
+                          ? 'hud-pair-yard-btn'
+                          : `hud-pair-step-${grp.steps}-${grp.tokenAId}-${grp.tokenBId}`
+                      }
+                      className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/50 text-xs font-display font-bold text-amber-200 transition-colors cursor-pointer"
+                    >
+                      <span className="truncate">🔗 {grp.label}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-amber-400/20 border border-amber-300/40 text-[10px] font-mono-tabular uppercase tracking-wider text-amber-100 shrink-0">
+                        OFF → ON
+                      </span>
+                    </button>
+                  ))}
+
+                {isLocalPlayersTurn &&
+                  breakablePairs.length > 0 &&
+                  onBreakPair &&
+                  breakablePairs.map((pair) => {
+                    const nums = pair.tokenIds
+                      .map((tid) => {
+                        const tok = activePlayer.tokens.find(
+                          (t) => t.id === tid
+                        );
+                        return tok ? `#${tok.index + 1}` : '';
+                      })
+                      .filter(Boolean)
+                      .join(' & ');
+                    const locLabel =
+                      pair.steps === 0
+                        ? 'Start Point'
+                        : pair.steps >= 51
+                        ? `Home Stretch ${pair.steps - 50}`
+                        : `Step ${pair.steps}`;
+                    return (
+                      <button
+                        key={`break-${pair.id}`}
+                        type="button"
+                        onClick={() => onBreakPair(pair.id)}
+                        data-testid={`hud-break-pair-${pair.id}`}
+                        className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-xs font-display font-bold text-sky-200 transition-colors cursor-pointer"
+                      >
+                        <span className="truncate">
+                          ⛓️‍💥 BREAK PAIR {nums} ({locLabel})
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-sky-400/25 border border-sky-300/50 text-[10px] font-mono-tabular uppercase tracking-wider text-sky-100 shrink-0">
+                          ON → OFF
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
+
+            {gameState.turnPhase === 'SELECTING_TOKEN' &&
+              isLocalPlayersTurn &&
+              gameState.legalMoves.length > 0 && (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {gameState.legalMoves.map((move) => {
+                    const tokenNumber = move.tokenIndex + 1;
+                    const isPair = Boolean(move.isPairMove);
+                    const stepDelta =
+                      move.moveDistance || move.toSteps - move.fromSteps;
+                    const actionText = isPair
+                      ? move.fromSteps === -1
+                        ? 'Move Pair (Deploy)'
+                        : move.capturesTokenIds.length > 0
+                        ? '⚔ Move Pair (Capture!)'
+                        : `Move Pair (+${stepDelta})`
+                      : move.fromSteps === -1
                       ? '→ Start'
                       : move.reachesHome
                       ? '👑 Finish!'
                       : move.capturesTokenIds.length > 0
                       ? '⚔ Capture!'
-                      : `→ +${move.toSteps - move.fromSteps} steps`;
+                      : `→ +${stepDelta} steps`;
 
-                  return (
-                    <button
-                      key={move.tokenId}
-                      type="button"
-                      onClick={() => onSelectToken(move.tokenId)}
-                      data-testid={`quick-move-${move.tokenId}`}
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-800/95 hover:bg-slate-700 border border-slate-700 hover:border-amber-400/60 text-xs font-semibold text-slate-100 transition-colors text-left truncate cursor-pointer"
-                    >
-                      <span
-                        className="inline-flex items-center justify-center px-1.5 h-5 rounded-md text-[11px] font-black text-white shrink-0 border border-white/40 font-mono-tabular shadow-sm"
-                        style={{
-                          backgroundColor: COLOR_META[activePlayer.color].primaryHex,
-                        }}
+                    return (
+                      <button
+                        key={move.tokenId}
+                        type="button"
+                        onClick={() => onSelectToken(move.tokenId)}
+                        data-testid={`quick-move-${move.tokenId}`}
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-slate-800/95 hover:bg-slate-700 border border-slate-700 hover:border-amber-400/60 text-xs font-semibold text-slate-100 transition-colors text-left truncate cursor-pointer"
                       >
-                        #{tokenNumber}
-                      </span>
-                      <span className="truncate font-mono-tabular">
-                        {actionText}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                        <span
+                          className="inline-flex items-center justify-center px-1.5 h-5 rounded-md text-[11px] font-black text-white shrink-0 border border-white/40 font-mono-tabular shadow-sm"
+                          style={{
+                            backgroundColor:
+                              COLOR_META[activePlayer.color].primaryHex,
+                          }}
+                        >
+                          {isPair ? `2×#${tokenNumber}` : `#${tokenNumber}`}
+                        </span>
+                        <span className="truncate font-mono-tabular">
+                          {actionText}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+          </div>
+        )}
       </div>
 
       {/* Mobile / Tablet 1-Line Live Event Ticker (Saves vertical space so page never scrolls) */}

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   handleAddBot,
   handleAdvanceTurn,
+  handleBreakPair,
   handleCreateRoom,
+  handleFormYardPair,
   handleJoinMatchmaking,
   handleJoinRoom,
   handleLeaveMatchmaking,
@@ -81,6 +83,25 @@ export async function POST(req: NextRequest) {
           body.roomCode,
           clientId,
           body.tokenId
+        );
+        return NextResponse.json(result);
+      }
+
+      case 'BREAK_PAIR': {
+        const result = await handleBreakPair(
+          body.roomCode,
+          clientId,
+          body.pairId
+        );
+        return NextResponse.json(result);
+      }
+
+      case 'FORM_YARD_PAIR': {
+        const result = await handleFormYardPair(
+          body.roomCode,
+          clientId,
+          body.tokenAId,
+          body.tokenBId
         );
         return NextResponse.json(result);
       }

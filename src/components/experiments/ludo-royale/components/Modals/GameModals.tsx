@@ -485,7 +485,9 @@ export const SetupModal: React.FC<SetupModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
               <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 cursor-pointer">
-                <span className="text-slate-300">Triple 6s Forfeit Turn</span>
+                <span className="text-slate-300">
+                  Three Consecutive Sixes Rollback
+                </span>
                 <input
                   type="checkbox"
                   checked={rules.maxConsecutiveSixes === 3}
@@ -1786,31 +1788,58 @@ export const RulesModal: React.FC<{
           </button>
         </div>
 
-        <div className="space-y-3.5 text-xs md:text-sm text-slate-300 max-h-[68vh] overflow-y-auto pr-1 leading-relaxed">
+        <div className="space-y-3 text-xs md:text-sm text-slate-300 max-h-[68vh] overflow-y-auto pr-1 leading-relaxed">
           <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
             <h3 className="font-display font-bold text-white mb-1">
-              1. Objective & The 52-Square Track
+              1. Three Consecutive Sixes
             </h3>
-            <p className="text-slate-400 text-xs">
-              Each player commands 4 tokens starting in their corner yard. Navigate your tokens clockwise around the 52-cell perimeter track, up your 5-cell colored Home Stretch, and into the central Finishing Triangle. The first player to bring all 4 tokens home wins!
+            <p className="text-slate-300 text-xs">
+              Rolling three consecutive sixes cancels all actions performed during that sequence, restores the previous game state, and gives the same player a fresh roll.
             </p>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
             <h3 className="font-display font-bold text-white mb-1">
-              2. Deploying Tokens & Bonus Rolls
+              2. Manual Token Pairing
             </h3>
-            <p className="text-slate-400 text-xs">
-              You must roll a 6 to deploy a token from your starting yard onto your colored entry square. Rolling a 6 also awards a bonus roll.
+            <p className="text-slate-300 text-xs">
+              Two tokens of the same colour on the same board square can manually form a pair only on an even dice roll (2, 4, or 6). Pairs cannot be formed in the Home Yard.
             </p>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
             <h3 className="font-display font-bold text-white mb-1">
-              3. Capturing & Safe Squares
+              3. Pair Movement
             </h3>
-            <p className="text-slate-400 text-xs">
-              Landing on a square occupied by an opponent’s token captures it and sends it back to its starting yard! However, tokens resting on any of the 4 colored Start Squares or the 4 Star Squares cannot be captured.
+            <p className="text-slate-300 text-xs">
+              Pairs move only on even dice values and advance half the dice distance.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
+            <h3 className="font-display font-bold text-white mb-1">
+              4. Pair Breaking
+            </h3>
+            <p className="text-slate-300 text-xs">
+              Players may break their pair at any board location during their turn and move one token using the full dice value.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
+            <h3 className="font-display font-bold text-white mb-1">
+              5. Pair Capture
+            </h3>
+            <p className="text-slate-300 text-xs">
+              Only a pair can capture another pair. Single tokens cannot capture pairs, and pairs cannot capture single tokens.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
+            <h3 className="font-display font-bold text-white mb-1">
+              6. Blockade Exception
+            </h3>
+            <p className="text-slate-300 text-xs">
+              A single token can land on an opposing pair&apos;s square without capturing it. If the pair remains stationary, that single token may pass through it on its next roll.
             </p>
           </div>
 

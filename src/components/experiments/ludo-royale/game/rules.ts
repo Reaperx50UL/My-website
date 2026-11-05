@@ -1,5 +1,5 @@
 import { AVATAR_OPTIONS, COLOR_META, DEFAULT_HOUSE_RULES } from './constants';
-import {
+import type {
   AIDifficulty,
   HouseRules,
   PlayerColor,
@@ -91,7 +91,7 @@ export function normalizeRules(partial?: Partial<HouseRules>): HouseRules {
 }
 
 /**
- * Checks whether rolling a consecutive six forfeits the turn according to the selected ruleset.
+ * Checks whether rolling a consecutive six triggers the Three Consecutive Sixes Complete Rollback.
  */
 export function shouldForfeitOnConsecutiveSixes(
   consecutiveSixes: number,
@@ -108,34 +108,49 @@ export function shouldForfeitOnConsecutiveSixes(
  */
 export function describeActiveRules(rules: HouseRules): string[] {
   const descriptions: string[] = [
-    'Roll a 6 to deploy a token from your starting yard onto your colored entry square.',
-    'Rolling a 6 grants an extra roll.',
+    'Roll a 6 to deploy a token from your starting yard onto your colored entry square. Rolling a 6 grants an extra roll.',
+    'Manual Token Pairing (ON/OFF Switch): Whenever two tokens of the same colour occupy the same board square (outside the Home Yard), you can toggle them into a pair on any dice roll (1–6) or before rolling.',
+    'Pair Movement: Pairs move only on even dice values (2, 4, 6) and advance half the dice distance.',
+    'Unpair Option: Players may unpair (break) their pair in any scenario during their turn to move individual tokens using the full dice value.',
+    'Pair Capture: Only a pair can capture another pair. Single tokens cannot capture pairs, and pairs cannot capture single tokens.',
+    "Blockade Exception: A single token can land on an opposing pair's square without capturing it. If the pair remains stationary, that single token may pass through it on its next roll.",
     'An exact dice roll is required to enter the central finishing triangle.',
-    'In 3- and 4-player matches, play continues after 1st place finishes until 2nd, 3rd, and 4th places are decided.',
   ];
 
   if (rules.maxConsecutiveSixes === 3) {
-    descriptions.push('Rolling three consecutive 6s forfeits the third move and passes the turn.');
+    descriptions.push(
+      'Three Consecutive Sixes: Rolling three consecutive sixes cancels all actions performed during that sequence, restores the previous game state, and gives the same player a fresh roll.'
+    );
   } else {
-    descriptions.push('Unlimited consecutive 6s are allowed without forfeiting your turn.');
+    descriptions.push('Unlimited consecutive 6s are allowed without rollback.');
   }
 
   if (rules.safeStarSquares) {
-    descriptions.push('Colored start squares and the 4 Star squares protect tokens from capture.');
+    descriptions.push(
+      'Colored start squares and the 4 Star squares protect tokens and pairs from capture.'
+    );
   } else {
-    descriptions.push('Only the 4 colored starting squares are safe from capture.');
+    descriptions.push(
+      'Only the 4 colored starting squares are safe from capture.'
+    );
   }
 
   if (rules.bonusRollOnCapture) {
-    descriptions.push('Capturing an opponent token on a non-safe square awards a bonus roll.');
+    descriptions.push(
+      'Capturing an opponent token or pair on a non-safe square awards a bonus roll.'
+    );
   }
 
   if (rules.bonusRollOnHome) {
-    descriptions.push('Reaching the central finishing triangle awards a bonus roll.');
+    descriptions.push(
+      'Reaching the central finishing triangle awards a bonus roll.'
+    );
   }
 
   if (rules.fastStart) {
-    descriptions.push('Fast Start active: Each player begins with 1 token deployed on their start square.');
+    descriptions.push(
+      'Fast Start active: Each player begins with 1 token deployed on their start square.'
+    );
   }
 
   return descriptions;

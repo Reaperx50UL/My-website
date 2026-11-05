@@ -3,13 +3,15 @@
  * Enforces all game rules, dice generation, legal token moves, bot ticks, and room state persistence.
  */
 
-import { chooseAIMove } from '../game/aiStrategy';
+import { chooseAIMove, chooseAITurnDecision } from '../game/aiStrategy';
 import { DEFAULT_HOUSE_RULES, PLAYER_COLORS } from '../game/constants';
 import {
+  breakTokenPair,
   commitDiceRoll,
   completeTurnTransition,
   createInitialGameState,
   executeTokenMove,
+  formTokenPair,
   generateFairDiceRoll,
 } from '../game/gameEngine';
 import {
@@ -111,25 +113,42 @@ export async function processRoomTick(room: ServerRoom): Promise<boolean> {
       broadcastGameState(room);
       return true;
     } else if (room.gameState.turnPhase === 'SELECTING_TOKEN') {
-      const chosen = chooseAIMove(
-        room.gameState.legalMoves,
-        activePlayer.aiDifficulty || 'medium',
-        activePlayer.color,
-        room.gameState.players,
-        room.gameState.rules
-      );
-      if (chosen) {
-        const moveDetails = room.gameState.legalMoves.find(
-          (m) => m.tokenId === chosen.tokenId
+      const decision = chooseAITurnDecision(room.gameState);
+      if (decision?.formPairTokenIds) {
+        room.gameState = formTokenPair(
+          room.gameState,
+          decision.formPairTokenIds[0],
+          decision.formPairTokenIds[1]
         );
-        room.gameState = executeTokenMove(room.gameState, chosen.tokenId);
+      } else if (decision?.breakPairId) {
+        room.gameState = breakTokenPair(room.gameState, decision.breakPairId);
+      }
+
+      const chosen =
+        decision?.move ||
+        chooseAIMove(
+          room.gameState.legalMoves,
+          activePlayer.aiDifficulty || 'medium',
+          activePlayer.color,
+          room.gameState.players,
+          room.gameState.rules
+        );
+      if (chosen) {
+        const moveDetails =
+          room.gameState.legalMoves.find(
+            (m) =>
+              m.tokenId === chosen.tokenId ||
+              m.pairId === chosen.tokenId ||
+              (m.isPairMove && m.pairedTokenIds?.includes(chosen.tokenId))
+          ) || chosen;
+        room.gameState = executeTokenMove(room.gameState, moveDetails.tokenId);
         room.version = (room.version || 1) + 1;
         room.updatedAt = Date.now();
         await multiplayerStore.saveRoom(room);
         if (moveDetails) {
           const moveMsg: ServerMessage = {
             type: 'TOKEN_MOVED',
-            tokenId: chosen.tokenId,
+            tokenId: moveDetails.tokenId,
             fromSteps: moveDetails.fromSteps,
             toSteps: moveDetails.toSteps,
             capturedIds: moveDetails.capturesTokenIds || [],
@@ -604,12 +623,17 @@ export async function handleMoveToken(
     return { success: false, error: 'Moving a token is not valid at this stage.' };
   }
 
-  const moveDetails = room.gameState.legalMoves.find((m) => m.tokenId === tokenId);
+  const moveDetails = room.gameState.legalMoves.find(
+    (m) =>
+      m.tokenId === tokenId ||
+      m.pairId === tokenId ||
+      (m.isPairMove && m.pairedTokenIds?.includes(tokenId))
+  );
   if (!moveDetails) {
     return { success: false, error: 'Illegal move rejected by server.' };
   }
 
-  room.gameState = executeTokenMove(room.gameState, tokenId);
+  room.gameState = executeTokenMove(room.gameState, moveDetails.tokenId);
   room.version = (room.version || 1) + 1;
   room.updatedAt = Date.now();
 
@@ -618,7 +642,7 @@ export async function handleMoveToken(
 
   const moveMsg: ServerMessage = {
     type: 'TOKEN_MOVED',
-    tokenId,
+    tokenId: moveDetails.tokenId,
     fromSteps: moveDetails.fromSteps,
     toSteps: moveDetails.toSteps,
     capturedIds: moveDetails.capturesTokenIds || [],
@@ -634,13 +658,66 @@ export async function handleMoveToken(
     version: room.version,
     room,
     moveResult: {
-      tokenId,
+      tokenId: moveDetails.tokenId,
       fromSteps: moveDetails.fromSteps,
       toSteps: moveDetails.toSteps,
       capturedIds: moveDetails.capturesTokenIds || [],
       reachesHome: moveDetails.reachesHome || false,
     },
   };
+}
+
+export async function handleBreakPair(
+  roomCode: string,
+  playerId: string,
+  pairId: string
+): Promise<{ success: boolean; gameState?: GameState; version?: number; error?: string }> {
+  const code = (roomCode || '').trim().toUpperCase();
+  const room = await multiplayerStore.getRoom(code);
+  if (!room || !room.gameState || room.status !== 'playing') {
+    return { success: false, error: 'No active match found for this room.' };
+  }
+
+  const activePlayer = room.gameState.players[room.gameState.activePlayerIndex];
+  const roomPlayer = room.players.find((p) => p.id === playerId);
+  if (!roomPlayer || roomPlayer.color !== activePlayer.color) {
+    return { success: false, error: 'Out of turn: You can only break your own pair on your turn.' };
+  }
+
+  room.gameState = breakTokenPair(room.gameState, pairId);
+  room.version = (room.version || 1) + 1;
+  room.updatedAt = Date.now();
+  await multiplayerStore.saveRoom(room);
+  broadcastGameState(room);
+
+  return { success: true, gameState: room.gameState, version: room.version };
+}
+
+export async function handleFormYardPair(
+  roomCode: string,
+  playerId: string,
+  tokenAId?: string,
+  tokenBId?: string
+): Promise<{ success: boolean; gameState?: GameState; version?: number; error?: string }> {
+  const code = (roomCode || '').trim().toUpperCase();
+  const room = await multiplayerStore.getRoom(code);
+  if (!room || !room.gameState || room.status !== 'playing') {
+    return { success: false, error: 'No active match found for this room.' };
+  }
+
+  const activePlayer = room.gameState.players[room.gameState.activePlayerIndex];
+  const roomPlayer = room.players.find((p) => p.id === playerId);
+  if (!roomPlayer || roomPlayer.color !== activePlayer.color) {
+    return { success: false, error: 'Out of turn: You can only form pairs on your turn.' };
+  }
+
+  room.gameState = formTokenPair(room.gameState, tokenAId, tokenBId);
+  room.version = (room.version || 1) + 1;
+  room.updatedAt = Date.now();
+  await multiplayerStore.saveRoom(room);
+  broadcastGameState(room);
+
+  return { success: true, gameState: room.gameState, version: room.version };
 }
 
 export async function handleAdvanceTurn(
