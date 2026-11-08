@@ -1,4 +1,10 @@
-export type PlayerColor = 'red' | 'green' | 'yellow' | 'blue';
+export type PlayerColor =
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'purple'
+  | 'orange';
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
@@ -109,7 +115,7 @@ export interface SixSequenceSnapshot {
   eventLog: GameEventLog[];
 }
 
-export type MatchmakingPlayerCount = 2 | 3 | 4;
+export type MatchmakingPlayerCount = 2 | 3 | 4 | 5 | 6;
 
 export type MatchLifecycleState =
   | 'waiting_for_players'

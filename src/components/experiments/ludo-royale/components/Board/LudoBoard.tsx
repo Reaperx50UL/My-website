@@ -11,8 +11,10 @@ import {
   TokenStyle,
 } from '../../game/gameTypes';
 import {
+  HEXAGON_BOARD_GEOMETRY,
   HOME_PATH_COORDS,
   MAIN_TRACK_COORDS,
+  PENTAGON_BOARD_GEOMETRY,
   YARD_SLOT_COORDS,
   buildMoveIndicators,
   getStackOffset,
@@ -22,12 +24,13 @@ import {
   groupTokensByCell,
 } from '../../game/boardLayout';
 import {
+  ALL_PLAYER_COLORS,
   COLOR_META,
-  FINISH_STEP,
   PLAYER_COLORS,
   STAR_SAFE_INDICES,
   START_TRACK_INDEX,
   getBoardThemeOption,
+  getFinishStep,
 } from '../../game/constants';
 
 export interface LudoBoardProps {
@@ -72,6 +75,8 @@ const YARD_QUADRANTS: Record<
   green: { x: 900, y: 0, size: 600 },
   yellow: { x: 900, y: 900, size: 600 },
   blue: { x: 0, y: 900, size: 600 },
+  purple: { x: 0, y: 900, size: 600 },
+  orange: { x: 0, y: 0, size: 600 },
 };
 
 const HOME_TRIANGLES: Record<PlayerColor, string> = {
@@ -79,6 +84,8 @@ const HOME_TRIANGLES: Record<PlayerColor, string> = {
   green: '600,600 900,600 750,750',
   yellow: '900,600 900,900 750,750',
   blue: '600,900 900,900 750,750',
+  purple: '600,900 900,900 750,750',
+  orange: '600,600 750,750 600,900',
 };
 
 /**
@@ -182,6 +189,44 @@ const METALLIC_PAWN_PALETTE: Record<
     arenaFloorDark: '#050C21',
     arenaFloorMid: '#15306B',
   },
+  purple: {
+    name: 'Amethyst',
+    territoryTitle: 'AMETHYST NEBULA',
+    territorySubtitle: 'VOID SANCTUM',
+    specHighlight: '#F3E8FF',
+    lightMetal: '#C084FC',
+    midMetal: '#9333EA',
+    deepMetal: '#581C87',
+    abyssMetal: '#1E0536',
+    rimReflect: '#A855F7',
+    trimLight: '#E9D5FF',
+    trimMid: '#A855F7',
+    trimDark: '#4C1D95',
+    gemCore: '#FAF5FF',
+    gemGlow: '#C084FC',
+    arenaOuterMetal: '#3B0764',
+    arenaFloorDark: '#130324',
+    arenaFloorMid: '#4A0E78',
+  },
+  orange: {
+    name: 'Blaze Orange',
+    territoryTitle: 'SUPERNOVA CITADEL',
+    territorySubtitle: 'SOLAR FLARE',
+    specHighlight: '#FFEDD5',
+    lightMetal: '#FB923C',
+    midMetal: '#EA580C',
+    deepMetal: '#9A3412',
+    abyssMetal: '#330E02',
+    rimReflect: '#F97316',
+    trimLight: '#FED7AA',
+    trimMid: '#F97316',
+    trimDark: '#7C2D12',
+    gemCore: '#FFF7ED',
+    gemGlow: '#FB923C',
+    arenaOuterMetal: '#571906',
+    arenaFloorDark: '#1F0701',
+    arenaFloorMid: '#6E2209',
+  },
 };
 
 function gridCoordToSvgPoint(coord: GridCoord): { x: number; y: number } {
@@ -229,10 +274,23 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
     [effectiveThemeId]
   );
 
+  const playerCount = players.length;
+  const finishStep = getFinishStep(playerCount);
+
   const turnLighting = useMemo(
-    () => getTurnLightingConfig(activeColor),
-    [activeColor]
+    () => getTurnLightingConfig(activeColor, playerCount),
+    [activeColor, playerCount]
   );
+
+  const boardViewBox = useMemo(() => {
+    if (playerCount === 5) {
+      return { x: 64, y: 64, width: 1372, height: 1372 };
+    }
+    if (playerCount === 6) {
+      return { x: 78, y: 78, width: 1344, height: 1344 };
+    }
+    return { x: 0, y: 0, width: BOARD_VIEWBOX_SIZE, height: BOARD_VIEWBOX_SIZE };
+  }, [playerCount]);
 
   // Detect captures and home arrivals for celebratory visual bursts
   useEffect(() => {
@@ -250,9 +308,15 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         const prev = prevMap[tokenId];
         if (!prev) continue;
 
-        if (curr.steps === FINISH_STEP && prev.steps < FINISH_STEP) {
+        if (curr.steps === finishStep && prev.steps < finishStep) {
           const pt = gridCoordToSvgPoint(
-            getTokenGridCoord(curr.color, FINISH_STEP, curr.index, curr.yardSlot)
+            getTokenGridCoord(
+              curr.color,
+              finishStep,
+              curr.index,
+              curr.yardSlot,
+              playerCount
+            )
           );
           const id = `home-${curr.id}-${Date.now()}`;
           setHomeBursts((b) => [...b, { id, x: pt.x, y: pt.y, color: curr.color }]);
@@ -263,7 +327,13 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
         if (prev.steps >= 0 && curr.steps === -1) {
           const pt = gridCoordToSvgPoint(
-            getTokenGridCoord(prev.color, prev.steps, prev.index, prev.yardSlot)
+            getTokenGridCoord(
+              prev.color,
+              prev.steps,
+              prev.index,
+              prev.yardSlot,
+              playerCount
+            )
           );
           const id = `cap-${curr.id}-${Date.now()}`;
           setCaptureBursts((b) => [
@@ -278,7 +348,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
     }
 
     prevTokensRef.current = currentMap;
-  }, [players, reducedMotion]);
+  }, [players, reducedMotion, playerCount, finishStep]);
 
   const legalMoveByTokenId = useMemo(() => {
     const map = new Map<string, LegalMove>();
@@ -299,7 +369,11 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   }, [players]);
 
   const tokenPositions = useMemo(() => {
-    const grouped = groupTokensByCell(allTokens);
+    const grouped = groupTokensByCell(allTokens, playerCount);
+    const basePawnScale =
+      playerCount === 5 ? 0.96 : playerCount === 6 ? 0.92 : 1.1;
+    const stackSpreadFactor =
+      playerCount === 5 ? 0.85 : playerCount === 6 ? 0.8 : 1.05;
     const result = new Map<
       string,
       {
@@ -324,7 +398,8 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           token.color,
           token.steps,
           token.index,
-          token.yardSlot
+          token.yardSlot,
+          playerCount
         );
         const basePt = gridCoordToSvgPoint(baseCoord);
 
@@ -332,16 +407,16 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           result.set(token.id, {
             x: basePt.x,
             y: basePt.y,
-            scale: 1,
+            scale: basePawnScale,
             stackCount: count,
             stackIndex: idx,
           });
         } else {
           const offset = getStackOffset(idx, count);
           result.set(token.id, {
-            x: basePt.x + offset.dx * CELL_SIZE,
-            y: basePt.y + offset.dy * CELL_SIZE,
-            scale: offset.scale,
+            x: basePt.x + offset.dx * CELL_SIZE * stackSpreadFactor,
+            y: basePt.y + offset.dy * CELL_SIZE * stackSpreadFactor,
+            scale: offset.scale * basePawnScale,
             stackCount: count,
             stackIndex: idx,
           });
@@ -350,12 +425,12 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
     }
 
     return result;
-  }, [allTokens, legalMoveByTokenId]);
+  }, [allTokens, legalMoveByTokenId, playerCount]);
 
   // Build move indicators for ALL playable tokens so the player immediately sees where each token will land
   const moveIndicators = useMemo(
-    () => buildMoveIndicators(legalMoves, activeColor),
-    [legalMoves, activeColor]
+    () => buildMoveIndicators(legalMoves, activeColor, playerCount),
+    [legalMoves, activeColor, playerCount]
   );
 
   /**
@@ -724,6 +799,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
       homeLaneColor?: PlayerColor | null;
       homeLaneStepIndex?: number;
       trackIndex?: number;
+      radialInwardDeg?: number;
     }
   ) => {
     const x = col * CELL_SIZE;
@@ -733,7 +809,9 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
     const coloredOwner = options.isStartColor || options.homeLaneColor || null;
     const palette = coloredOwner ? METALLIC_PAWN_PALETTE[coloredOwner] : null;
     const laneRotation =
-      options.homeLaneColor === 'red'
+      options.radialInwardDeg !== undefined
+        ? options.radialInwardDeg
+        : options.homeLaneColor === 'red'
         ? 0
         : options.homeLaneColor === 'green'
         ? 90
@@ -1155,6 +1233,22 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                   stroke={palette.specHighlight}
                   strokeWidth={2.8}
                   strokeLinecap="round"
+                />
+              )}
+              {options.homeLaneColor === 'purple' && (
+                /* Arcane Aether Star Sigil */
+                <polygon
+                  points="0,-16 5,-5 16,0 5,5 0,16 -5,5 -16,0 -5,-5"
+                  fill={palette.specHighlight}
+                  opacity={0.82}
+                />
+              )}
+              {options.homeLaneColor === 'orange' && (
+                /* Solar Magma Burst Sigil */
+                <polygon
+                  points="0,-16 14,10 -14,10"
+                  fill={palette.specHighlight}
+                  opacity={0.82}
                 />
               )}
             </g>
@@ -4253,7 +4347,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               : `+${move.toSteps - move.fromSteps}`
             : token.steps < 0
             ? 'YARD'
-            : token.steps >= FINISH_STEP
+            : token.steps >= finishStep
             ? 'HOME'
             : `STEP ${token.steps + 1}`;
 
@@ -4274,12 +4368,18 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
           const flipBelow = pos.y < 90;
           const rawPopupY = flipBelow ? pos.y + 52 : pos.y - 72;
           const popupY = Math.max(
-            pillH / 2 + 10,
-            Math.min(BOARD_VIEWBOX_SIZE - pillH / 2 - 10, rawPopupY)
+            boardViewBox.y + pillH / 2 + 10,
+            Math.min(
+              boardViewBox.y + boardViewBox.height - pillH / 2 - 10,
+              rawPopupY
+            )
           );
           const popupX = Math.max(
-            pillW / 2 + 10,
-            Math.min(BOARD_VIEWBOX_SIZE - pillW / 2 - 10, pos.x + stackSpread)
+            boardViewBox.x + pillW / 2 + 10,
+            Math.min(
+              boardViewBox.x + boardViewBox.width - pillW / 2 - 10,
+              pos.x + stackSpread
+            )
           );
 
           return (
@@ -4292,7 +4392,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                 if (
                   token.pairId &&
                   token.steps >= 0 &&
-                  token.steps < FINISH_STEP &&
+                  token.steps < finishStep &&
                   token.color === activeColor &&
                   onBreakPair &&
                   (turnPhase === 'SELECTING_TOKEN' ||
@@ -4383,8 +4483,13 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
     );
   };
 
+  const isManyPlayers = playerCount >= 5;
+  const boardSizeClasses = isManyPlayers
+    ? 'w-[min(99vw,64dvh,620px)] h-[min(99vw,64dvh,620px)] sm:w-[min(90vw,66dvh)] sm:h-[min(90vw,66dvh)] landscape:w-[min(60vw,94dvh)] landscape:h-[min(60vw,94dvh)] lg:w-[min(66vw,92dvh)] lg:h-[min(66vw,92dvh)] xl:w-[min(68vw,94dvh)] xl:h-[min(68vw,94dvh)]'
+    : 'w-[min(98vw,60dvh,560px)] h-[min(98vw,60dvh,560px)] sm:w-[min(86vw,60dvh)] sm:h-[min(86vw,60dvh)] landscape:w-[min(58vw,92dvh)] landscape:h-[min(58vw,92dvh)] lg:w-[min(64vw,90dvh)] lg:h-[min(64vw,90dvh)] xl:w-[min(66vw,92dvh)] xl:h-[min(66vw,92dvh)]';
+
   return (
-    <div className="relative flex items-center justify-center w-full h-full select-none p-1 sm:p-2">
+    <div className="relative flex items-center justify-center w-full h-full select-none p-0.5 sm:p-2">
       {/* Subtle, Controlled Ambient Turn Backlight */}
       <div
         aria-hidden="true"
@@ -4392,11 +4497,11 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-visible"
       >
         <div
-          className={`w-[min(86vw,50dvh)] h-[min(86vw,50dvh)] sm:w-[min(78vw,54dvh)] sm:h-[min(78vw,54dvh)] landscape:w-[min(52vw,88dvh)] landscape:h-[min(52vw,88dvh)] lg:w-[min(56vw,84dvh)] lg:h-[min(56vw,84dvh)] max-w-[680px] max-h-[680px] rounded-[28px] relative transition-all duration-700 ease-out ${
+          className={`${boardSizeClasses} max-w-full max-h-full rounded-[22px] sm:rounded-[28px] relative transition-all duration-700 ease-out ${
             reducedMotion ? '' : 'animate-turn-aura'
           }`}
           style={{
-            boxShadow: `0 0 42px 6px ${turnLighting.glowHex}`,
+            boxShadow: `0 0 36px 4px ${turnLighting.glowHex}`,
             border: `1.5px solid ${turnLighting.primaryHex}55`,
           }}
         >
@@ -4416,9 +4521,9 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
       {/* Physical 3D Tabletop Board Chassis Container */}
       <div
-        className="relative z-10 w-[min(86vw,50dvh)] h-[min(86vw,50dvh)] sm:w-[min(78vw,54dvh)] sm:h-[min(78vw,54dvh)] landscape:w-[min(52vw,88dvh)] landscape:h-[min(52vw,88dvh)] lg:w-[min(56vw,84dvh)] lg:h-[min(56vw,84dvh)] max-w-[680px] max-h-[680px] aspect-square rounded-[22px] sm:rounded-[28px] overflow-hidden ludo-3d-chassis transition-all duration-500"
+        className={`relative z-10 ${boardSizeClasses} max-w-full max-h-full aspect-square rounded-[20px] sm:rounded-[28px] overflow-hidden ludo-3d-chassis transition-all duration-500`}
         style={{
-          border: `3.5px solid ${
+          border: `3px solid ${
             effectiveThemeId === 'minimal_3d'
               ? '#CBD5E1'
               : effectiveThemeId === 'royal_classic'
@@ -4429,7 +4534,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         }}
       >
         <svg
-          viewBox={`0 0 ${BOARD_VIEWBOX_SIZE} ${BOARD_VIEWBOX_SIZE}`}
+          viewBox={`${boardViewBox.x} ${boardViewBox.y} ${boardViewBox.width} ${boardViewBox.height}`}
           className="w-full h-full block"
           role="img"
           aria-label="Ludo Royale 3D Board"
@@ -4616,8 +4721,8 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               <stop offset="100%" stopColor="#9C6B3B" />
             </linearGradient>
 
-            {/* 4. Per-Color 3D Metallic Gradients */}
-            {PLAYER_COLORS.map((color) => {
+            {/* 4. Per-Color 3D Metallic Gradients (All 6 Colors) */}
+            {ALL_PLAYER_COLORS.map((color) => {
               const p = METALLIC_PAWN_PALETTE[color];
               return (
                 <React.Fragment key={`defs-${color}`}>
@@ -4768,69 +4873,1949 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
 
           {/* 1. Master Physical Board Chassis */}
           <rect
-            x={0}
-            y={0}
-            width={BOARD_VIEWBOX_SIZE}
-            height={BOARD_VIEWBOX_SIZE}
+            x={boardViewBox.x - 20}
+            y={boardViewBox.y - 20}
+            width={boardViewBox.width + 40}
+            height={boardViewBox.height + 40}
             fill={
               effectiveThemeId === 'minimal_3d'
                 ? '#E2E8F0'
                 : effectiveThemeId === 'royal_classic'
                 ? '#1F0E04'
+                : effectiveThemeId === 'elemental_realms'
+                ? '#090D16'
+                : effectiveThemeId === 'neon_tech'
+                ? '#02050D'
+                : effectiveThemeId === 'nature_forest'
+                ? '#0F1F11'
                 : 'url(#board-outer-chassis-cosmic)'
             }
           />
 
-          {/* 2. Four Sculpted 3D Player Territories */}
-          {PLAYER_COLORS.map((color) => renderPlayerTerritory(color))}
+          {playerCount === 5 || playerCount === 6 ? (
+            /* Custom 5-Player Decagonal Wheel or 6-Player Dodecagonal Wheel Board (Exact Flush Layout with All 6 Board Themes) */
+            (() => {
+              const geom =
+                playerCount === 5
+                  ? PENTAGON_BOARD_GEOMETRY
+                  : HEXAGON_BOARD_GEOMETRY;
+              const centerPt = { x: 750, y: 750 };
 
-          {/* 3. 52 Shared Perimeter Track Tiles (Unique Design per Theme) */}
-          <g>
-            {MAIN_TRACK_COORDS.map((coord, trackIndex) => {
-              const startColor =
-                (Object.keys(START_TRACK_INDEX) as PlayerColor[]).find(
-                  (c) => START_TRACK_INDEX[c] === trackIndex
-                ) || null;
-              const isStar = STAR_SAFE_INDICES.includes(trackIndex);
-              return renderPhysicalTrackTile(
-                coord.row,
-                coord.col,
-                `track-${trackIndex}`,
-                {
-                  isStartColor: startColor,
-                  isStar,
-                  trackIndex,
-                }
+              const outerWheelPolyPts = geom.outerWheelVertices
+                .map((v) => {
+                  const pt = gridCoordToSvgPoint(v);
+                  return `${pt.x},${pt.y}`;
+                })
+                .join(' ');
+
+              const innerCorePolyPts = geom.innerCoreVertices
+                .map((v) => {
+                  const pt = gridCoordToSvgPoint(v);
+                  return `${pt.x},${pt.y}`;
+                })
+                .join(' ');
+
+              const wheelRimStroke =
+                effectiveThemeId === 'royal_classic'
+                  ? 'url(#gold-rim-bevel)'
+                  : effectiveThemeId === 'neon_tech'
+                  ? '#00F0FF'
+                  : effectiveThemeId === 'nature_forest'
+                  ? '#5D4037'
+                  : effectiveThemeId === 'elemental_realms'
+                  ? '#64748B'
+                  : effectiveThemeId === 'minimal_3d'
+                  ? '#94A3B8'
+                  : '#38BDF8';
+
+              const wheelBaseFill =
+                effectiveThemeId === 'royal_classic'
+                  ? '#1C0D04'
+                  : effectiveThemeId === 'neon_tech'
+                  ? '#02050D'
+                  : effectiveThemeId === 'nature_forest'
+                  ? '#142416'
+                  : effectiveThemeId === 'elemental_realms'
+                  ? '#090D16'
+                  : effectiveThemeId === 'minimal_3d'
+                  ? '#CBD5E1'
+                  : '#050918';
+
+              const coreFill =
+                effectiveThemeId === 'royal_classic'
+                  ? '#2A1205'
+                  : effectiveThemeId === 'neon_tech'
+                  ? '#030714'
+                  : effectiveThemeId === 'nature_forest'
+                  ? '#142617'
+                  : effectiveThemeId === 'elemental_realms'
+                  ? '#090D16'
+                  : effectiveThemeId === 'cosmic_galaxy'
+                  ? 'url(#event-horizon-core)'
+                  : '#1E0B36';
+
+              const coreStroke =
+                effectiveThemeId === 'royal_classic' ||
+                effectiveThemeId === 'cosmic_galaxy'
+                  ? 'url(#gold-rim-bevel)'
+                  : effectiveThemeId === 'neon_tech'
+                  ? '#00F0FF'
+                  : effectiveThemeId === 'nature_forest'
+                  ? '#22C55E'
+                  : effectiveThemeId === 'elemental_realms'
+                  ? '#94A3B8'
+                  : '#0F172A';
+
+              return (
+                <g
+                  data-testid={`custom-radial-board-${playerCount}p`}
+                  data-board-shape={playerCount === 5 ? 'pentagon' : 'hexagon'}
+                  data-board-theme={effectiveThemeId}
+                >
+                  {/* 1. Outer Polygonal Wheel Drop Shadow & Theme-Styled Backing Base */}
+                  <polygon
+                    points={outerWheelPolyPts}
+                    fill={wheelBaseFill}
+                    stroke={wheelRimStroke}
+                    strokeWidth={10}
+                    strokeLinejoin="round"
+                    filter="url(#token-drop-shadow)"
+                  />
+
+                  {/* 2. Extruded Outer Player Nameplate Tabs (Player 1..5 / Player 1..6) Styled per Board Theme & Color */}
+                  {geom.yards.map((yard) => {
+                    const tabPt = gridCoordToSvgPoint(yard.nameplateCenter);
+                    const palette = METALLIC_PAWN_PALETTE[yard.color];
+                    const tabW = yard.nameplateWidthGrid * CELL_SIZE;
+                    const tabH = yard.nameplateHeightGrid * CELL_SIZE;
+                    const playerObj = players[yard.armIndex];
+                    const labelText =
+                      playerObj?.name &&
+                      !playerObj.name.startsWith('Player ') &&
+                      !playerObj.name.startsWith('Bot ')
+                        ? `Player ${yard.playerNumber} · ${playerObj.name}`
+                        : `Player ${yard.playerNumber}`;
+
+                    const hw = tabW / 2;
+                    const hh = tabH / 2;
+                    const cut = 10;
+                    const chamferPts = `${-hw + cut},${-hh} ${hw - cut},${-hh} ${hw},0 ${hw - cut},${hh} ${-hw + cut},${hh} ${-hw},0`;
+
+                    return (
+                      <g
+                        key={`wheel-nameplate-${yard.color}`}
+                        transform={`translate(${tabPt.x}, ${tabPt.y}) rotate(${yard.nameplateAngleDeg})`}
+                      >
+                        {/* Drop Shadow */}
+                        <rect
+                          x={-hw + 2}
+                          y={-hh + 3}
+                          width={tabW}
+                          height={tabH}
+                          rx={10}
+                          fill="rgba(0, 0, 0, 0.65)"
+                        />
+
+                        {effectiveThemeId === 'neon_tech' ||
+                        effectiveThemeId === 'elemental_realms' ? (
+                          <polygon
+                            points={chamferPts}
+                            fill={
+                              effectiveThemeId === 'neon_tech'
+                                ? '#030714'
+                                : '#1E293B'
+                            }
+                            stroke={palette.specHighlight}
+                            strokeWidth={2.6}
+                          />
+                        ) : (
+                          <rect
+                            x={-hw}
+                            y={-hh}
+                            width={tabW}
+                            height={tabH}
+                            rx={10}
+                            fill={
+                              effectiveThemeId === 'royal_classic'
+                                ? '#271003'
+                                : effectiveThemeId === 'nature_forest'
+                                ? '#3E240E'
+                                : effectiveThemeId === 'cosmic_galaxy'
+                                ? '#060B1E'
+                                : `url(#tile-colored-plateau-${yard.color})`
+                            }
+                            stroke={
+                              effectiveThemeId === 'royal_classic'
+                                ? 'url(#gold-rim-bevel)'
+                                : effectiveThemeId === 'nature_forest'
+                                ? '#D9A066'
+                                : effectiveThemeId === 'cosmic_galaxy'
+                                ? palette.trimLight
+                                : '#FFFFFF'
+                            }
+                            strokeWidth={2.8}
+                          />
+                        )}
+
+                        {/* Inner Accent Frame & Color-Coded Side Gems / Rivets */}
+                        <rect
+                          x={-hw + 4}
+                          y={-hh + 4}
+                          width={tabW - 8}
+                          height={tabH - 8}
+                          rx={7}
+                          fill="none"
+                          stroke={
+                            effectiveThemeId === 'royal_classic'
+                              ? '#FEF08A'
+                              : effectiveThemeId === 'nature_forest'
+                              ? '#4ADE80'
+                              : palette.specHighlight
+                          }
+                          strokeWidth={1.2}
+                          opacity={0.7}
+                        />
+                        <circle
+                          cx={-hw + 14}
+                          cy={0}
+                          r={4.2}
+                          fill={
+                            effectiveThemeId === 'royal_classic'
+                              ? '#FEF08A'
+                              : effectiveThemeId === 'nature_forest'
+                              ? '#4ADE80'
+                              : palette.lightMetal
+                          }
+                          stroke="#020617"
+                          strokeWidth={1}
+                        />
+                        <circle
+                          cx={hw - 14}
+                          cy={0}
+                          r={4.2}
+                          fill={
+                            effectiveThemeId === 'royal_classic'
+                              ? '#FEF08A'
+                              : effectiveThemeId === 'nature_forest'
+                              ? '#4ADE80'
+                              : palette.lightMetal
+                          }
+                          stroke="#020617"
+                          strokeWidth={1}
+                        />
+
+                        <text
+                          x={0}
+                          y={1.5}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fill={
+                            effectiveThemeId === 'royal_classic'
+                              ? '#FEF08A'
+                              : effectiveThemeId === 'nature_forest'
+                              ? '#FEF3C7'
+                              : effectiveThemeId === 'neon_tech' ||
+                                effectiveThemeId === 'cosmic_galaxy'
+                              ? palette.specHighlight
+                              : '#FFFFFF'
+                          }
+                          stroke="#020617"
+                          strokeWidth={2.4}
+                          paintOrder="stroke"
+                          fontSize={playerCount === 5 ? '17.5' : '16'}
+                          fontWeight="900"
+                          letterSpacing="0.04em"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          {labelText}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* 3. Flush Triangular Wedge Home Yards (V_k, A_k, B_k) with Theme- & Color-Bespoke Sanctum Architecture & 4 Sockets */}
+                  {geom.yards.map((yard) => {
+                    const palette = METALLIC_PAWN_PALETTE[yard.color];
+                    const isTurn = activeColor === yard.color;
+                    const outerPtsArr = yard.outerTriangle.map((c) =>
+                      gridCoordToSvgPoint(c)
+                    );
+                    const innerPtsArr = yard.innerTriangle.map((c) =>
+                      gridCoordToSvgPoint(c)
+                    );
+                    const outerPts = outerPtsArr
+                      .map((pt) => `${pt.x},${pt.y}`)
+                      .join(' ');
+                    const innerPts = innerPtsArr
+                      .map((pt) => `${pt.x},${pt.y}`)
+                      .join(' ');
+
+                    const [vOut, aOut, bOut] = outerPtsArr;
+                    const [vIn, aIn, bIn] = innerPtsArr;
+
+                    // Mid-bevel triangle between outerTriangle and innerTriangle for 3D stepped molding
+                    const midPtsArr = outerPtsArr.map((oPt, idx) => ({
+                      x: oPt.x * 0.45 + innerPtsArr[idx].x * 0.55,
+                      y: oPt.y * 0.45 + innerPtsArr[idx].y * 0.55,
+                    }));
+                    const midPts = midPtsArr
+                      .map((pt) => `${pt.x},${pt.y}`)
+                      .join(' ');
+
+                    // 3 Corner Decorative Positions (inside the bevel margin near each vertex)
+                    const cornerNodes = [
+                      {
+                        x: vOut.x * 0.52 + vIn.x * 0.48,
+                        y: vOut.y * 0.52 + vIn.y * 0.48,
+                      },
+                      {
+                        x: aOut.x * 0.54 + aIn.x * 0.46,
+                        y: aOut.y * 0.54 + aIn.y * 0.46,
+                      },
+                      {
+                        x: bOut.x * 0.54 + bIn.x * 0.46,
+                        y: bOut.y * 0.54 + bIn.y * 0.46,
+                      },
+                    ];
+
+                    // Center point between the 4 sockets (slightly toward outer base from geometric centroid)
+                    const sanctumFocusPt = {
+                      x: (vIn.x * 0.26 + aIn.x * 0.37 + bIn.x * 0.37),
+                      y: (vIn.y * 0.26 + aIn.y * 0.37 + bIn.y * 0.37),
+                    };
+
+                    const sockR = playerCount === 5 ? 30 : 27;
+                    const clipOuterId = `radial-yard-outer-clip-${playerCount}-${yard.color}`;
+                    const clipInnerId = `radial-yard-inner-clip-${playerCount}-${yard.color}`;
+
+                    // Helper to generate merlons/logs along the 3 edges of the inner triangle
+                    const edgeDecorItems: Array<{
+                      x: number;
+                      y: number;
+                      angle: number;
+                      idx: number;
+                    }> = [];
+                    const edges = [
+                      [vIn, aIn],
+                      [aIn, bIn],
+                      [bIn, vIn],
+                    ];
+                    edges.forEach(([p1, p2], eIdx) => {
+                      const dx = p2.x - p1.x;
+                      const dy = p2.y - p1.y;
+                      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+                      const count = 5;
+                      for (let i = 1; i <= count; i++) {
+                        const t = i / (count + 1);
+                        edgeDecorItems.push({
+                          x: p1.x + dx * t,
+                          y: p1.y + dy * t,
+                          angle,
+                          idx: eIdx * 10 + i,
+                        });
+                      }
+                    });
+
+                    return (
+                      <g
+                        key={`radial-yard-${yard.color}`}
+                        data-testid={`spawn-room-${yard.color}`}
+                        data-spawn-architecture={tileSpec.spawnRoomArchitecture}
+                      >
+                        <defs>
+                          <clipPath id={clipOuterId}>
+                            <polygon points={outerPts} />
+                          </clipPath>
+                          <clipPath id={clipInnerId}>
+                            <polygon points={innerPts} />
+                          </clipPath>
+                        </defs>
+
+                        {/* ==========================================================
+                           A. OUTER TRIANGULAR WEDGE CHASSIS & 3D BEVELED FACETS
+                           ========================================================== */}
+                        <polygon
+                          points={outerPts}
+                          fill={
+                            effectiveThemeId === 'neon_tech'
+                              ? '#040917'
+                              : effectiveThemeId === 'royal_classic' ||
+                                effectiveThemeId === 'cosmic_galaxy' ||
+                                effectiveThemeId === 'elemental_realms'
+                              ? `url(#territory-housing-${yard.color})`
+                              : `url(#tile-colored-plateau-${yard.color})`
+                          }
+                          stroke={
+                            effectiveThemeId === 'royal_classic'
+                              ? 'url(#gold-rim-bevel)'
+                              : effectiveThemeId === 'neon_tech'
+                              ? palette.specHighlight
+                              : effectiveThemeId === 'nature_forest'
+                              ? '#4E342E'
+                              : effectiveThemeId === 'cosmic_galaxy'
+                              ? palette.trimLight
+                              : effectiveThemeId === 'elemental_realms'
+                              ? palette.lightMetal
+                              : '#FFFFFF'
+                          }
+                          strokeWidth={3}
+                          strokeLinejoin="round"
+                        />
+
+                        {/* 3 Directional 3D Beveled Facet Strips along the Outer Wedge Sides */}
+                        <g clipPath={`url(#${clipOuterId})`}>
+                          <polygon
+                            points={`${vOut.x},${vOut.y} ${aOut.x},${aOut.y} ${aIn.x},${aIn.y} ${vIn.x},${vIn.y}`}
+                            fill={
+                              effectiveThemeId === 'royal_classic'
+                                ? `url(#tile-colored-plateau-${yard.color})`
+                                : palette.lightMetal
+                            }
+                            opacity={
+                              effectiveThemeId === 'royal_classic'
+                                ? 0.72
+                                : effectiveThemeId === 'minimal_3d'
+                                ? 0.55
+                                : 0.38
+                            }
+                          />
+                          <polygon
+                            points={`${aOut.x},${aOut.y} ${bOut.x},${bOut.y} ${bIn.x},${bIn.y} ${aIn.x},${aIn.y}`}
+                            fill={
+                              effectiveThemeId === 'royal_classic'
+                                ? `url(#tile-colored-plateau-${yard.color})`
+                                : palette.midMetal
+                            }
+                            opacity={
+                              effectiveThemeId === 'royal_classic'
+                                ? 0.62
+                                : effectiveThemeId === 'minimal_3d'
+                                ? 0.45
+                                : 0.28
+                            }
+                          />
+                          <polygon
+                            points={`${bOut.x},${bOut.y} ${vOut.x},${vOut.y} ${vIn.x},${vIn.y} ${bIn.x},${bIn.y}`}
+                            fill={palette.deepMetal}
+                            opacity={0.65}
+                          />
+
+                          {/* Color Nebula / Ambient Glow Wash across the Outer Wedge */}
+                          {(effectiveThemeId === 'cosmic_galaxy' ||
+                            effectiveThemeId === 'neon_tech' ||
+                            effectiveThemeId === 'elemental_realms') && (
+                            <polygon
+                              points={outerPts}
+                              fill={`url(#territory-nebula-${yard.color})`}
+                              opacity={0.85}
+                            />
+                          )}
+
+                          {/* Theme-Specific Outer Wedge Trim & Architectural Accents */}
+                          {effectiveThemeId === 'royal_classic' && (
+                            <polygon
+                              points={midPts}
+                              fill="none"
+                              stroke="#FDE68A"
+                              strokeWidth={1.6}
+                              strokeDasharray="12 5"
+                              opacity={0.85}
+                            />
+                          )}
+
+                          {effectiveThemeId === 'minimal_3d' && (
+                            <polygon
+                              points={midPts}
+                              fill="none"
+                              stroke={palette.specHighlight}
+                              strokeWidth={2.8}
+                              strokeLinejoin="round"
+                              opacity={0.9}
+                            />
+                          )}
+
+                          {effectiveThemeId === 'neon_tech' && (
+                            <g>
+                              <polygon
+                                points={midPts}
+                                fill="none"
+                                stroke={palette.specHighlight}
+                                strokeWidth={1.8}
+                                strokeDasharray="16 6"
+                                opacity={0.85}
+                              />
+                              {/* Motherboard Circuit Traces radiating from the 3 vertices */}
+                              {outerPtsArr.map((oPt, cIdx) => {
+                                const iPt = innerPtsArr[cIdx];
+                                const mx = oPt.x * 0.62 + iPt.x * 0.38;
+                                const my = oPt.y * 0.62 + iPt.y * 0.38;
+                                return (
+                                  <g key={`cyber-trace-${yard.color}-${cIdx}`}>
+                                    <line
+                                      x1={oPt.x}
+                                      y1={oPt.y}
+                                      x2={mx}
+                                      y2={my}
+                                      stroke={palette.specHighlight}
+                                      strokeWidth={2.4}
+                                    />
+                                    <circle
+                                      cx={mx}
+                                      cy={my}
+                                      r={4}
+                                      fill={palette.specHighlight}
+                                    />
+                                  </g>
+                                );
+                              })}
+                            </g>
+                          )}
+
+                          {/* Corner Biome / Turret / Planet / Canopy Formations in the 3 Triangle Vertices */}
+                          {cornerNodes.map((cn, cIdx) => {
+                            const nodeScale =
+                              cIdx === 0
+                                ? playerCount === 5
+                                  ? 0.52
+                                  : 0.46
+                                : playerCount === 5
+                                ? 0.62
+                                : 0.54;
+                            return (
+                              <g
+                                key={`yard-corner-node-${yard.color}-${cIdx}`}
+                                transform={`translate(${cn.x}, ${cn.y}) scale(${nodeScale})`}
+                              >
+                                {effectiveThemeId === 'cosmic_galaxy' && (
+                                  /* Ringed Planetary Bodies & Moons */
+                                  <g>
+                                    <circle
+                                      cx={2}
+                                      cy={4}
+                                      r={18}
+                                      fill="rgba(0,0,0,0.75)"
+                                    />
+                                    <circle
+                                      cx={0}
+                                      cy={0}
+                                      r={17}
+                                      fill={`url(#pawn-head-${yard.color})`}
+                                      stroke={palette.trimLight}
+                                      strokeWidth={1.4}
+                                    />
+                                    {cIdx !== 1 && (
+                                      <ellipse
+                                        cx={0}
+                                        cy={0}
+                                        rx={26}
+                                        ry={7.5}
+                                        transform="rotate(-24)"
+                                        fill="none"
+                                        stroke={palette.specHighlight}
+                                        strokeWidth={2.2}
+                                        opacity={0.85}
+                                      />
+                                    )}
+                                    <circle
+                                      cx={-5}
+                                      cy={-5}
+                                      r={4}
+                                      fill="#FFFFFF"
+                                      opacity={0.8}
+                                    />
+                                  </g>
+                                )}
+
+                                {effectiveThemeId === 'royal_classic' && (
+                                  /* Royal Castle Watchtower Turret & Flaming Golden Brazier */
+                                  <g>
+                                    <circle
+                                      cx={2}
+                                      cy={4}
+                                      r={22}
+                                      fill="rgba(0,0,0,0.8)"
+                                    />
+                                    <circle
+                                      cx={0}
+                                      cy={0}
+                                      r={20}
+                                      fill="url(#gold-rim-bevel)"
+                                      stroke="#FEF08A"
+                                      strokeWidth={2}
+                                    />
+                                    <circle
+                                      cx={0}
+                                      cy={0}
+                                      r={14}
+                                      fill={palette.deepMetal}
+                                      stroke="#F59E0B"
+                                      strokeWidth={1.6}
+                                    />
+                                    <circle cx={0} cy={0} r={8.5} fill="#F59E0B" />
+                                    <circle
+                                      cx={-1.5}
+                                      cy={-1.5}
+                                      r={4.5}
+                                      fill="#FEF08A"
+                                    />
+                                    <circle
+                                      cx={-2}
+                                      cy={-2}
+                                      r={2}
+                                      fill="#FFFFFF"
+                                    />
+                                  </g>
+                                )}
+
+                                {effectiveThemeId === 'elemental_realms' && (
+                                  /* Color-Specific Elemental Corner Formation (All 6 Colors) */
+                                  <g>
+                                    <circle
+                                      cx={2}
+                                      cy={4}
+                                      r={22}
+                                      fill="rgba(0,0,0,0.8)"
+                                    />
+                                    {yard.color === 'red' ? (
+                                      /* Fire: Volcanic magma crater vent */
+                                      <g>
+                                        <polygon
+                                          points="-20,-8 -8,-22 10,-20 22,-6 18,14 4,22 -16,18"
+                                          fill="#1E1B18"
+                                          stroke="#F97316"
+                                          strokeWidth={2}
+                                        />
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={11}
+                                          fill="#EF4444"
+                                        />
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={5.5}
+                                          fill="#FEF08A"
+                                        />
+                                      </g>
+                                    ) : yard.color === 'green' ? (
+                                      /* Earth: Glowing emerald crystal cluster */
+                                      <g>
+                                        <polygon
+                                          points="0,-24 12,-6 7,19 -10,19 -14,-5"
+                                          fill="#10B981"
+                                          stroke="#A7F3D0"
+                                          strokeWidth={2}
+                                        />
+                                        <polygon
+                                          points="-15,-12 -2,-2 4,17 -19,10"
+                                          fill="#059669"
+                                          stroke="#6EE7B7"
+                                          strokeWidth={1.5}
+                                        />
+                                      </g>
+                                    ) : yard.color === 'yellow' ? (
+                                      /* Sun/Air: Floating golden sun crystal & wind ring */
+                                      <g>
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={19}
+                                          fill="none"
+                                          stroke="#FDE68A"
+                                          strokeWidth={2}
+                                          strokeDasharray="8 5"
+                                        />
+                                        <polygon
+                                          points="0,-20 14,0 0,20 -14,0"
+                                          fill="#F59E0B"
+                                          stroke="#FEF08A"
+                                          strokeWidth={2}
+                                        />
+                                      </g>
+                                    ) : yard.color === 'blue' ? (
+                                      /* Water/Ice: Crystalline glacial ice spire */
+                                      <g>
+                                        <polygon
+                                          points="0,-24 10,-10 20,0 10,10 0,24 -10,10 -20,0 -10,-10"
+                                          fill="#38BDF8"
+                                          stroke="#E0F2FE"
+                                          strokeWidth={2}
+                                        />
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={7}
+                                          fill="#FFFFFF"
+                                        />
+                                      </g>
+                                    ) : yard.color === 'purple' ? (
+                                      /* Aether/Storm: Arcane amethyst void crystal & lightning halo */
+                                      <g>
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={20}
+                                          fill="none"
+                                          stroke="#E879F9"
+                                          strokeWidth={1.8}
+                                          strokeDasharray="6 4"
+                                        />
+                                        <polygon
+                                          points="0,-23 13,-7 9,18 -9,18 -13,-7"
+                                          fill="#9333EA"
+                                          stroke="#F5D0FE"
+                                          strokeWidth={2}
+                                        />
+                                        <circle
+                                          cx={0}
+                                          cy={-2}
+                                          r={6}
+                                          fill="#F0ABFC"
+                                        />
+                                      </g>
+                                    ) : (
+                                      /* Orange (Solar Flare / Amber Forge): Blazing forge-fire star crystal */
+                                      <g>
+                                        <polygon
+                                          points="0,-23 8,-8 23,0 8,8 0,23 -8,8 -23,0 -8,-8"
+                                          fill="#EA580C"
+                                          stroke="#FED7AA"
+                                          strokeWidth={2}
+                                        />
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={8}
+                                          fill="#FDE047"
+                                        />
+                                      </g>
+                                    )}
+                                  </g>
+                                )}
+
+                                {effectiveThemeId === 'nature_forest' && (
+                                  /* Lush 3D Woodland Tree Canopy & Glowing Forest Lantern */
+                                  <g>
+                                    <circle
+                                      cx={2}
+                                      cy={4}
+                                      r={25}
+                                      fill="rgba(0,0,0,0.7)"
+                                    />
+                                    <circle
+                                      cx={0}
+                                      cy={0}
+                                      r={23}
+                                      fill="#14532D"
+                                      stroke="#052E16"
+                                      strokeWidth={2}
+                                    />
+                                    <circle
+                                      cx={-8}
+                                      cy={-6}
+                                      r={14}
+                                      fill="#16A34A"
+                                    />
+                                    <circle
+                                      cx={8}
+                                      cy={-5}
+                                      r={13}
+                                      fill="#22C55E"
+                                    />
+                                    <circle
+                                      cx={0}
+                                      cy={7}
+                                      r={13}
+                                      fill="#15803D"
+                                    />
+                                    {/* Color-matched woodland blossom & warm lantern */}
+                                    <circle
+                                      cx={-5}
+                                      cy={-7}
+                                      r={6}
+                                      fill={palette.specHighlight}
+                                      stroke={palette.deepMetal}
+                                      strokeWidth={1.2}
+                                    />
+                                    <circle
+                                      cx={12}
+                                      cy={10}
+                                      r={6}
+                                      fill="#F59E0B"
+                                      stroke="#FEF08A"
+                                      strokeWidth={1.5}
+                                    />
+                                  </g>
+                                )}
+
+                                {effectiveThemeId === 'minimal_3d' &&
+                                  cIdx === 0 && (
+                                    /* Sculpted 3D Studio Faction Emblem Medallion at the Inner Apex */
+                                    <g>
+                                      <circle
+                                        cx={2}
+                                        cy={3}
+                                        r={22}
+                                        fill="rgba(15, 23, 42, 0.35)"
+                                      />
+                                      <circle
+                                        cx={0}
+                                        cy={0}
+                                        r={20}
+                                        fill={palette.deepMetal}
+                                        stroke="#FFFFFF"
+                                        strokeWidth={2.2}
+                                      />
+                                      {yard.color === 'red' ||
+                                      yard.color === 'green' ? (
+                                        <path
+                                          d="M -8 -8 L 8 8 M 8 -8 L -8 8"
+                                          stroke="#FFFFFF"
+                                          strokeWidth={3}
+                                          strokeLinecap="round"
+                                        />
+                                      ) : yard.color === 'blue' ? (
+                                        <circle
+                                          cx={0}
+                                          cy={0}
+                                          r={7}
+                                          fill="#FFFFFF"
+                                        />
+                                      ) : yard.color === 'purple' ? (
+                                        <polygon
+                                          points="0,-10 9,0 0,10 -9,0"
+                                          fill="#FFFFFF"
+                                        />
+                                      ) : (
+                                        <polygon
+                                          points="0,-10 3,-3 10,-3 4.5,1.5 6.5,9 0,4.5 -6.5,9 -4.5,1.5 -10,-3 -3,-3"
+                                          fill="#FFFFFF"
+                                        />
+                                      )}
+                                    </g>
+                                  )}
+                              </g>
+                            );
+                          })}
+                        </g>
+
+                        {/* Active Turn Highlight Pulse on Outer Triangle */}
+                        {isTurn && (
+                          <polygon
+                            points={outerPts}
+                            fill="none"
+                            stroke={
+                              effectiveThemeId === 'royal_classic'
+                                ? '#FEF08A'
+                                : palette.specHighlight
+                            }
+                            strokeWidth={5.5}
+                            strokeDasharray="14 8"
+                            strokeLinejoin="round"
+                            className="animate-turn-yard-ring"
+                            data-testid="turn-yard-pulse-ring"
+                          />
+                        )}
+
+                        {/* ==========================================================
+                           B. INSET INNER SANCTUM TRIANGLE (v_k, a_k, b_k) & PERIMETER ARCHITECTURE
+                           ========================================================== */}
+                        {/* Inner Sanctum Drop Shadow */}
+                        <polygon
+                          points={innerPts}
+                          transform="translate(2, 4)"
+                          fill="rgba(0, 0, 0, 0.62)"
+                          strokeLinejoin="round"
+                        />
+
+                        {/* Main Inner Sanctum Floor Polygon */}
+                        <polygon
+                          points={innerPts}
+                          fill={
+                            effectiveThemeId === 'cosmic_galaxy' ||
+                            effectiveThemeId === 'royal_classic' ||
+                            effectiveThemeId === 'elemental_realms' ||
+                            effectiveThemeId === 'nature_forest'
+                              ? `url(#arena-deck-${yard.color})`
+                              : effectiveThemeId === 'neon_tech'
+                              ? '#030612'
+                              : '#F8FAFC'
+                          }
+                          stroke={
+                            effectiveThemeId === 'royal_classic'
+                              ? 'url(#gold-rim-bevel)'
+                              : effectiveThemeId === 'elemental_realms'
+                              ? 'url(#tile-elemental-stone)'
+                              : effectiveThemeId === 'nature_forest'
+                              ? '#6D4522'
+                              : effectiveThemeId === 'neon_tech'
+                              ? palette.lightMetal
+                              : effectiveThemeId === 'cosmic_galaxy'
+                              ? palette.trimLight
+                              : palette.midMetal
+                          }
+                          strokeWidth={
+                            effectiveThemeId === 'royal_classic' ||
+                            effectiveThemeId === 'nature_forest' ||
+                            effectiveThemeId === 'elemental_realms'
+                              ? 5.5
+                              : 3.2
+                          }
+                          strokeLinejoin="round"
+                        />
+
+                        {/* Theme-Specific Interior Floor Motifs, Veins, Planks & Central Medallions (Clipped to Inner Sanctum) */}
+                        <g clipPath={`url(#${clipInnerId})`}>
+                          {/* 1. COSMIC GALAXY: Orbital Reactor Stator Ticks, Gravity Rings & Astral Star Core */}
+                          {effectiveThemeId === 'cosmic_galaxy' && (
+                            <g>
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={playerCount === 5 ? 86 : 74}
+                                fill="none"
+                                stroke={palette.specHighlight}
+                                strokeWidth={1.6}
+                                strokeDasharray="16 8"
+                                opacity={0.65}
+                              />
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={playerCount === 5 ? 54 : 46}
+                                fill="none"
+                                stroke={palette.trimLight}
+                                strokeWidth={1.4}
+                                strokeDasharray="8 6"
+                                opacity={0.55}
+                              />
+                              {Array.from({ length: 12 }).map((_, i) => {
+                                const a = i * 30;
+                                return (
+                                  <g
+                                    key={`stator-${yard.color}-${i}`}
+                                    transform={`translate(${sanctumFocusPt.x}, ${sanctumFocusPt.y}) rotate(${a})`}
+                                  >
+                                    <rect
+                                      x={-3}
+                                      y={playerCount === 5 ? -92 : -80}
+                                      width={6}
+                                      height={14}
+                                      rx={1.5}
+                                      fill={
+                                        i % 2 === 0
+                                          ? palette.trimLight
+                                          : palette.midMetal
+                                      }
+                                      opacity={0.75}
+                                    />
+                                  </g>
+                                );
+                              })}
+                              {/* 4-Point Astral Reactor Star */}
+                              <path
+                                d={`M ${sanctumFocusPt.x} ${
+                                  sanctumFocusPt.y - 26
+                                } Q ${sanctumFocusPt.x + 4} ${
+                                  sanctumFocusPt.y - 4
+                                } ${sanctumFocusPt.x + 26} ${
+                                  sanctumFocusPt.y
+                                } Q ${sanctumFocusPt.x + 4} ${
+                                  sanctumFocusPt.y + 4
+                                } ${sanctumFocusPt.x} ${
+                                  sanctumFocusPt.y + 26
+                                } Q ${sanctumFocusPt.x - 4} ${
+                                  sanctumFocusPt.y + 4
+                                } ${sanctumFocusPt.x - 26} ${
+                                  sanctumFocusPt.y
+                                } Q ${sanctumFocusPt.x - 4} ${
+                                  sanctumFocusPt.y - 4
+                                } ${sanctumFocusPt.x} ${
+                                  sanctumFocusPt.y - 26
+                                } Z`}
+                                fill={palette.specHighlight}
+                                opacity={0.45}
+                              />
+                            </g>
+                          )}
+
+                          {/* 2. ROYAL CLASSIC: Marble Courtyard Border, Crenelated Merlons & Tudor Compass Rose */}
+                          {effectiveThemeId === 'royal_classic' && (
+                            <g>
+                              <polygon
+                                points={innerPts}
+                                fill="none"
+                                stroke="#FDE68A"
+                                strokeWidth={3}
+                                strokeDasharray="10 5"
+                                opacity={0.85}
+                              />
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={playerCount === 5 ? 74 : 64}
+                                fill="none"
+                                stroke="#F59E0B"
+                                strokeWidth={1.8}
+                                strokeDasharray="10 6"
+                                opacity={0.75}
+                              />
+                              {/* Tudor Compass Rose & Royal Keep Spire */}
+                              <g
+                                transform={`translate(${sanctumFocusPt.x}, ${sanctumFocusPt.y}) scale(${
+                                  playerCount === 5 ? 0.72 : 0.62
+                                })`}
+                              >
+                                <polygon
+                                  points="0,-42 11,-11 42,0 11,11 0,42 -11,11 -42,0 -11,-11"
+                                  fill="url(#gold-rim-bevel)"
+                                  stroke="#FEF08A"
+                                  strokeWidth={1.5}
+                                  opacity={0.9}
+                                />
+                                <polygon
+                                  points="0,-30 8,-8 30,0 8,8 0,30 -8,8 -30,0 -8,-8"
+                                  fill={palette.lightMetal}
+                                  stroke="#FEF08A"
+                                  strokeWidth={1.4}
+                                  transform="rotate(45)"
+                                />
+                                <circle
+                                  cx={0}
+                                  cy={0}
+                                  r={13}
+                                  fill="url(#gold-rim-bevel)"
+                                  stroke="#FFFFFF"
+                                  strokeWidth={1.6}
+                                />
+                                <circle
+                                  cx={0}
+                                  cy={0}
+                                  r={6}
+                                  fill={palette.specHighlight}
+                                />
+                              </g>
+                            </g>
+                          )}
+
+                          {/* 3. ELEMENTAL REALMS: Color-Specific Biome Energy Veins & Elemental Sanctum Core (All 6 Colors) */}
+                          {effectiveThemeId === 'elemental_realms' && (
+                            <g
+                              transform={`translate(${sanctumFocusPt.x}, ${sanctumFocusPt.y}) scale(${
+                                playerCount === 5 ? 0.68 : 0.58
+                              })`}
+                            >
+                              {yard.color === 'red' && (
+                                <g
+                                  stroke="#F97316"
+                                  strokeWidth={3.5}
+                                  fill="none"
+                                  opacity={0.82}
+                                  strokeLinecap="round"
+                                >
+                                  <path d="M -130 0 L -55 -16 L 0 0 L 62 18 L 130 0" />
+                                  <path d="M 0 -130 L 16 -54 L 0 0 L -18 64 L 0 130" />
+                                  <path d="M -90 -90 L -30 -20 L 0 0 L 35 28 L 90 90" />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={28}
+                                    fill="#EF4444"
+                                    stroke="#FEF08A"
+                                    strokeWidth={2.5}
+                                  />
+                                </g>
+                              )}
+                              {yard.color === 'green' && (
+                                <g
+                                  stroke="#34D399"
+                                  strokeWidth={3}
+                                  fill="none"
+                                  opacity={0.8}
+                                >
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={105}
+                                    strokeDasharray="16 9"
+                                  />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={72}
+                                    strokeDasharray="10 7"
+                                  />
+                                  <polygon
+                                    points="0,-38 15,-12 38,0 15,12 0,38 -15,12 -38,0 -15,-12"
+                                    fill="#065F46"
+                                    stroke="#A7F3D0"
+                                    strokeWidth={2.2}
+                                  />
+                                </g>
+                              )}
+                              {yard.color === 'yellow' && (
+                                <g
+                                  stroke="#FDE68A"
+                                  strokeWidth={2.8}
+                                  fill="none"
+                                  opacity={0.82}
+                                >
+                                  <circle cx={0} cy={0} r={104} />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={74}
+                                    strokeDasharray="14 8"
+                                  />
+                                  <polygon
+                                    points="0,-42 13,-13 42,0 13,13 0,42 -13,13 -42,0 -13,-13"
+                                    fill="#D97706"
+                                    stroke="#FEF08A"
+                                    strokeWidth={2.2}
+                                  />
+                                </g>
+                              )}
+                              {yard.color === 'blue' && (
+                                <g
+                                  stroke="#7DD3FC"
+                                  strokeWidth={2.8}
+                                  fill="none"
+                                  opacity={0.82}
+                                >
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={110}
+                                    strokeDasharray="22 10"
+                                  />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={78}
+                                    strokeDasharray="14 8"
+                                  />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={28}
+                                    fill="#0284C7"
+                                    stroke="#E0F2FE"
+                                    strokeWidth={2.5}
+                                  />
+                                </g>
+                              )}
+                              {yard.color === 'purple' && (
+                                <g
+                                  stroke="#E879F9"
+                                  strokeWidth={3}
+                                  fill="none"
+                                  opacity={0.85}
+                                  strokeLinecap="round"
+                                >
+                                  <path d="M -115 -45 L -48 -12 L 0 0 L 52 16 L 115 45" />
+                                  <path d="M -45 115 L -14 46 L 0 0 L 18 -50 L 45 -115" />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={92}
+                                    strokeDasharray="12 8"
+                                  />
+                                  <polygon
+                                    points="0,-36 14,-14 36,0 14,14 0,36 -14,14 -36,0 -14,-14"
+                                    fill="#6B21A8"
+                                    stroke="#F5D0FE"
+                                    strokeWidth={2.2}
+                                  />
+                                </g>
+                              )}
+                              {yard.color === 'orange' && (
+                                <g
+                                  stroke="#FB923C"
+                                  strokeWidth={3.2}
+                                  fill="none"
+                                  opacity={0.85}
+                                  strokeLinecap="round"
+                                >
+                                  <path d="M -125 -30 L -52 -8 L 0 0 L 54 12 L 125 30" />
+                                  <path d="M -30 -125 L -8 -52 L 0 0 L 12 54 L 30 125" />
+                                  <circle
+                                    cx={0}
+                                    cy={0}
+                                    r={88}
+                                    stroke="#FDBA74"
+                                    strokeDasharray="16 8"
+                                  />
+                                  <polygon
+                                    points="0,-38 14,-10 38,0 14,10 0,38 -14,10 -38,0 -14,-10"
+                                    fill="#C2410C"
+                                    stroke="#FEF08A"
+                                    strokeWidth={2.2}
+                                  />
+                                </g>
+                              )}
+                            </g>
+                          )}
+
+                          {/* 4. NEON TECH: Laser-Etched Cyber Grid Lines & Central Hologram Core */}
+                          {effectiveThemeId === 'neon_tech' && (
+                            <g opacity={0.62}>
+                              <line
+                                x1={sanctumFocusPt.x - 130}
+                                y1={sanctumFocusPt.y}
+                                x2={sanctumFocusPt.x + 130}
+                                y2={sanctumFocusPt.y}
+                                stroke={palette.lightMetal}
+                                strokeWidth={1.6}
+                                strokeDasharray="8 6"
+                              />
+                              <line
+                                x1={sanctumFocusPt.x}
+                                y1={sanctumFocusPt.y - 130}
+                                x2={sanctumFocusPt.x}
+                                y2={sanctumFocusPt.y + 130}
+                                stroke={palette.lightMetal}
+                                strokeWidth={1.6}
+                                strokeDasharray="8 6"
+                              />
+                              <polygon
+                                points={`${sanctumFocusPt.x},${
+                                  sanctumFocusPt.y - 28
+                                } ${sanctumFocusPt.x + 28},${sanctumFocusPt.y} ${
+                                  sanctumFocusPt.x
+                                },${sanctumFocusPt.y + 28} ${
+                                  sanctumFocusPt.x - 28
+                                },${sanctumFocusPt.y}`}
+                                fill="none"
+                                stroke={palette.specHighlight}
+                                strokeWidth={2.2}
+                              />
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={9}
+                                fill={palette.midMetal}
+                                stroke={palette.specHighlight}
+                                strokeWidth={1.8}
+                              />
+                            </g>
+                          )}
+
+                          {/* 5. NATURE / FOREST: Carved Plank Seams, Tree-Ring Engravings & Central Botanical Lotus */}
+                          {effectiveThemeId === 'nature_forest' && (
+                            <g>
+                              {[-65, -22, 22, 65].map((dy, pIdx) => (
+                                <line
+                                  key={`yard-plank-${yard.color}-${pIdx}`}
+                                  x1={sanctumFocusPt.x - 140}
+                                  y1={sanctumFocusPt.y + dy}
+                                  x2={sanctumFocusPt.x + 140}
+                                  y2={sanctumFocusPt.y + dy}
+                                  stroke="rgba(217, 160, 102, 0.25)"
+                                  strokeWidth={2}
+                                />
+                              ))}
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={playerCount === 5 ? 74 : 64}
+                                fill="none"
+                                stroke={palette.trimLight}
+                                strokeWidth={1.6}
+                                strokeDasharray="16 8"
+                                opacity={0.5}
+                              />
+                              <g
+                                transform={`translate(${sanctumFocusPt.x}, ${sanctumFocusPt.y}) scale(${
+                                  playerCount === 5 ? 0.62 : 0.54
+                                })`}
+                                opacity={0.85}
+                              >
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                  <path
+                                    key={`lotus-${yard.color}-${i}`}
+                                    d="M 0 0 C -9 -16 -7 -34 0 -44 C 7 -34 9 -16 0 0 Z"
+                                    fill={
+                                      i % 2 === 0
+                                        ? '#22C55E'
+                                        : palette.lightMetal
+                                    }
+                                    stroke="#BBF7D0"
+                                    strokeWidth={1.2}
+                                    transform={`rotate(${i * 45})`}
+                                  />
+                                ))}
+                                <circle
+                                  cx={0}
+                                  cy={0}
+                                  r={11}
+                                  fill="#FDE047"
+                                  stroke="#78350F"
+                                  strokeWidth={2}
+                                />
+                              </g>
+                            </g>
+                          )}
+
+                          {/* 6. MINIMAL 3D STUDIO: Elevated Color-Matched Studio Podium Ring */}
+                          {effectiveThemeId === 'minimal_3d' && (
+                            <g>
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={playerCount === 5 ? 72 : 62}
+                                fill={`url(#tile-colored-plateau-${yard.color})`}
+                                opacity={0.18}
+                              />
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={playerCount === 5 ? 64 : 55}
+                                fill="none"
+                                stroke={palette.midMetal}
+                                strokeWidth={2.5}
+                                opacity={0.65}
+                              />
+                              <circle
+                                cx={sanctumFocusPt.x}
+                                cy={sanctumFocusPt.y}
+                                r={18}
+                                fill={`url(#tile-colored-plateau-${yard.color})`}
+                                stroke="#FFFFFF"
+                                strokeWidth={2}
+                              />
+                            </g>
+                          )}
+                        </g>
+
+                        {/* Perimeter Battlement Merlons (Royal Classic) or Carved Timber Logs & Moss (Nature Forest) along Inner Sanctum Edges */}
+                        {effectiveThemeId === 'royal_classic' &&
+                          edgeDecorItems.map((m) => (
+                            <g
+                              key={`merlon-${yard.color}-${m.idx}`}
+                              transform={`translate(${m.x}, ${m.y}) rotate(${m.angle})`}
+                            >
+                              <rect
+                                x={-5.5}
+                                y={-3.5}
+                                width={11}
+                                height={7}
+                                rx={1.5}
+                                fill="url(#gold-rim-bevel)"
+                                stroke="#451A03"
+                                strokeWidth={1}
+                              />
+                            </g>
+                          ))}
+
+                        {effectiveThemeId === 'nature_forest' &&
+                          edgeDecorItems.map((m, mIdx) => (
+                            <g
+                              key={`log-seg-${yard.color}-${m.idx}`}
+                              transform={`translate(${m.x}, ${m.y}) rotate(${m.angle})`}
+                            >
+                              <rect
+                                x={-7.5}
+                                y={-4}
+                                width={15}
+                                height={8}
+                                rx={3}
+                                fill={mIdx % 2 === 0 ? '#8C582B' : '#734620'}
+                                stroke="#3E240E"
+                                strokeWidth={1.1}
+                              />
+                              {mIdx % 3 === 0 && (
+                                <circle
+                                  cx={4}
+                                  cy={-3.5}
+                                  r={3.5}
+                                  fill="#22C55E"
+                                  opacity={0.9}
+                                />
+                              )}
+                            </g>
+                          ))}
+
+                        {/* ==========================================================
+                           C. 4 BESPOKE 3D TOKEN SOCKETS STYLED PER BOARD THEME & COLOR
+                           ========================================================== */}
+                        {yard.slots.map((slotCoord, sIdx) => {
+                          const sPt = gridCoordToSvgPoint(slotCoord);
+
+                          /* 1. ROYAL CLASSIC: 8-Sided Gilded Octagonal Throne Pedestal Socket (`gilded_octagon`) */
+                          if (effectiveThemeId === 'royal_classic') {
+                            const rOut = sockR + 2;
+                            const octPts = Array.from({ length: 8 })
+                              .map((_, i) => {
+                                const a = ((i * 45 + 22.5) * Math.PI) / 180;
+                                return `${sPt.x + Math.cos(a) * rOut},${
+                                  sPt.y + Math.sin(a) * rOut
+                                }`;
+                              })
+                              .join(' ');
+                            return (
+                              <g
+                                key={`radial-slot-${yard.color}-${sIdx}`}
+                                data-socket-style={tileSpec.socketStyle}
+                              >
+                                <polygon
+                                  points={octPts}
+                                  transform="translate(1.5, 3.5)"
+                                  fill="rgba(0, 0, 0, 0.78)"
+                                />
+                                <polygon
+                                  points={octPts}
+                                  fill="url(#gold-rim-bevel)"
+                                  stroke="#FEF08A"
+                                  strokeWidth={2}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 5}
+                                  fill="url(#tile-royal-marble)"
+                                  stroke="#92400E"
+                                  strokeWidth={1.6}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 10}
+                                  fill={palette.deepMetal}
+                                  stroke="#FDE68A"
+                                  strokeWidth={1.5}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 15}
+                                  fill={`url(#pawn-body-${yard.color})`}
+                                  opacity={0.8}
+                                />
+                              </g>
+                            );
+                          }
+
+                          /* 2. ELEMENTAL REALMS: 10-Vertex Chiseled Runic Crater Socket (`runic_crater`) */
+                          if (effectiveThemeId === 'elemental_realms') {
+                            const craterPts = Array.from({ length: 10 })
+                              .map((_, i) => {
+                                const a = (i * 36 * Math.PI) / 180;
+                                const r =
+                                  i % 2 === 0 ? sockR + 2.5 : sockR - 1.5;
+                                return `${sPt.x + Math.cos(a) * r},${
+                                  sPt.y + Math.sin(a) * r
+                                }`;
+                              })
+                              .join(' ');
+                            return (
+                              <g
+                                key={`radial-slot-${yard.color}-${sIdx}`}
+                                data-socket-style={tileSpec.socketStyle}
+                              >
+                                <polygon
+                                  points={craterPts}
+                                  transform="translate(1.5, 3.5)"
+                                  fill="rgba(0, 0, 0, 0.82)"
+                                />
+                                <polygon
+                                  points={craterPts}
+                                  fill="url(#tile-elemental-stone)"
+                                  stroke={palette.lightMetal}
+                                  strokeWidth={2}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 6.5}
+                                  fill="#090D1A"
+                                  stroke={palette.specHighlight}
+                                  strokeWidth={2}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 13}
+                                  fill={`url(#pawn-head-${yard.color})`}
+                                  opacity={0.82}
+                                />
+                              </g>
+                            );
+                          }
+
+                          /* 3. NEON TECH: Chamfered Octagonal Cyberpunk Holo-Pad Socket (`neon_holo_pad`) */
+                          if (effectiveThemeId === 'neon_tech') {
+                            const sr = sockR;
+                            const sc = sockR * 0.32;
+                            const sx0 = sPt.x - sr;
+                            const sy0 = sPt.y - sr;
+                            const sx1 = sPt.x + sr;
+                            const sy1 = sPt.y + sr;
+                            const padOct = `${sx0 + sc},${sy0} ${sx1 - sc},${sy0} ${sx1},${
+                              sy0 + sc
+                            } ${sx1},${sy1 - sc} ${sx1 - sc},${sy1} ${
+                              sx0 + sc
+                            },${sy1} ${sx0},${sy1 - sc} ${sx0},${sy0 + sc}`;
+                            return (
+                              <g
+                                key={`radial-slot-${yard.color}-${sIdx}`}
+                                data-socket-style={tileSpec.socketStyle}
+                              >
+                                <polygon
+                                  points={padOct}
+                                  transform="translate(0, 3.5)"
+                                  fill="rgba(0, 0, 0, 0.85)"
+                                />
+                                <polygon
+                                  points={padOct}
+                                  fill="#081026"
+                                  stroke={palette.lightMetal}
+                                  strokeWidth={2.4}
+                                />
+                                <polygon
+                                  points={padOct}
+                                  transform={`translate(${sPt.x}, ${sPt.y}) scale(0.75) translate(${-sPt.x}, ${-sPt.y})`}
+                                  fill="#030612"
+                                  stroke={palette.specHighlight}
+                                  strokeWidth={1.6}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR * 0.44}
+                                  fill={palette.midMetal}
+                                  opacity={0.5}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR * 0.5}
+                                  fill="none"
+                                  stroke={palette.specHighlight}
+                                  strokeWidth={1.3}
+                                  strokeDasharray="5 3"
+                                />
+                              </g>
+                            );
+                          }
+
+                          /* 4. NATURE / FOREST: Carved Mossy Tree-Stump Socket (`mossy_timber_stump`) */
+                          if (effectiveThemeId === 'nature_forest') {
+                            return (
+                              <g
+                                key={`radial-slot-${yard.color}-${sIdx}`}
+                                data-socket-style={tileSpec.socketStyle}
+                              >
+                                <circle
+                                  cx={sPt.x + 2}
+                                  cy={sPt.y + 3.5}
+                                  r={sockR + 1.5}
+                                  fill="rgba(0, 0, 0, 0.72)"
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR}
+                                  fill="#5C3A1B"
+                                  stroke="#2E1A08"
+                                  strokeWidth={2.2}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 4.5}
+                                  fill="url(#tile-nature-wood)"
+                                  stroke="#784922"
+                                  strokeWidth={1.5}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR - 10}
+                                  fill={palette.deepMetal}
+                                  stroke={palette.specHighlight}
+                                  strokeWidth={1.8}
+                                />
+                                {/* Moss tufts & color-coded woodland berry on stump rim */}
+                                <circle
+                                  cx={sPt.x - sockR * 0.68}
+                                  cy={sPt.y - sockR * 0.46}
+                                  r={4.2}
+                                  fill="#22C55E"
+                                />
+                                <circle
+                                  cx={sPt.x - sockR * 0.52}
+                                  cy={sPt.y - sockR * 0.64}
+                                  r={3}
+                                  fill="#86EFAC"
+                                />
+                                <circle
+                                  cx={sPt.x + sockR * 0.64}
+                                  cy={sPt.y + sockR * 0.48}
+                                  r={3.8}
+                                  fill={palette.lightMetal}
+                                />
+                              </g>
+                            );
+                          }
+
+                          /* 5. MINIMAL 3D MODERN: Smooth Studio Podium Dimple Socket (`matte_studio_dimple`) */
+                          if (effectiveThemeId === 'minimal_3d') {
+                            return (
+                              <g
+                                key={`radial-slot-${yard.color}-${sIdx}`}
+                                data-socket-style={tileSpec.socketStyle}
+                              >
+                                <circle
+                                  cx={sPt.x + 1.5}
+                                  cy={sPt.y + 3}
+                                  r={sockR + 1}
+                                  fill="rgba(15, 23, 42, 0.32)"
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y}
+                                  r={sockR}
+                                  fill={palette.deepMetal}
+                                  stroke="#FFFFFF"
+                                  strokeWidth={2.4}
+                                />
+                                <circle
+                                  cx={sPt.x}
+                                  cy={sPt.y + 1}
+                                  r={sockR - 6}
+                                  fill={`url(#tile-colored-plateau-${yard.color})`}
+                                  stroke={palette.specHighlight}
+                                  strokeWidth={1.5}
+                                />
+                              </g>
+                            );
+                          }
+
+                          /* 6. COSMIC GALAXY (Default): Multi-Tiered Recessed Orbital Gravity-Well Socket (`gravity_well`) */
+                          return (
+                            <g
+                              key={`radial-slot-${yard.color}-${sIdx}`}
+                              data-socket-style={tileSpec.socketStyle}
+                            >
+                              <circle
+                                cx={sPt.x + 1.5}
+                                cy={sPt.y + 3}
+                                r={sockR + 1.5}
+                                fill="rgba(0, 0, 0, 0.78)"
+                              />
+                              <circle
+                                cx={sPt.x}
+                                cy={sPt.y}
+                                r={sockR}
+                                fill={`url(#arena-rim-${yard.color})`}
+                                stroke={palette.trimLight}
+                                strokeWidth={1.8}
+                              />
+                              <circle
+                                cx={sPt.x}
+                                cy={sPt.y}
+                                r={sockR - 5}
+                                fill="url(#socket-concave-well)"
+                                stroke="#010207"
+                                strokeWidth={2.4}
+                              />
+                              <circle
+                                cx={sPt.x}
+                                cy={sPt.y + 1}
+                                r={sockR - 10}
+                                fill={palette.arenaFloorDark}
+                                stroke={palette.lightMetal}
+                                strokeWidth={1.4}
+                              />
+                              <circle
+                                cx={sPt.x}
+                                cy={sPt.y + 1}
+                                r={sockR - 15}
+                                fill={`url(#pawn-body-${yard.color})`}
+                                opacity={0.55}
+                              />
+                            </g>
+                          );
+                        })}
+                      </g>
+                    );
+                  })}
+
+                  {/* 4. Flush 3x6 Rectangular Track Arms (18 contiguous cells per arm rendered with Active Board Theme's Physical Tile Design) */}
+                  <g data-testid="radial-flush-arms">
+                    {geom.visualArmCells.map((cell) => {
+                      const pt = gridCoordToSvgPoint(cell.coord);
+                      const wPx = cell.cellW * CELL_SIZE; // lateral width
+                      const hPx = cell.cellH * CELL_SIZE; // radial height
+                      const palette = METALLIC_PAWN_PALETTE[cell.armColor];
+
+                      return (
+                        <g
+                          key={`arm-cell-${cell.armIndex}-${cell.row}-${cell.col}`}
+                          transform={`translate(${pt.x}, ${pt.y}) rotate(${cell.angleDeg})`}
+                        >
+                          {/* Render the active 4-player board theme's physical tile scaled into this exact flush cell */}
+                          <g
+                            transform={`scale(${cell.cellH}, ${cell.cellW}) translate(-50, -50)`}
+                          >
+                            {renderPhysicalTrackTile(
+                              0,
+                              0,
+                              `wheel-tile-${cell.armIndex}-${cell.row}-${cell.col}`,
+                              {
+                                isStartColor: cell.isColoredStartSquare
+                                  ? cell.armColor
+                                  : null,
+                                isStar: cell.isStarSafe,
+                                homeLaneColor: cell.isColoredHomeStretch
+                                  ? cell.armColor
+                                  : null,
+                                homeLaneStepIndex:
+                                  cell.homeStepIndex ?? undefined,
+                                radialInwardDeg: 180,
+                              }
+                            )}
+                          </g>
+
+                          {/* Crisp Flush Grid Seam Border */}
+                          <rect
+                            x={-hPx / 2}
+                            y={-wPx / 2}
+                            width={hPx}
+                            height={wPx}
+                            fill="none"
+                            stroke={
+                              effectiveThemeId === 'royal_classic'
+                                ? '#78350F'
+                                : effectiveThemeId === 'neon_tech'
+                                ? 'rgba(56, 189, 248, 0.45)'
+                                : effectiveThemeId === 'nature_forest'
+                                ? '#2E1F18'
+                                : '#1E293B'
+                            }
+                            strokeWidth={1.4}
+                          />
+
+                          {/* Colored Inward Home-Stretch Entry Arrow on (col = 0, row = 5) pointing in local -X (inward) */}
+                          {cell.isCenterArrowTip && (
+                            <g>
+                              <line
+                                x1={hPx * 0.26}
+                                y1={0}
+                                x2={-hPx * 0.22}
+                                y2={0}
+                                stroke={
+                                  effectiveThemeId === 'cosmic_galaxy' ||
+                                  effectiveThemeId === 'neon_tech' ||
+                                  effectiveThemeId === 'elemental_realms'
+                                    ? palette.specHighlight
+                                    : palette.midMetal
+                                }
+                                strokeWidth={3.8}
+                                strokeLinecap="round"
+                              />
+                              <polygon
+                                points={`${-hPx * 0.32},0 ${-hPx * 0.08},${
+                                  -wPx * 0.18
+                                } ${-hPx * 0.08},${wPx * 0.18}`}
+                                fill={
+                                  effectiveThemeId === 'cosmic_galaxy' ||
+                                  effectiveThemeId === 'neon_tech' ||
+                                  effectiveThemeId === 'elemental_realms'
+                                    ? palette.specHighlight
+                                    : palette.midMetal
+                                }
+                              />
+                            </g>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </g>
+
+                  {/* 5. Central Colored Finish Trapezoids & Theme-Styled N-Gon Core with Centered Die Emblem */}
+                  <g data-testid="radial-centerpiece">
+                    {/* N Colored Finish Trapezoids (V_{k-1}, V_k, U_k, U_{k-1}) */}
+                    {geom.finishTrapezoids.map((trap) => {
+                      const palette = METALLIC_PAWN_PALETTE[trap.color];
+                      const pts = trap.points
+                        .map((c) => {
+                          const pt = gridCoordToSvgPoint(c);
+                          return `${pt.x},${pt.y}`;
+                        })
+                        .join(' ');
+                      return (
+                        <g key={`finish-trap-${trap.color}`}>
+                          <polygon
+                            points={pts}
+                            fill={
+                              effectiveThemeId === 'cosmic_galaxy' ||
+                              effectiveThemeId === 'neon_tech' ||
+                              effectiveThemeId === 'elemental_realms'
+                                ? `url(#home-bay-${trap.color})`
+                                : `url(#tile-colored-plateau-${trap.color})`
+                            }
+                            stroke={
+                              effectiveThemeId === 'royal_classic'
+                                ? 'url(#gold-rim-bevel)'
+                                : effectiveThemeId === 'neon_tech'
+                                ? palette.specHighlight
+                                : effectiveThemeId === 'nature_forest'
+                                ? '#4E342E'
+                                : '#1E293B'
+                            }
+                            strokeWidth={2.4}
+                            strokeLinejoin="round"
+                          />
+                          <polygon
+                            points={pts}
+                            fill="none"
+                            stroke={
+                              effectiveThemeId === 'royal_classic'
+                                ? '#FEF08A'
+                                : palette.specHighlight
+                            }
+                            strokeWidth={1.1}
+                            opacity={0.45}
+                          />
+                        </g>
+                      );
+                    })}
+
+                    {/* Theme-Styled Central Pentagon / Hexagon Core */}
+                    <polygon
+                      points={innerCorePolyPts}
+                      fill={coreFill}
+                      stroke={coreStroke}
+                      strokeWidth={3.2}
+                      strokeLinejoin="round"
+                    />
+
+                    {/* Centered Die Emblem inside the Core (matching both reference screenshots) */}
+                    {playerCount === 5 ? (
+                      <g
+                        transform={`translate(${centerPt.x}, ${centerPt.y})`}
+                      >
+                        <rect
+                          x={-34}
+                          y={-34}
+                          width={68}
+                          height={68}
+                          rx={15}
+                          fill="#0EA5E9"
+                          stroke={
+                            effectiveThemeId === 'royal_classic'
+                              ? '#FEF08A'
+                              : '#0F172A'
+                          }
+                          strokeWidth={3}
+                        />
+                        <rect
+                          x={-26}
+                          y={-26}
+                          width={52}
+                          height={52}
+                          rx={11}
+                          fill="#38BDF8"
+                        />
+                        <circle cx={0} cy={0} r={7.5} fill="#FFFFFF" />
+                      </g>
+                    ) : (
+                      <g
+                        transform={`translate(${centerPt.x}, ${centerPt.y})`}
+                      >
+                        <rect
+                          x={-36}
+                          y={-36}
+                          width={72}
+                          height={72}
+                          rx={16}
+                          fill="#FFFFFF"
+                          stroke={
+                            effectiveThemeId === 'royal_classic'
+                              ? '#D97706'
+                              : '#0F172A'
+                          }
+                          strokeWidth={3}
+                        />
+                        {/* 6-pip die pattern matching the 6-player reference image */}
+                        {[
+                          { x: -17, y: -14 },
+                          { x: 0, y: -14 },
+                          { x: 17, y: -14 },
+                          { x: -17, y: 14 },
+                          { x: 0, y: 14 },
+                          { x: 17, y: 14 },
+                        ].map((pip, pIdx) => (
+                          <circle
+                            key={`core-pip-${pIdx}`}
+                            cx={pip.x}
+                            cy={pip.y}
+                            r={6.2}
+                            fill="#0F172A"
+                          />
+                        ))}
+                      </g>
+                    )}
+                  </g>
+                </g>
               );
-            })}
-          </g>
+            })()
+          ) : (
+            <>
+              {/* 2. Four Sculpted 3D Player Territories */}
+              {PLAYER_COLORS.map((color) => renderPlayerTerritory(color))}
 
-          {/* 4. 20 Colored Home Lane Tiles (5 per player color) */}
-          <g>
-            {PLAYER_COLORS.map((color) =>
-              HOME_PATH_COORDS[color].map((coord, stepIdx) =>
-                renderPhysicalTrackTile(
-                  coord.row,
-                  coord.col,
-                  `homelane-${color}-${stepIdx}`,
-                  {
-                    homeLaneColor: color,
-                    homeLaneStepIndex: stepIdx,
-                  }
-                )
-              )
-            )}
-          </g>
+              {/* 3. 52 Shared Perimeter Track Tiles (Unique Design per Theme) */}
+              <g>
+                {MAIN_TRACK_COORDS.map((coord, trackIndex) => {
+                  const startColor =
+                    PLAYER_COLORS.find(
+                      (c) => START_TRACK_INDEX[c] === trackIndex
+                    ) || null;
+                  const isStar = STAR_SAFE_INDICES.includes(trackIndex);
+                  return renderPhysicalTrackTile(
+                    coord.row,
+                    coord.col,
+                    `track-${trackIndex}`,
+                    {
+                      isStartColor: startColor,
+                      isStar,
+                      trackIndex,
+                    }
+                  );
+                })}
+              </g>
 
-          {/* 5. Massive Central 3D Black Hole / Theme Centerpiece */}
-          {renderCenterpiece()}
+              {/* 4. 20 Colored Home Lane Tiles (5 per player color) */}
+              <g>
+                {PLAYER_COLORS.map((color) =>
+                  HOME_PATH_COORDS[color].map((coord, stepIdx) =>
+                    renderPhysicalTrackTile(
+                      coord.row,
+                      coord.col,
+                      `homelane-${color}-${stepIdx}`,
+                      {
+                        homeLaneColor: color,
+                        homeLaneStepIndex: stepIdx,
+                      }
+                    )
+                  )
+                )}
+              </g>
+
+              {/* 5. Massive Central 3D Black Hole / Theme Centerpiece */}
+              {renderCenterpiece()}
+            </>
+          )}
 
           {/* 6. Sculpted Outer 3D Board Moulding Frame Overlay */}
           <rect
-            x={3}
-            y={3}
-            width={BOARD_VIEWBOX_SIZE - 6}
-            height={BOARD_VIEWBOX_SIZE - 6}
+            x={boardViewBox.x + 3}
+            y={boardViewBox.y + 3}
+            width={boardViewBox.width - 6}
+            height={boardViewBox.height - 6}
             rx={22}
             fill="none"
             stroke="rgba(226, 232, 240, 0.24)"
@@ -4892,26 +6877,46 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             </g>
           ))}
 
-          {/* 9. All 16 Tall 3D Sculpted Metallic Game Pieces with Token Numbers (1..4) */}
+          {/* 9. All Tall 3D Sculpted Metallic Game Pieces with Token Numbers (1..4) */}
           <g>
             {allTokens.map((token) => {
               const pos = tokenPositions.get(token.id);
               if (!pos) return null;
 
-              const isAnimatingThis =
-                animatingMove && animatingMove.tokenId === token.id;
-              const animPt = isAnimatingThis
-                ? gridCoordToSvgPoint(animatingMove.coord)
+              const animatingPrimaryToken = animatingMove
+                ? allTokens.find((t) => t.id === animatingMove.tokenId)
                 : null;
+              const isAnimatingThis = Boolean(
+                animatingMove &&
+                  (animatingMove.tokenId === token.id ||
+                    (token.pairId &&
+                      animatingPrimaryToken?.pairId === token.pairId))
+              );
+              const animBasePt =
+                isAnimatingThis && animatingMove
+                  ? gridCoordToSvgPoint(animatingMove.coord)
+                  : null;
+              const stackSpreadFactor =
+                playerCount === 5 ? 0.85 : playerCount === 6 ? 0.8 : 1.05;
+              const animOffset =
+                isAnimatingThis && pos.stackCount > 1
+                  ? getStackOffset(pos.stackIndex, pos.stackCount)
+                  : { dx: 0, dy: 0 };
 
-              const renderX = animPt ? animPt.x : pos.x;
-              const renderY = animPt ? animPt.y - 12 : pos.y;
+              const renderX = animBasePt
+                ? animBasePt.x + animOffset.dx * CELL_SIZE * stackSpreadFactor
+                : pos.x;
+              const renderY = animBasePt
+                ? animBasePt.y +
+                  animOffset.dy * CELL_SIZE * stackSpreadFactor -
+                  10
+                : pos.y;
 
               const isLegal = legalMoveByTokenId.has(token.id);
               const isBreakablePair = Boolean(
                 token.pairId &&
                   token.steps >= 0 &&
-                  token.steps < FINISH_STEP &&
+                  token.steps < finishStep &&
                   token.color === activeColor &&
                   onBreakPair &&
                   (turnPhase === 'SELECTING_TOKEN' ||
@@ -4924,7 +6929,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               const tokenStateLabel =
                 token.steps < 0
                   ? 'yard'
-                  : token.steps >= FINISH_STEP
+                  : token.steps >= finishStep
                   ? 'home'
                   : 'track';
 
@@ -4989,141 +6994,148 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                   }}
                   data-testid={`token-${token.id}`}
                 >
-                  {/* Generous Transparent Touch/Click Hitbox (88x88) */}
-                  <circle cx={0} cy={-6} r={44} fill="transparent" />
-
-                  {/* Linked Pair Base Aura Ring */}
-                  {token.pairId && (
-                    <ellipse
-                      cx={0}
-                      cy={21}
-                      rx={34}
-                      ry={13}
-                      fill="rgba(250, 204, 21, 0.16)"
-                      stroke="#FACC15"
-                      strokeWidth={3}
-                    />
-                  )}
-
-                  {/* Playable Ground Selection Halo Ring */}
-                  {isInteractive && showMoveHints && (
-                    <g>
-                      <ellipse
-                        cx={0}
-                        cy={21}
-                        rx={37}
-                        ry={14.5}
-                        fill="none"
-                        stroke={
-                          token.pairId ? '#FDE047' : palette.specHighlight
-                        }
-                        strokeWidth={4}
-                        strokeDasharray="6 5"
-                        className="animate-token-pulse"
-                      />
-                      <ellipse
-                        cx={0}
-                        cy={21}
-                        rx={29}
-                        ry={11}
-                        fill={palette.lightMetal}
-                        opacity={0.36}
-                      />
-                    </g>
-                  )}
-
-                  {/* Levitating 3D Pawn Wrapper when Playable */}
+                  {/* Center the 3D pawn's circular pedestal base (cy=+17.5) onto (0,0) on 5P & 6P radial cells and yard sockets */}
                   <g
-                    className={
-                      isInteractive && !reducedMotion
-                        ? 'animate-token-levitate'
-                        : ''
+                    transform={
+                      playerCount >= 5 ? 'translate(0, -14)' : undefined
                     }
                   >
-                    {/* 3D Sculpted Metallic Pawn with Engraved Token Number (1..4) */}
-                    {render3DMetallicPawn(
-                      token.color,
-                      isInteractive,
-                      tokenNumber,
-                      token.id
+                    {/* Generous Transparent Touch/Click Hitbox (88x88) */}
+                    <circle cx={0} cy={-6} r={44} fill="transparent" />
+
+                    {/* Linked Pair Base Aura Ring */}
+                    {token.pairId && (
+                      <ellipse
+                        cx={0}
+                        cy={21}
+                        rx={34}
+                        ry={13}
+                        fill="rgba(250, 204, 21, 0.16)"
+                        stroke="#FACC15"
+                        strokeWidth={3}
+                      />
                     )}
 
-                    {/* Color-Blind Accessible Symbol Engraving on Sphere Head */}
-                    {colorBlindMode && (
-                      <text
-                        x={0}
-                        y={-31}
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                        fill="#FFFFFF"
-                        stroke="#020617"
-                        strokeWidth={2.5}
-                        paintOrder="stroke"
-                        fontSize="13"
-                        fontWeight="900"
-                      >
-                        {meta.symbol}
-                      </text>
+                    {/* Playable Ground Selection Halo Ring */}
+                    {isInteractive && showMoveHints && (
+                      <g>
+                        <ellipse
+                          cx={0}
+                          cy={21}
+                          rx={37}
+                          ry={14.5}
+                          fill="none"
+                          stroke={
+                            token.pairId ? '#FDE047' : palette.specHighlight
+                          }
+                          strokeWidth={4}
+                          strokeDasharray="6 5"
+                          className="animate-token-pulse"
+                        />
+                        <ellipse
+                          cx={0}
+                          cy={21}
+                          rx={29}
+                          ry={11}
+                          fill={palette.lightMetal}
+                          opacity={0.36}
+                        />
+                      </g>
                     )}
 
-                    {/* Prominent "2" Pair Indicator Badge for Paired Tokens (rendered once per pair on the topmost paired token) */}
-                    {token.pairId ? (
-                      allTokens.filter((t) => t.pairId === token.pairId)[1]
-                        ?.id === token.id && (
-                        <g
-                          transform="translate(22, -40)"
-                          data-testid={`pair-badge-${token.pairId}`}
+                    {/* Levitating 3D Pawn Wrapper when Playable */}
+                    <g
+                      className={
+                        isInteractive && !reducedMotion
+                          ? 'animate-token-levitate'
+                          : ''
+                      }
+                    >
+                      {/* 3D Sculpted Metallic Pawn with Engraved Token Number (1..4) */}
+                      {render3DMetallicPawn(
+                        token.color,
+                        isInteractive,
+                        tokenNumber,
+                        token.id
+                      )}
+
+                      {/* Color-Blind Accessible Symbol Engraving on Sphere Head */}
+                      {colorBlindMode && (
+                        <text
+                          x={0}
+                          y={-31}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fill="#FFFFFF"
+                          stroke="#020617"
+                          strokeWidth={2.5}
+                          paintOrder="stroke"
+                          fontSize="13"
+                          fontWeight="900"
                         >
-                          <circle
-                            cx={0}
-                            cy={0}
-                            r={14.5}
-                            fill="#F59E0B"
-                            stroke="#FEF08A"
-                            strokeWidth={2.6}
-                          />
-                          <text
-                            x={0}
-                            y={0.5}
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                            fill="#020617"
-                            fontSize="14.5"
-                            fontWeight="900"
-                            className="font-mono-tabular"
+                          {meta.symbol}
+                        </text>
+                      )}
+
+                      {/* Prominent "2" Pair Indicator Badge for Paired Tokens (rendered once per pair on the topmost paired token) */}
+                      {token.pairId ? (
+                        allTokens.filter((t) => t.pairId === token.pairId)[1]
+                          ?.id === token.id && (
+                          <g
+                            transform="translate(22, -40)"
+                            data-testid={`pair-badge-${token.pairId}`}
                           >
-                            2
-                          </text>
-                        </g>
-                      )
-                    ) : (
-                      /* Stack Count Badge when Multiple Unpaired Tokens Share a Tile */
-                      pos.stackCount > 1 &&
-                      pos.stackIndex === pos.stackCount - 1 && (
-                        <g transform="translate(22, -38)">
-                          <circle
-                            cx={0}
-                            cy={0}
-                            r={13.5}
-                            fill="#090D1A"
-                            stroke={palette.specHighlight}
-                            strokeWidth={2.2}
-                          />
-                          <text
-                            x={0}
-                            y={1}
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                            fill="#F8FAFC"
-                            fontSize="12"
-                            fontWeight="800"
-                            className="font-mono-tabular"
-                          >
-                            ×{pos.stackCount}
-                          </text>
-                        </g>
-                      )
-                    )}
+                            <circle
+                              cx={0}
+                              cy={0}
+                              r={14.5}
+                              fill="#F59E0B"
+                              stroke="#FEF08A"
+                              strokeWidth={2.6}
+                            />
+                            <text
+                              x={0}
+                              y={0.5}
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              fill="#020617"
+                              fontSize="14.5"
+                              fontWeight="900"
+                              className="font-mono-tabular"
+                            >
+                              2
+                            </text>
+                          </g>
+                        )
+                      ) : (
+                        /* Stack Count Badge when Multiple Unpaired Tokens Share a Tile */
+                        pos.stackCount > 1 &&
+                        pos.stackIndex === pos.stackCount - 1 && (
+                          <g transform="translate(22, -38)">
+                            <circle
+                              cx={0}
+                              cy={0}
+                              r={13.5}
+                              fill="#090D1A"
+                              stroke={palette.specHighlight}
+                              strokeWidth={2.2}
+                            />
+                            <text
+                              x={0}
+                              y={1}
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              fill="#F8FAFC"
+                              fontSize="12"
+                              fontWeight="800"
+                              className="font-mono-tabular"
+                            >
+                              ×{pos.stackCount}
+                            </text>
+                          </g>
+                        )
+                      )}
+                    </g>
                   </g>
                 </g>
               );
@@ -5153,7 +7165,7 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
               Boolean(onBreakPair) &&
               Boolean(targetToken.pairId) &&
               targetToken.steps >= 0 &&
-              targetToken.steps < FINISH_STEP &&
+              targetToken.steps < finishStep &&
               (turnPhase === 'SELECTING_TOKEN' ||
                 turnPhase === 'WAITING_FOR_ROLL');
 
@@ -5162,12 +7174,18 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
             const rawX = pos.x;
             const rawY = pos.y < 210 ? pos.y + 92 : pos.y - 115;
             const clampedX = Math.max(
-              menuW / 2 + 16,
-              Math.min(BOARD_VIEWBOX_SIZE - menuW / 2 - 16, rawX)
+              boardViewBox.x + menuW / 2 + 16,
+              Math.min(
+                boardViewBox.x + boardViewBox.width - menuW / 2 - 16,
+                rawX
+              )
             );
             const clampedY = Math.max(
-              menuH / 2 + 16,
-              Math.min(BOARD_VIEWBOX_SIZE - menuH / 2 - 16, rawY)
+              boardViewBox.y + menuH / 2 + 16,
+              Math.min(
+                boardViewBox.y + boardViewBox.height - menuH / 2 - 16,
+                rawY
+              )
             );
 
             return (

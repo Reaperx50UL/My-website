@@ -4,7 +4,7 @@
  */
 
 import { chooseAIMove, chooseAITurnDecision } from '../game/aiStrategy';
-import { DEFAULT_HOUSE_RULES, PLAYER_COLORS } from '../game/constants';
+import { ALL_PLAYER_COLORS, DEFAULT_HOUSE_RULES, PLAYER_COLORS } from '../game/constants';
 import {
   breakTokenPair,
   commitDiceRoll,

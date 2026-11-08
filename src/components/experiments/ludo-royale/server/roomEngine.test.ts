@@ -373,3 +373,28 @@ test('14. Matchmaking Turn Progression: P1 rolls, turn transitions, version incr
   // Cleanup
   await handleLeaveRoom(roomCode, p1);
 });
+
+test('15. 5-Player and 6-Player Matchmaking Brackets: queue, match, and seat assignments', async () => {
+  const ts = Date.now();
+  // 5-player matchmaking
+  const p5_1 = await handleJoinMatchmaking(`p5-1-${ts}`, 'Five1', 'crown', 5);
+  assert.equal(p5_1.status, 'searching');
+  await handleJoinMatchmaking(`p5-2-${ts}`, 'Five2', 'knight', 5);
+  await handleJoinMatchmaking(`p5-3-${ts}`, 'Five3', 'shield', 5);
+  await handleJoinMatchmaking(`p5-4-${ts}`, 'Five4', 'falcon', 5);
+  const p5_5 = await handleJoinMatchmaking(`p5-5-${ts}`, 'Five5', 'dragon', 5);
+  assert.equal(p5_5.status, 'matched');
+  assert.equal(p5_5.room?.players.length, 5);
+  assert.equal(p5_5.room?.players[4].color, 'purple');
+
+  // 6-player matchmaking
+  const p6_1 = await handleJoinMatchmaking(`p6-1-${ts}`, 'Six1', 'crown', 6);
+  assert.equal(p6_1.status, 'searching');
+  for (let i = 2; i <= 5; i++) {
+    await handleJoinMatchmaking(`p6-${i}-${ts}`, `Six${i}`, 'knight', 6);
+  }
+  const p6_6 = await handleJoinMatchmaking(`p6-6-${ts}`, 'Six6', 'dragon', 6);
+  assert.equal(p6_6.status, 'matched');
+  assert.equal(p6_6.room?.players.length, 6);
+  assert.equal(p6_6.room?.players[5].color, 'orange');
+});

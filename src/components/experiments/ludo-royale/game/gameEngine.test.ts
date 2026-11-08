@@ -9,8 +9,10 @@ import {
   getTokenGridCoord,
   getTurnLightingConfig,
   groupTokensByCell,
+  HEXAGON_BOARD_GEOMETRY,
   isSafeTrackIndex,
   MAIN_TRACK_COORDS,
+  PENTAGON_BOARD_GEOMETRY,
 } from './boardLayout';
 import {
   AVATAR_OPTIONS,
@@ -57,7 +59,11 @@ import {
   getAvatarUnlockProgress,
   isAvatarUnlocked,
 } from './progression';
-import { buildSetupPlayerRoster, getDefaultSeatName } from './rules';
+import {
+  buildSetupPlayerRoster,
+  getColorsForPlayerCount,
+  getDefaultSeatName,
+} from './rules';
 import {
   computeHapticDuration,
   getDiceAudioIdentity,
@@ -474,18 +480,24 @@ test('17. Local Multiplayer supports mixed Human and AI Bot rosters with individ
       green: 'human',
       yellow: 'ai',
       blue: 'ai',
+      purple: 'ai',
+      orange: 'ai',
     },
     botDifficulties: {
       red: 'medium',
       green: 'medium',
       yellow: 'hard',
       blue: 'easy',
+      purple: 'medium',
+      orange: 'medium',
     },
     customNames: {
       red: 'Commander',
       green: 'Player 2',
       yellow: '', // Should fallback to Solar Bot
       blue: 'Cyber Bot',
+      purple: 'Amethyst Bot',
+      orange: 'Blaze Bot',
     },
     profile: hostProfile,
   });
@@ -1823,4 +1835,238 @@ test('39. Single-Token Move Preservation Across Pair/Unpair Toggles: Pairing and
   state = executeTokenMove(state, 'red-2');
   assert.equal(state.players[0].tokens[2].steps, 18);
 });
+
+test('40. 5-Player Pentagon Board & 6-Player Hexagon Board Geometry, Themes, Exact 1-Cell-Per-Step Alignment, Captures, Safe Stars, Pairing & Three Sixes Rollback', () => {
+  // 1. Verify Pentagon (5P: 5 arms × 13 physical cells = 65 perimeter cells) and Hexagon (6P: 6 arms × 13 physical cells = 78 perimeter cells)
+  assert.equal(PENTAGON_BOARD_GEOMETRY.trackCoords.length, 65);
+  assert.equal(HEXAGON_BOARD_GEOMETRY.trackCoords.length, 78);
+  assert.deepEqual(getColorsForPlayerCount(5), [
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'purple',
+  ]);
+  assert.deepEqual(getColorsForPlayerCount(6), [
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'purple',
+    'orange',
+  ]);
+
+  // Verify all 6 board themes provide territory titles for purple and orange
+  for (const themeOpt of BOARD_THEME_OPTIONS) {
+    const spec = getThemeTileSpec(themeOpt.id);
+    assert.ok(spec.territoryTitles.purple.length > 0);
+    assert.ok(spec.territoryTitles.orange.length > 0);
+  }
+
+  // 2. Verify full step coordinate progression for 5P (0..69) and 6P (0..82) and assert every board step lands at the EXACT center of a physical visualArmCells cell!
+  for (const playerCount of [5, 6] as const) {
+    const geom =
+      playerCount === 5 ? PENTAGON_BOARD_GEOMETRY : HEXAGON_BOARD_GEOMETRY;
+    const finishStep = playerCount === 5 ? 69 : 82;
+    const colors = getColorsForPlayerCount(playerCount);
+
+    for (const color of colors) {
+      for (let tIdx = 0; tIdx < 4; tIdx++) {
+        const yardCoord = getTokenGridCoord(color, -1, tIdx, tIdx, playerCount);
+        assert.ok(
+          Number.isFinite(yardCoord.row) && Number.isFinite(yardCoord.col)
+        );
+      }
+
+      for (let step = 0; step < finishStep; step++) {
+        const coord = getTokenGridCoord(color, step, 0, undefined, playerCount);
+        assert.ok(
+          Number.isFinite(coord.row) && Number.isFinite(coord.col),
+          `Invalid coord for ${playerCount}P ${color} at step ${step}`
+        );
+        // Every step 0..finishStep-1 MUST match the exact center of a physical cell in geom.visualArmCells!
+        const matchesPhysicalCell = geom.visualArmCells.some(
+          (cell) =>
+            Math.abs(cell.coord.row - coord.row) < 1e-4 &&
+            Math.abs(cell.coord.col - coord.col) < 1e-4
+        );
+        assert.equal(
+          matchesPhysicalCell,
+          true,
+          `Step ${step} for ${playerCount}P ${color} at (${coord.row}, ${coord.col}) is not centered inside a physical arm cell!`
+        );
+      }
+
+      const finishCoord = getTokenGridCoord(
+        color,
+        finishStep,
+        0,
+        undefined,
+        playerCount
+      );
+      assert.ok(
+        Number.isFinite(finishCoord.row) && Number.isFinite(finishCoord.col)
+      );
+
+      // Step 0 must be a Safe Start Square
+      const startGlobal = getGlobalTrackIndex(color, 0, playerCount)!;
+      assert.equal(
+        isSafeTrackIndex(startGlobal, DEFAULT_HOUSE_RULES, playerCount),
+        true
+      );
+      // Safe Star Square on the next arm is always at step 8 (5 steps inward along own arm + 3 steps outward along next arm)
+      const starGlobal = getGlobalTrackIndex(color, 8, playerCount)!;
+      assert.equal(
+        isSafeTrackIndex(starGlobal, DEFAULT_HOUSE_RULES, playerCount),
+        true
+      );
+    }
+  }
+
+  // 3. Test 5-Player Pentagon Gameplay (Purple capturing Red, Manual Pairing, and 3-Sixes Rollback)
+  const fivePlayers: PlayerConfig[] = getColorsForPlayerCount(5).map(
+    (color, i) => ({
+      color,
+      name: `Player ${i + 1}`,
+      avatar: 'crown',
+      type: i === 0 ? 'human' : 'ai',
+      aiDifficulty: 'medium',
+    })
+  );
+  let state5p = createInitialGameState({ mode: 'ai', players: fivePlayers });
+  assert.equal(state5p.players.length, 5);
+  assert.equal(state5p.players[4].color, 'purple');
+
+  // On 5P Pentagon (65 cells), Red starts at 8, so Red step 10 is global (8 + 10) % 65 = 18 (non-safe square).
+  // Purple starts at 60, so Purple step 23 is global (60 + 23) % 65 = 18!
+  state5p.players[0].tokens[0].steps = 10;
+  state5p.players[4].tokens[0].steps = 20; // Purple at step 20 (global 15)
+  state5p.activePlayerIndex = 4; // Purple's turn
+  state5p = commitDiceRoll(state5p, 3); // Purple moves 20 -> 23 (global 18), capturing Red!
+  const purpleCaptureMove = state5p.legalMoves.find(
+    (m) => m.tokenId === 'purple-0'
+  );
+  assert.ok(purpleCaptureMove);
+  assert.deepEqual(purpleCaptureMove.capturesTokenIds, ['red-0']);
+  state5p = executeTokenMove(state5p, 'purple-0');
+  assert.equal(state5p.players[0].tokens[0].steps, -1); // Red returned to Home Yard
+  assert.equal(state5p.players[4].capturesMade, 1);
+
+  // 4. Test 6-Player Hexagon Gameplay (Orange Pair vs Purple Pair capture & Three Consecutive Sixes rollback)
+  const sixPlayers: PlayerConfig[] = getColorsForPlayerCount(6).map(
+    (color, i) => ({
+      color,
+      name: `Player ${i + 1}`,
+      avatar: 'crown',
+      type: 'human',
+    })
+  );
+  let state6p = createInitialGameState({ mode: 'local', players: sixPlayers });
+  assert.equal(state6p.players.length, 6);
+  assert.equal(state6p.players[5].color, 'orange');
+
+  // On 6P Hexagon (78 cells), Purple starts at 60, so Purple step 4 is global (60 + 4) % 78 = 64 (non-safe square)
+  state6p.players[4].tokens[0].steps = 4;
+  state6p.players[4].tokens[1].steps = 4;
+  state6p.activePlayerIndex = 4; // Purple's turn to form its pair
+  state6p = formTokenPair(state6p, 'purple-0', 'purple-1');
+  assert.equal(state6p.pairs?.length, 1);
+
+  // Orange starts at 73, so Orange step 67 is global (73 + 67) % 78 = 62, and step 69 is global (73 + 69) % 78 = 64 (where Purple pair sits!)
+  state6p.players[5].tokens[0].steps = 67;
+  state6p.players[5].tokens[1].steps = 67;
+  state6p.activePlayerIndex = 5; // Orange's turn
+  state6p = commitDiceRoll(state6p, 4);
+  state6p = formTokenPair(state6p, 'orange-0', 'orange-1');
+  assert.equal(state6p.pairs?.length, 2);
+
+  const orangePairMove = state6p.legalMoves.find(
+    (m) => m.isPairMove && m.tokenId === 'orange-0'
+  );
+  assert.ok(orangePairMove);
+  assert.equal(orangePairMove.toSteps, 69);
+  assert.deepEqual(orangePairMove.capturesTokenIds, ['purple-0', 'purple-1']);
+  state6p = executeTokenMove(state6p, 'orange-0');
+  assert.equal(state6p.players[4].tokens[0].steps, -1);
+  assert.equal(state6p.players[4].tokens[1].steps, -1);
+  assert.equal(state6p.players[5].capturesMade, 2);
+
+  // Test Three Consecutive Sixes rollback on 6-Player Hexagon for Orange
+  state6p.activePlayerIndex = 5;
+  state6p.turnPhase = 'WAITING_FOR_ROLL';
+  state6p.consecutiveSixes = 0;
+  const beforeSixesOrangeStep = state6p.players[5].tokens[2].steps; // -1
+  state6p = commitDiceRoll(state6p, 6);
+  state6p = executeTokenMove(state6p, 'orange-2'); // Deployed to 0
+  assert.equal(state6p.players[5].tokens[2].steps, 0);
+  state6p = commitDiceRoll(state6p, 6);
+  state6p = executeTokenMove(state6p, 'orange-2'); // Moved to 6
+  assert.equal(state6p.players[5].tokens[2].steps, 6);
+  // Third consecutive 6 -> full rollback!
+  state6p = commitDiceRoll(state6p, 6);
+  assert.equal(state6p.players[5].tokens[2].steps, beforeSixesOrangeStep);
+  assert.equal(state6p.turnPhase, 'WAITING_FOR_ROLL');
+  assert.equal(state6p.activePlayerIndex, 5); // Orange gets a fresh roll!
+});
+
+test('41. 5-Player and 6-Player Online Matchmaking & Private Lobby Bot Replacement', () => {
+  // 1. Test 5-Player Matchmaking Queue
+  let queue5: MatchmakingQueueEntry[] = [];
+  for (let i = 1; i <= 5; i++) {
+    const res = enqueueMatchmakingPlayer(queue5, {
+      id: `s5-${i}`,
+      name: `P${i}`,
+      avatar: 'crown',
+      targetPlayers: 5,
+      joinedAt: 1000 + i,
+    });
+    queue5 = res.remainingQueue;
+    if (i < 5) {
+      assert.equal(res.matchedEntries, null);
+    } else {
+      assert.equal(res.matchedEntries?.length, 5);
+      const room5 = createMatchedOnlineRoom({
+        roomCode: 'PENT55',
+        matchedEntries: res.matchedEntries!,
+        targetPlayers: 5,
+      });
+      assert.equal(room5.players.length, 5);
+      assert.equal(room5.players[4].color, 'purple');
+      assert.equal(room5.gameState?.players.length, 5);
+    }
+  }
+
+  // 2. Test 6-Player Matchmaking Queue & Departure Bot Replacement
+  let queue6: MatchmakingQueueEntry[] = [];
+  let room6: ReturnType<typeof createMatchedOnlineRoom> | null = null;
+  for (let i = 1; i <= 6; i++) {
+    const res = enqueueMatchmakingPlayer(queue6, {
+      id: `s6-${i}`,
+      name: `HexPlayer${i}`,
+      avatar: 'dragon',
+      targetPlayers: 6,
+      joinedAt: 2000 + i,
+    });
+    queue6 = res.remainingQueue;
+    if (i === 6) {
+      assert.equal(res.matchedEntries?.length, 6);
+      room6 = createMatchedOnlineRoom({
+        roomCode: 'HEXA66',
+        matchedEntries: res.matchedEntries!,
+        targetPlayers: 6,
+      });
+    }
+  }
+  assert.ok(room6);
+  assert.equal(room6.players.length, 6);
+  assert.equal(room6.players[5].color, 'orange');
+
+  // If Player 6 (Orange) leaves while 5 humans remain, Orange is replaced by an AI Bot and match continues!
+  const dep = resolvePlayerDeparture(room6, 's6-6');
+  assert.equal(dep.action, 'replace_with_bot');
+  assert.equal(countConnectedHumanPlayers(dep.room.players), 5);
+  assert.equal(dep.room.gameState?.players[5].type, 'ai');
+  assert.equal(dep.room.gameState?.players[5].replacedByBot, true);
+});
+
 

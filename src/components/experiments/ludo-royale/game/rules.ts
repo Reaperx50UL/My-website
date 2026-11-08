@@ -13,6 +13,8 @@ const BOT_DEFAULT_NAMES: Record<PlayerColor, string> = {
   green: 'Emerald Bot',
   yellow: 'Solar Bot',
   blue: 'Sapphire Bot',
+  purple: 'Amethyst Bot',
+  orange: 'Blaze Bot',
 };
 
 /**
@@ -35,10 +37,10 @@ export function getDefaultSeatName(
 
 /**
  * Builds the validated player roster for Local Multiplayer and AI matches,
- * supporting any combination of Human pass-and-play seats and AI Bots.
+ * supporting any combination of Human pass-and-play seats and AI Bots for 2, 3, 4, 5, or 6 players.
  */
 export function buildSetupPlayerRoster(params: {
-  playerCount: 2 | 3 | 4;
+  playerCount: 2 | 3 | 4 | 5 | 6;
   seatTypes: Record<PlayerColor, PlayerType>;
   botDifficulties: Record<PlayerColor, AIDifficulty>;
   customNames: Record<PlayerColor, string>;
@@ -67,17 +69,25 @@ export function buildSetupPlayerRoster(params: {
 }
 
 /**
- * Returns the standard 2-player, 3-player, or 4-player color seating arrangement.
+ * Returns the standard 2-player, 3-player, 4-player, 5-player (Pentagon), or 6-player (Hexagon) color seating arrangement.
  * For 2 players, seats them across the board diagonally (Red vs Yellow) for balanced track distance.
  */
-export function getColorsForPlayerCount(count: 2 | 3 | 4): PlayerColor[] {
+export function getColorsForPlayerCount(
+  count: 2 | 3 | 4 | 5 | 6
+): PlayerColor[] {
   if (count === 2) {
     return ['red', 'yellow'];
   }
   if (count === 3) {
     return ['red', 'green', 'yellow'];
   }
-  return ['red', 'green', 'yellow', 'blue'];
+  if (count === 4) {
+    return ['red', 'green', 'yellow', 'blue'];
+  }
+  if (count === 5) {
+    return ['red', 'green', 'yellow', 'blue', 'purple'];
+  }
+  return ['red', 'green', 'yellow', 'blue', 'purple', 'orange'];
 }
 
 /**

@@ -1282,7 +1282,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         />
       ) : (
         /* Full-Viewport Game Shell (Zero-Scroll Portrait & Landscape Layout) */
-        <main className="relative h-[100dvh] w-full overflow-hidden flex flex-col landscape:flex-row lg:flex-row items-center justify-between landscape:justify-center lg:justify-center gap-2 sm:gap-3 lg:gap-6 px-2.5 py-2 sm:px-4 sm:py-3 lg:p-6 max-w-[1440px] mx-auto">
+        <main className="relative min-h-[100dvh] h-[100dvh] w-full overflow-y-auto landscape:overflow-hidden lg:overflow-hidden flex flex-col landscape:flex-row lg:flex-row items-center justify-start sm:justify-center gap-1.5 sm:gap-3 lg:gap-6 px-1.5 py-1.5 sm:px-4 sm:py-3 lg:p-6 max-w-[1600px] mx-auto">
           {/* Live Online Notification Toast Banner (Bot Replacement / Player Left) */}
           {inMatchBanner && (
             <div
@@ -1301,7 +1301,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
             </div>
           )}
 
-          <div className="flex-1 flex items-center justify-center w-full min-h-0 min-w-0">
+          <div className="flex-1 flex items-center justify-center w-full min-h-0 min-w-0 shrink-0 sm:shrink py-0.5">
             {(() => {
               const activePlayer =
                 gameState.players[gameState.activePlayerIndex];

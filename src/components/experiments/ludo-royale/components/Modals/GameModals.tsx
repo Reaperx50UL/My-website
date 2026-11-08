@@ -84,7 +84,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({
   onStartMatch,
   onClose,
 }) => {
-  const [playerCount, setPlayerCount] = useState<2 | 3 | 4>(4);
+  const [playerCount, setPlayerCount] = useState<2 | 3 | 4 | 5 | 6>(4);
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('medium');
   const [rules, setRules] = useState<HouseRules>(initialRules);
   const [seatTypes, setSeatTypes] = useState<Record<PlayerColor, PlayerType>>({
@@ -92,6 +92,8 @@ export const SetupModal: React.FC<SetupModalProps> = ({
     green: mode === 'ai' ? 'ai' : 'human',
     yellow: mode === 'ai' ? 'ai' : 'human',
     blue: mode === 'ai' ? 'ai' : 'human',
+    purple: mode === 'ai' ? 'ai' : 'human',
+    orange: mode === 'ai' ? 'ai' : 'human',
   });
   const [botDifficulties, setBotDifficulties] = useState<
     Record<PlayerColor, AIDifficulty>
@@ -100,12 +102,16 @@ export const SetupModal: React.FC<SetupModalProps> = ({
     green: 'medium',
     yellow: 'medium',
     blue: 'medium',
+    purple: 'medium',
+    orange: 'medium',
   });
   const [customNames, setCustomNames] = useState<Record<PlayerColor, string>>({
     red: profile.nickname || 'Player 1',
     green: mode === 'ai' ? 'Emerald Bot' : 'Player 2',
     yellow: mode === 'ai' ? 'Solar Bot' : 'Player 3',
     blue: mode === 'ai' ? 'Sapphire Bot' : 'Player 4',
+    purple: mode === 'ai' ? 'Amethyst Bot' : 'Player 5',
+    orange: mode === 'ai' ? 'Blaze Bot' : 'Player 6',
   });
 
   const activeColors = getColorsForPlayerCount(playerCount);
@@ -117,7 +123,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({
   const humanCount = activeColors.length - botCount;
   const canAddMoreBots =
     activeColors.some((c, idx) => idx > 0 && seatTypes[c] === 'human') ||
-    playerCount < 4;
+    playerCount < 6;
 
   const handleToggleSeatType = (color: PlayerColor, idx: number) => {
     if (idx === 0) return; // Host seat 0 remains human
@@ -164,9 +170,9 @@ export const SetupModal: React.FC<SetupModalProps> = ({
       return;
     }
 
-    // 2. Otherwise, if playerCount < 4, expand playerCount by 1 and set the new seat to AI Bot
-    if (playerCount < 4) {
-      const nextCount = (playerCount + 1) as 3 | 4;
+    // 2. Otherwise, if playerCount < 6, expand playerCount by 1 and set the new seat to AI Bot
+    if (playerCount < 6) {
+      const nextCount = (playerCount + 1) as 3 | 4 | 5 | 6;
       const nextColors = getColorsForPlayerCount(nextCount);
       const addedColor = nextColors.find((c) => !activeColors.includes(c));
       setPlayerCount(nextCount);
@@ -192,10 +198,14 @@ export const SetupModal: React.FC<SetupModalProps> = ({
       green: 'human',
       yellow: 'human',
       blue: 'human',
+      purple: 'human',
+      orange: 'human',
     });
     setCustomNames((prev) => {
       const updated = { ...prev };
-      (['green', 'yellow', 'blue'] as PlayerColor[]).forEach((color, i) => {
+      (
+        ['green', 'yellow', 'blue', 'purple', 'orange'] as PlayerColor[]
+      ).forEach((color, i) => {
         if (/Bot$/i.test(updated[color] || '')) {
           updated[color] = `Player ${i + 2}`;
         }
@@ -211,6 +221,8 @@ export const SetupModal: React.FC<SetupModalProps> = ({
       green: tier,
       yellow: tier,
       blue: tier,
+      purple: tier,
+      orange: tier,
     });
   };
 
@@ -229,26 +241,26 @@ export const SetupModal: React.FC<SetupModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby="setup-modal-title"
     >
       <form
         onSubmit={handleLaunch}
-        className="w-full max-w-2xl bg-[#111827] border border-slate-800 rounded-3xl p-6 md:p-7 shadow-2xl my-auto"
+        className="w-full max-w-2xl max-h-[94dvh] sm:max-h-[88dvh] bg-[#111827] border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden my-auto"
       >
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div className="flex items-center justify-between p-4 sm:p-6 pb-3 sm:pb-4 border-b border-slate-800 shrink-0">
           <div>
             <h2
               id="setup-modal-title"
-              className="font-display font-bold text-xl md:text-2xl text-white"
+              className="font-display font-bold text-lg sm:text-2xl text-white"
             >
               {mode === 'ai'
                 ? 'Configure AI Match'
                 : 'Configure Local Multiplayer'}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
               Customize player seating, mix Human &amp; AI Bots, and configure house rules.
             </p>
           </div>
@@ -256,33 +268,62 @@ export const SetupModal: React.FC<SetupModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close Setup Modal"
-            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="space-y-5 py-5 max-h-[70vh] overflow-y-auto pr-1">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 scrollbar-thin">
           {/* Player Count Selector */}
           <div>
-            <span className="block text-xs font-semibold text-slate-300 mb-2">
-              Number of Players
-            </span>
-            <div className="grid grid-cols-3 gap-2.5">
-              {([2, 3, 4] as const).map((cnt) => (
-                <button
-                  key={cnt}
-                  type="button"
-                  onClick={() => setPlayerCount(cnt)}
-                  className={`py-2.5 px-4 rounded-xl font-display font-bold text-sm border transition-all cursor-pointer ${
-                    playerCount === cnt
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
-                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                  }`}
-                >
-                  {cnt} Players
-                </button>
-              ))}
+            <div className="flex items-center justify-between mb-2">
+              <span className="block text-xs font-semibold text-slate-300">
+                Number of Players &amp; Custom Board Shape
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-semibold text-amber-400">
+                {playerCount === 5
+                  ? '⬠ Custom 5-Arm Pentagon Board (55-Cell Track)'
+                  : playerCount === 6
+                  ? '⬢ Custom 6-Arm Hexagon Board (54-Cell Track)'
+                  : '✚ Classic 4-Arm Cross Board (52-Cell Track)'}
+              </span>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+              {([2, 3, 4, 5, 6] as const).map((cnt) => {
+                const boardBadge =
+                  cnt === 5
+                    ? '5-Arm'
+                    : cnt === 6
+                    ? '6-Arm'
+                    : 'Cross';
+                return (
+                  <button
+                    key={cnt}
+                    type="button"
+                    data-testid={`setup-player-count-${cnt}`}
+                    onClick={() => setPlayerCount(cnt)}
+                    className={`py-1.5 sm:py-2 px-1 sm:px-2 rounded-xl font-display font-bold text-xs sm:text-sm border transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                      playerCount === cnt
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-[11px] sm:text-xs font-bold leading-tight">{cnt}P</span>
+                    <span
+                      className={`text-[8px] sm:text-[9px] font-semibold tracking-tight leading-tight ${
+                        playerCount === cnt
+                          ? 'text-slate-900 font-bold'
+                          : cnt >= 5
+                          ? 'text-amber-400/90'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {boardBadge}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -603,17 +644,17 @@ export const SetupModal: React.FC<SetupModalProps> = ({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-2.5 sm:gap-3 p-3.5 sm:p-4 border-t border-slate-800 bg-[#0c121d] shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
+            className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-sm shadow-lg cursor-pointer"
+            className="flex items-center gap-2 px-5 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-xs sm:text-sm shadow-lg cursor-pointer"
           >
             <Play className="w-4 h-4 fill-slate-950" />
             <span>Start Match</span>
@@ -634,6 +675,8 @@ interface OnlineModalProps {
   errorMessage: string | null;
   statusNotice?: { title: string; message: string } | null;
   onDismissNotice?: () => void;
+  connectionStatus?: 'connected' | 'connecting' | 'offline';
+  backendStatus?: BackendStatusInfo | null;
   matchmakingStatus: 'idle' | 'searching' | 'matched';
   selectedPlayerCount: MatchmakingPlayerCount;
   matchmakingFoundPlayers: number;
@@ -647,9 +690,8 @@ interface OnlineModalProps {
   onAddBot: () => void;
   onToggleReady: () => void;
   onStartOnlineMatch: () => void;
+  onUpdateRoomRules?: (rules: Partial<HouseRules>) => void;
   onClose: () => void;
-  connectionStatus?: 'connected' | 'connecting' | 'offline';
-  backendStatus?: BackendStatusInfo | null;
 }
 
 const MATCHMAKING_MODE_CARDS: {
@@ -696,6 +738,28 @@ const MATCHMAKING_MODE_CARDS: {
     borderActiveClass: 'border-2 border-amber-400 ring-2 ring-emerald-400/30',
     bgActiveClass: 'bg-gradient-to-br from-emerald-500/25 via-slate-900 to-slate-950',
   },
+  {
+    count: 5,
+    headerBadge: '5 PLAYER',
+    label: 'Pentagon',
+    description: 'Custom 5-arm Pentagon radial board battle.',
+    indicator: '5 Players',
+    ruleSummary: 'Custom 55-Tile Pentagon Arena · AI Bots replace departed seats while 2+ humans remain.',
+    accentHex: '#A855F7',
+    borderActiveClass: 'border-2 border-amber-400 ring-2 ring-purple-400/30',
+    bgActiveClass: 'bg-gradient-to-br from-purple-500/25 via-slate-900 to-slate-950',
+  },
+  {
+    count: 6,
+    headerBadge: '6 PLAYER',
+    label: 'Hexagon',
+    description: 'Custom 6-arm Hexagon radial board battle.',
+    indicator: '6 Players',
+    ruleSummary: 'Custom 54-Tile Hexagon Arena · AI Bots replace departed seats while 2+ humans remain.',
+    accentHex: '#F97316',
+    borderActiveClass: 'border-2 border-amber-400 ring-2 ring-orange-400/30',
+    bgActiveClass: 'bg-gradient-to-br from-orange-500/25 via-slate-900 to-slate-950',
+  },
 ];
 
 export const OnlineModal: React.FC<OnlineModalProps> = ({
@@ -705,6 +769,8 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
   errorMessage,
   statusNotice,
   onDismissNotice,
+  connectionStatus = 'connected',
+  backendStatus,
   matchmakingStatus,
   selectedPlayerCount,
   matchmakingFoundPlayers,
@@ -718,9 +784,8 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
   onAddBot,
   onToggleReady,
   onStartOnlineMatch,
+  onUpdateRoomRules,
   onClose,
-  connectionStatus = 'connected',
-  backendStatus,
 }) => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [copied, setCopied] = useState(false);
@@ -837,6 +902,33 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
           {backendStatus && !backendStatus.configured && mode === 'matchmaking' && (
             <div className="px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200/90 leading-relaxed">
               ℹ️ <strong>Multi-Device Notice:</strong> Server is currently operating in in-memory mode. For multiple devices across separate Vercel serverless instances to pair together, add <code className="text-amber-100 bg-amber-950/70 px-1 py-0.5 rounded border border-amber-500/30">UPSTASH_REDIS_REST_URL</code> and <code className="text-amber-100 bg-amber-950/70 px-1 py-0.5 rounded border border-amber-500/30">UPSTASH_REDIS_REST_TOKEN</code> to your Vercel Project Environment Variables.
+            </div>
+          )}
+
+          {/* Status / Termination Notice Banner */}
+          {statusNotice && (
+            <div
+              data-testid="online-status-notice"
+              className="flex items-start justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/50 text-amber-100 shadow-lg"
+            >
+              <div className="space-y-0.5">
+                <div className="font-display font-bold text-xs sm:text-sm text-amber-300">
+                  {statusNotice.title}
+                </div>
+                <p className="text-xs text-slate-200 leading-relaxed">
+                  {statusNotice.message}
+                </p>
+              </div>
+              {onDismissNotice && (
+                <button
+                  type="button"
+                  onClick={onDismissNotice}
+                  aria-label="Dismiss Notice"
+                  className="text-amber-300 hover:text-white p-1 rounded-lg hover:bg-amber-400/20 transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
           {/* Status / Termination Notice Banner */}
@@ -1028,6 +1120,45 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                                 />
                               </svg>
                             )}
+                            {card.count === 5 && (
+                              <svg
+                                viewBox="0 0 40 40"
+                                className="w-7 h-7"
+                                aria-hidden="true"
+                              >
+                                <polygon
+                                  points="20,4 35,15 29,33 11,33 5,15"
+                                  fill="rgba(168,85,247,0.2)"
+                                  stroke="#A855F7"
+                                  strokeWidth="2.2"
+                                />
+                                <circle cx="20" cy="6" r="2.6" fill="#EF4444" />
+                                <circle cx="34" cy="15" r="2.6" fill="#10B981" />
+                                <circle cx="29" cy="32" r="2.6" fill="#F59E0B" />
+                                <circle cx="11" cy="32" r="2.6" fill="#3B82F6" />
+                                <circle cx="6" cy="15" r="2.6" fill="#A855F7" />
+                              </svg>
+                            )}
+                            {card.count === 6 && (
+                              <svg
+                                viewBox="0 0 40 40"
+                                className="w-7 h-7"
+                                aria-hidden="true"
+                              >
+                                <polygon
+                                  points="20,4 34,12 34,28 20,36 6,28 6,12"
+                                  fill="rgba(249,115,22,0.2)"
+                                  stroke="#F97316"
+                                  strokeWidth="2.2"
+                                />
+                                <circle cx="20" cy="5" r="2.5" fill="#EF4444" />
+                                <circle cx="33" cy="12" r="2.5" fill="#10B981" />
+                                <circle cx="33" cy="28" r="2.5" fill="#F59E0B" />
+                                <circle cx="20" cy="35" r="2.5" fill="#3B82F6" />
+                                <circle cx="7" cy="28" r="2.5" fill="#A855F7" />
+                                <circle cx="7" cy="12" r="2.5" fill="#F97316" />
+                              </svg>
+                            )}
                           </div>
 
                           {/* Label & Description */}
@@ -1139,13 +1270,13 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   </div>
                 </div>
 
-                {/* Live Player Slots Grid (2, 3, or 4 slots) */}
+                {/* Live Player Slots Grid (2, 3, 4, 5, or 6 slots) */}
                 <div
                   className={`grid gap-2.5 ${
                     selectedPlayerCount === 2
                       ? 'grid-cols-2'
-                      : selectedPlayerCount === 3
-                      ? 'grid-cols-1 sm:grid-cols-3'
+                      : selectedPlayerCount === 3 || selectedPlayerCount >= 5
+                      ? 'grid-cols-2 sm:grid-cols-3'
                       : 'grid-cols-2 sm:grid-cols-4'
                   }`}
                 >
@@ -1322,7 +1453,14 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
               {/* Connected Room Players */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>Players in Lobby ({room.players.length}/4)</span>
+                  <span>
+                    Players in Lobby ({room.players.length}/6) ·{' '}
+                    {room.players.length === 5
+                      ? 'Pentagon 5P Board'
+                      : room.players.length === 6
+                      ? 'Hexagon 6P Board'
+                      : 'Classic Cross Board'}
+                  </span>
                   {assignedColor && (
                     <span>
                       Your Color:{' '}
@@ -1387,7 +1525,7 @@ export const OnlineModal: React.FC<OnlineModalProps> = ({
                   >
                     Toggle Ready
                   </button>
-                  {room.players.length < 4 && (
+                  {room.players.length < 6 && (
                     <button
                       type="button"
                       onClick={onAddBot}
@@ -1500,16 +1638,6 @@ export const PauseModal: React.FC<PauseModalProps> = ({
               className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-rose-950/70 border border-slate-800 text-slate-300 hover:text-rose-200 font-display font-semibold text-sm cursor-pointer"
             >
               Save &amp; Return to Title
-            </button>
-          )}
-
-          {onExitWebLab && (
-            <button
-              type="button"
-              onClick={onExitWebLab}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white font-display font-medium text-xs cursor-pointer transition-colors"
-            >
-              Exit to Web Lab
             </button>
           )}
         </div>
@@ -1739,16 +1867,6 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
             Play Again
           </button>
         </div>
-
-        {onExitWebLab && (
-          <button
-            type="button"
-            onClick={onExitWebLab}
-            className="w-full py-2 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white font-display font-medium text-xs cursor-pointer transition-colors"
-          >
-            Exit to Web Lab
-          </button>
-        )}
       </div>
     </div>
   );
@@ -2085,16 +2203,16 @@ export const SettingsModal: React.FC<{
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-modal-title"
     >
       <form
         onSubmit={handleSave}
-        className="w-full max-w-xl bg-[#111827] border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 my-auto"
+        className="w-full max-w-xl max-h-[94dvh] sm:max-h-[88dvh] bg-[#111827] border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden my-auto"
       >
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between p-4 sm:p-5 pb-3 sm:pb-4 border-b border-slate-800 shrink-0">
           <div>
             <h2
               id="settings-modal-title"
@@ -2110,13 +2228,13 @@ export const SettingsModal: React.FC<{
             type="button"
             onClick={onClose}
             aria-label="Close Settings Modal"
-            className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer shrink-0"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="space-y-4 max-h-[68vh] overflow-y-auto pr-1 text-xs">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs scrollbar-thin">
           {/* Player Progression & Level Banner */}
           <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/30 border border-slate-800">
             <div className="flex items-center justify-between gap-2 mb-2">
@@ -2741,7 +2859,7 @@ export const SettingsModal: React.FC<{
           </div>
         </div>
 
-        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-800">
+        <div className="flex justify-end gap-2.5 p-3.5 sm:p-4 border-t border-slate-800 bg-[#0c121d] shrink-0">
           <button
             type="submit"
             className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-display font-bold text-xs cursor-pointer shadow-md"

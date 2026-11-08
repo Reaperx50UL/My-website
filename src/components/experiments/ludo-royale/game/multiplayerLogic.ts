@@ -1,6 +1,10 @@
-import { COLOR_META, DEFAULT_HOUSE_RULES, PLAYER_COLORS } from './constants';
-import { createInitialGameState } from './gameEngine';
 import {
+  ALL_PLAYER_COLORS,
+  COLOR_META,
+  DEFAULT_HOUSE_RULES,
+} from './constants';
+import { createInitialGameState } from './gameEngine';
+import type {
   GameEventLog,
   GameState,
   HouseRules,
@@ -28,7 +32,6 @@ export interface RoomPlayerRecord {
   isHost: boolean;
   isAI: boolean;
   connected: boolean;
-  lastSeen?: number;
   replacedByBot?: boolean;
   originalHumanName?: string;
 }
@@ -44,9 +47,6 @@ export interface AuthoritativeRoom {
   rules: HouseRules;
   gameState: GameState | null;
   terminatedReason?: string;
-  terminatedTitle?: string;
-  terminatedMessage?: string;
-  returnTo?: 'matchmaking' | 'friends' | 'title';
 }
 
 export type DepartureResolution =
@@ -181,7 +181,7 @@ export function createPrivateLobbyRoom(params: {
   return {
     roomCode: params.roomCode,
     roomType: 'friends',
-    targetPlayers: 4,
+    targetPlayers: 6,
     hostId: params.hostId,
     status: 'lobby',
     lifecycle: 'waiting_for_players',
@@ -192,7 +192,7 @@ export function createPrivateLobbyRoom(params: {
 }
 
 /**
- * Creates an active online match room for 2, 3, or 4 matched human players.
+ * Creates an active online match room for 2, 3, 4, 5, or 6 matched human players.
  */
 export function createMatchedOnlineRoom(params: {
   roomCode: string;
@@ -208,7 +208,7 @@ export function createMatchedOnlineRoom(params: {
     id: entry.id,
     name: String(entry.name || `Player ${idx + 1}`).slice(0, 20),
     avatar: String(entry.avatar || 'crown'),
-    color: seatColors[idx] || PLAYER_COLORS[idx],
+    color: seatColors[idx] || ALL_PLAYER_COLORS[idx],
     ready: true,
     isHost: idx === 0,
     isAI: false,
@@ -287,9 +287,6 @@ export function resolvePlayerDeparture(
         lifecycle: 'room_closed',
         players: room.players.filter((p) => p.id !== departingPlayerId),
         terminatedReason: 'host_left_private_room',
-        terminatedTitle: 'Room Closed',
-        terminatedMessage: `The host (${departingPlayer.name}) has left the room and the lobby has closed.`,
-        returnTo: 'friends',
       };
       return {
         action: 'terminate_match',
@@ -329,9 +326,6 @@ export function resolvePlayerDeparture(
         lifecycle: 'room_closed',
         players: room.players.filter((p) => p.id !== departingPlayerId),
         terminatedReason: 'host_left_private_room',
-        terminatedTitle: 'Room Ended by Host',
-        terminatedMessage: `The host (${departingPlayer.name}) has left the match and the room has ended.`,
-        returnTo: 'friends',
       };
       return {
         action: 'terminate_match',
@@ -358,9 +352,6 @@ export function resolvePlayerDeparture(
         lifecycle: 'room_closed',
         players: remainingRoomPlayers,
         terminatedReason: 'not_enough_players_private',
-        terminatedTitle: 'Match Ended',
-        terminatedMessage: `${departingPlayer.name} has left the match. Returning to room menu.`,
-        returnTo: 'friends',
       };
       return {
         action: 'terminate_match',
@@ -441,10 +432,6 @@ export function resolvePlayerDeparture(
       status: 'terminated',
       lifecycle: 'match_terminated',
       terminatedReason: 'opponent_left_2p',
-      terminatedTitle: 'Opponent Left Match',
-      terminatedMessage:
-        'Your opponent has left the match. Returning to matchmaking.',
-      returnTo: 'matchmaking',
     };
 
     return {
@@ -516,10 +503,6 @@ export function resolvePlayerDeparture(
       status: 'terminated',
       lifecycle: 'match_terminated',
       terminatedReason: 'last_human_remaining',
-      terminatedTitle: 'Match Terminated',
-      terminatedMessage:
-        'The match ended because only one human player remained after opponents left.',
-      returnTo: 'matchmaking',
     };
 
     return {

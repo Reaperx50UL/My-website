@@ -1,5 +1,5 @@
 import { AVATAR_OPTIONS } from './constants';
-import {
+import type {
   AvatarOption,
   PlayerStats,
   UserProfile,

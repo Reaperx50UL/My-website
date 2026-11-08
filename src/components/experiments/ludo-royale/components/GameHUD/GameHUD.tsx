@@ -14,8 +14,9 @@ import { getThemeTileSpec } from '../../game/boardLayout';
 import {
   AVATAR_OPTIONS,
   COLOR_META,
-  FINISH_STEP,
   getBoardThemeOption,
+  getFinishStep,
+  getHomePathStartStep,
 } from '../../game/constants';
 import { AppSettings, GameState, PlayerColor } from '../../game/gameTypes';
 import {
@@ -78,7 +79,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     !isRolling &&
     !isAnimatingMove;
 
-  // Manual Pair Formation ON/OFF Switch: available whenever two unpaired same-color tokens share any board square (0..55, outside Home Yard -1),
+  const playerCount = gameState.players.length;
+  const finishStep = getFinishStep(playerCount);
+  const homePathStartStep = getHomePathStartStep(playerCount);
+
+  // Manual Pair Formation ON/OFF Switch: available whenever two unpaired same-color tokens share any board square (0..finishStep-1, outside Home Yard -1),
   // regardless of dice roll (1..6 or before rolling), supporting all 2-token combinations when >2 same-color tokens share a square.
   const pairableGroups = (() => {
     if (
@@ -102,8 +107,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       const locLabel =
         opt.steps === 0
           ? 'Start Point'
-          : opt.steps >= 51
-          ? `Home Stretch ${opt.steps - 50}`
+          : opt.steps >= homePathStartStep
+          ? `Home Stretch ${opt.steps - homePathStartStep + 1}`
           : `Step ${opt.steps}`;
       return {
         steps: opt.steps,
@@ -116,7 +121,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
   const canFormYardPair = pairableGroups.length > 0;
 
-  // Voluntary Pair Breaking: allowed at ANY board location (0..55) during the player's turn
+  // Voluntary Pair Breaking: allowed at ANY board location (0..finishStep-1) during the player's turn
   const breakablePairs =
     isLocalPlayersTurn &&
     !isRolling &&
@@ -126,7 +131,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       ? (gameState.pairs || []).filter(
           (p) =>
             p.color === activePlayer.color &&
-            canBreakPairAtPosition(p, gameState.rules)
+            canBreakPairAtPosition(p, gameState.rules, undefined, playerCount)
         )
       : [];
 
@@ -139,14 +144,27 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <aside
       aria-label="Game Controls and Player Status"
-      className="relative flex flex-col justify-between gap-2 sm:gap-2.5 lg:gap-3 w-full landscape:w-[330px] md:landscape:w-[360px] lg:w-[385px] lg:landscape:w-[385px] xl:w-[405px] xl:landscape:w-[405px] shrink-0 bg-[#111827] border border-slate-800/90 rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 lg:p-4 shadow-2xl"
+      className="relative flex flex-col justify-between gap-1.5 sm:gap-2.5 lg:gap-3 w-full landscape:w-[330px] md:landscape:w-[360px] lg:w-[385px] lg:landscape:w-[385px] xl:w-[405px] xl:landscape:w-[405px] shrink-0 bg-[#111827] border border-slate-800/90 rounded-2xl sm:rounded-3xl p-2 sm:p-3.5 lg:p-4 shadow-2xl"
     >
       {/* Top Bar: Turn Counter & Quick Utility Controls */}
-      <div className="flex items-center justify-between gap-1.5 pb-1.5 sm:pb-2 border-b border-slate-800">
+      <div className="flex items-center justify-between gap-1.5 pb-1 sm:pb-2 border-b border-slate-800">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           <span className="text-xs font-mono-tabular font-semibold text-slate-200 whitespace-nowrap shrink-0">
             Turn {Math.round(gameState.turnNumber)}
           </span>
+          {gameState.players.length >= 5 && (
+            <span
+              data-testid="hud-board-shape-badge"
+              title={
+                gameState.players.length === 5
+                  ? 'Custom 5-Arm Pentagon Board'
+                  : 'Custom 6-Arm Hexagon Board'
+              }
+              className="text-[10px] font-mono-tabular font-bold text-purple-200 bg-purple-500/20 border border-purple-400/40 px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0"
+            >
+              {gameState.players.length === 5 ? '⬠ 5P' : '⬢ 6P'}
+            </span>
+          )}
           {gameState.consecutiveSixes > 0 && (
             <span
               data-testid="hud-consecutive-sixes-badge"
@@ -184,11 +202,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               aria-label={`Switch Board & Token Theme (Current: ${activeBoardTheme.label})`}
               title={`Board: ${activeBoardTheme.label} · Token: ${activeBoardTheme.tokenStyleLabel} (Click to switch)`}
               className={`${
-                isOnline ? 'w-7 h-7 justify-center' : 'h-8 px-2'
+                isOnline || gameState.players.length >= 5
+                  ? 'w-7 h-7 justify-center'
+                  : 'h-7 sm:h-8 px-1.5 sm:px-2'
               } rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/80 text-amber-300 flex items-center gap-1 text-[10px] font-semibold transition-colors cursor-pointer`}
             >
               <Palette className="w-3.5 h-3.5 shrink-0" />
-              {!isOnline && (
+              {!isOnline && gameState.players.length < 5 && (
                 <span className="hidden xl:inline max-w-[78px] truncate">
                   {activeBoardTheme.label}
                 </span>
@@ -204,9 +224,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label={settings.soundEnabled ? 'Mute Audio [M]' : 'Unmute Audio [M]'}
             title={settings.soundEnabled ? 'Mute Audio [M]' : 'Unmute Audio [M]'}
-            className={`${
-              isOnline ? 'w-7 h-7' : 'w-8 h-8'
-            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
           >
             {settings.soundEnabled ? (
               <Volume2 className="w-3.5 h-3.5" />
@@ -224,9 +242,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label="Toggle Match Chronicle Log"
             title="Match Chronicle Log"
-            className={`lg:hidden ${
-              isOnline ? 'w-7 h-7' : 'w-8 h-8'
-            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
+            className="lg:hidden w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
           >
             <ScrollText className="w-3.5 h-3.5" />
           </button>
@@ -240,9 +256,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label="Game Rules [H]"
             title="Game Rules [H]"
-            className={`${
-              isOnline ? 'w-7 h-7' : 'w-8 h-8'
-            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
           >
             <HelpCircle className="w-3.5 h-3.5" />
           </button>
@@ -257,7 +271,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               }}
               aria-label="Restart Match [R]"
               title="Restart Match [R]"
-              className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
@@ -272,9 +286,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             }}
             aria-label="Pause Game [P]"
             title="Pause Game [P]"
-            className={`${
-              isOnline ? 'w-7 h-7' : 'w-8 h-8'
-            } rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer`}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
           >
             <Pause className="w-3.5 h-3.5" />
           </button>
@@ -290,10 +302,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               }}
               aria-label="Leave Room"
               title="Leave Online Room"
-              className="h-7 px-2.5 rounded-lg bg-rose-950/85 hover:bg-rose-900 border border-rose-500/50 text-rose-200 flex items-center gap-1 text-[11px] font-display font-bold transition-colors cursor-pointer shrink-0 shadow-sm"
+              className="h-7 px-2 rounded-lg bg-rose-950/85 hover:bg-rose-900 border border-rose-500/50 text-rose-200 flex items-center gap-1 text-[10px] sm:text-[11px] font-display font-bold transition-colors cursor-pointer shrink-0 shadow-sm"
             >
               <LogOut className="w-3 h-3 shrink-0" />
-              <span>Leave Room</span>
+              <span>Leave</span>
             </button>
           ) : (
             <button
@@ -305,7 +317,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               }}
               aria-label="Exit Match"
               title="Exit Match"
-              className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
@@ -314,19 +326,25 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       </div>
 
       {/* Player Roster Cards:
-          - 4 columns in a single compact row on Tablet Portrait (sm:grid-cols-4)
-          - 2x2 grid on Mobile Portrait (grid-cols-2), Mobile Landscape (landscape:grid-cols-2), and Desktop (lg:grid-cols-2) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 landscape:grid-cols-2 lg:grid-cols-2 gap-1.5 sm:gap-2">
+          - Adaptive layout for 2-4 players vs 5-6 players (3 cols on mobile for 5P/6P to save vertical height) */}
+      <div
+        className={
+          gameState.players.length > 4
+            ? 'grid grid-cols-3 sm:grid-cols-3 landscape:grid-cols-2 lg:grid-cols-2 lg:landscape:grid-cols-2 gap-1 sm:gap-1.5'
+            : 'grid grid-cols-2 sm:grid-cols-4 landscape:grid-cols-2 lg:grid-cols-2 gap-1 sm:gap-2'
+        }
+      >
         {gameState.players.map((player, idx) => {
           const isTurn = idx === gameState.activePlayerIndex;
           const meta = COLOR_META[player.color];
           const inYard = player.tokens.filter((t) => t.steps === -1).length;
           const onBoard = player.tokens.filter(
-            (t) => t.steps >= 0 && t.steps < FINISH_STEP
+            (t) => t.steps >= 0 && t.steps < finishStep
           ).length;
           const inHome = player.tokens.filter(
-            (t) => t.steps === FINISH_STEP
+            (t) => t.steps === finishStep
           ).length;
+          const isManyPlayers = gameState.players.length > 4;
 
           const rawTitle =
             getThemeTileSpec(settings.boardTheme).territoryTitles[
@@ -340,9 +358,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div
               key={player.color}
               data-testid={`hud-player-card-${player.color}`}
-              className={`flex flex-col justify-between p-1.5 sm:p-2 lg:p-2.5 rounded-xl border transition-all ${
+              className={`flex flex-col justify-between ${
+                isManyPlayers
+                  ? 'p-1 sm:p-1.5 lg:p-2'
+                  : 'p-1.5 sm:p-2 lg:p-2.5'
+              } rounded-lg sm:rounded-xl border transition-all ${
                 isTurn
-                  ? 'bg-slate-800/95 border-slate-500 shadow-lg'
+                  ? 'bg-slate-800/95 border-slate-500 shadow-md sm:shadow-lg'
                   : 'bg-slate-900/75 border-slate-800/90 opacity-88'
               }`}
               style={
@@ -351,7 +373,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                       borderColor: meta.primaryHex,
                       background:
                         'linear-gradient(145deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%)',
-                      boxShadow: `0 6px 20px -6px ${meta.glowHex}, inset 0 1px 1px rgba(255,255,255,0.14)`,
+                      boxShadow: `0 4px 16px -4px ${meta.glowHex}, inset 0 1px 1px rgba(255,255,255,0.14)`,
                     }
                   : {
                       background:
@@ -359,10 +381,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     }
               }
             >
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center justify-between gap-0.5 sm:gap-1 mb-0.5 min-w-0">
+                <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
                   <span
-                    className="w-5 h-5 lg:w-6 lg:h-6 rounded-md flex items-center justify-center text-[11px] lg:text-xs shrink-0 shadow-inner"
+                    className={`${
+                      isManyPlayers
+                        ? 'w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5 text-[9px] sm:text-[10px]'
+                        : 'w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-[10px] sm:text-[11px] lg:text-xs'
+                    } rounded flex items-center justify-center shrink-0 shadow-inner`}
                     style={{
                       backgroundColor: meta.darkHex,
                       border: `1px solid ${meta.lightHex}`,
@@ -371,15 +397,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     {getAvatarEmoji(player.avatar)}
                   </span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span className="block text-[11px] lg:text-xs font-bold text-slate-100 truncate">
+                    <div className="flex items-center gap-0.5 sm:gap-1 min-w-0">
+                      <span className="block text-[9px] sm:text-[11px] lg:text-xs font-bold text-slate-100 truncate">
                         {player.name}
                       </span>
                       {player.replacedByBot ? (
                         <span
                           data-testid={`bot-badge-${player.color}`}
                           title={`${player.originalHumanName || player.name} left — AI Bot is now controlling this seat`}
-                          className="px-1.5 py-0.2 rounded bg-amber-500/25 border border-amber-400/60 text-[8px] font-extrabold uppercase tracking-wider text-amber-200 shrink-0"
+                          className="px-1 py-0.2 rounded bg-amber-500/25 border border-amber-400/60 text-[7px] sm:text-[8px] font-extrabold uppercase tracking-wider text-amber-200 shrink-0"
                         >
                           BOT
                         </span>
@@ -387,21 +413,23 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                         player.type === 'ai' && (
                           <span
                             data-testid={`bot-badge-${player.color}`}
-                            className="px-1 py-0.2 rounded bg-indigo-500/25 border border-indigo-400/40 text-[8px] font-bold uppercase tracking-wider text-indigo-200 shrink-0"
+                            className="px-0.5 sm:px-1 py-0.2 rounded bg-indigo-500/25 border border-indigo-400/40 text-[7px] sm:text-[8px] font-bold uppercase tracking-wider text-indigo-200 shrink-0"
                           >
                             AI
                           </span>
                         )
                       )}
                     </div>
-                    <span className="hidden lg:block text-[10px] text-slate-400 truncate">
-                      {meta.symbol} {territoryLabel}
-                      {player.replacedByBot
-                        ? ' · AI Bot Takeover'
-                        : player.type === 'ai'
-                        ? ` · ${player.aiDifficulty || 'medium'}`
-                        : ''}
-                    </span>
+                    {!isManyPlayers && (
+                      <span className="hidden lg:block text-[10px] text-slate-400 truncate">
+                        {meta.symbol} {territoryLabel}
+                        {player.replacedByBot
+                          ? ' · AI Bot Takeover'
+                          : player.type === 'ai'
+                          ? ` · ${player.aiDifficulty || 'medium'}`
+                          : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -420,7 +448,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                         ? '🥉 3rd'
                         : `${rank}th`;
                     return (
-                      <span className="text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 shrink-0">
+                      <span className="text-[8px] sm:text-[9px] lg:text-[10px] font-bold px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 shrink-0">
                         {rankText}
                       </span>
                     );
@@ -428,7 +456,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   if (isTurn) {
                     return (
                       <span
-                        className="text-[9px] lg:text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-slate-950 shrink-0"
+                        className="text-[8px] sm:text-[9px] lg:text-[10px] font-bold uppercase tracking-wider px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded text-slate-950 shrink-0"
                         style={{ backgroundColor: meta.primaryHex }}
                       >
                         Turn
@@ -439,18 +467,22 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 })()}
               </div>
 
-              {/* Token Pips & Tabular Readout */}
-              <div className="flex items-center justify-between text-[9px] lg:text-[10px] tracking-tight text-slate-400 pt-1 border-t border-slate-800/80 font-mono-tabular">
-                <span className="whitespace-nowrap">Yard:{inYard}</span>
+              {/* Token Pips & Tabular Readout (Compact abbreviations for many players) */}
+              <div className="flex items-center justify-between text-[8px] sm:text-[9px] lg:text-[10px] tracking-tight text-slate-400 pt-0.5 border-t border-slate-800/80 font-mono-tabular">
+                <span className="whitespace-nowrap">
+                  {isManyPlayers ? `Y:${inYard}` : `Yard:${inYard}`}
+                </span>
                 <span aria-hidden="true" className="text-slate-600">
                   ·
                 </span>
-                <span className="whitespace-nowrap">Track:{onBoard}</span>
+                <span className="whitespace-nowrap">
+                  {isManyPlayers ? `T:${onBoard}` : `Track:${onBoard}`}
+                </span>
                 <span aria-hidden="true" className="text-slate-600">
                   ·
                 </span>
                 <span className="font-bold text-slate-200 whitespace-nowrap">
-                  Home:{inHome}/4
+                  {isManyPlayers ? `H:${inHome}/4` : `Home:${inHome}/4`}
                 </span>
               </div>
             </div>
@@ -531,8 +563,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     const locLabel =
                       pair.steps === 0
                         ? 'Start Point'
-                        : pair.steps >= 51
-                        ? `Home Stretch ${pair.steps - 50}`
+                        : pair.steps >= homePathStartStep
+                        ? `Home Stretch ${pair.steps - homePathStartStep + 1}`
                         : `Step ${pair.steps}`;
                     return (
                       <button

@@ -13,30 +13,110 @@ import type {
 
 export const PLAYER_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
 
+export const ALL_PLAYER_COLORS: PlayerColor[] = [
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'purple',
+  'orange',
+];
+
 export const TOTAL_TRACK_CELLS = 52;
-export const MAX_TRACK_STEPS = 50; // 0..50 are on the shared perimeter track (51 squares)
-export const HOME_PATH_START_STEP = 51; // 51..55 are the 5 colored home column squares
-export const FINISH_STEP = 56; // 56 is the final home triangle
+export const TOTAL_TRACK_CELLS_5P = 65; // 5 arms × 13 physical perimeter cells per arm
+export const TOTAL_TRACK_CELLS_6P = 78; // 6 arms × 13 physical perimeter cells per arm
+
+export const MAX_TRACK_STEPS = 50; // 0..50 are on the shared 4P perimeter track (51 squares)
+export const HOME_PATH_START_STEP = 51; // 51..55 are the 5 colored home column squares (4P)
+export const FINISH_STEP = 56; // 56 is the final home triangle / polygon (4P)
 
 /**
- * Starting track index (0..51) for each color on the 52-cell perimeter track.
+ * Returns the maximum step index on the shared perimeter track before entering the home stretch:
+ * - <=4 players (52 cells): 50 (steps 0..50 = 51 perimeter squares)
+ * - 5 players (65 cells): 63 (steps 0..63 = 64 perimeter squares)
+ * - 6 players (78 cells): 76 (steps 0..76 = 77 perimeter squares)
+ */
+export function getMaxTrackSteps(playerCount: number = 4): number {
+  if (playerCount === 5) return 63;
+  if (playerCount === 6) return 76;
+  return MAX_TRACK_STEPS;
+}
+
+/**
+ * Returns the first step index of the 5-cell colored Home Stretch for the active board layout:
+ * - <=4 players: 51 (steps 51..55)
+ * - 5 players: 64 (steps 64..68)
+ * - 6 players: 77 (steps 77..81)
+ */
+export function getHomePathStartStep(playerCount: number = 4): number {
+  if (playerCount === 5) return 64;
+  if (playerCount === 6) return 77;
+  return HOME_PATH_START_STEP;
+}
+
+/**
+ * Returns the final Finish step index for the active board layout:
+ * - <=4 players: 56
+ * - 5 players: 69
+ * - 6 players: 82
+ */
+export function getFinishStep(playerCount: number = 4): number {
+  if (playerCount === 5) return 69;
+  if (playerCount === 6) return 82;
+  return FINISH_STEP;
+}
+
+/**
+ * Starting track index (0..51) for each color on the 52-cell 4-player perimeter track.
  */
 export const START_TRACK_INDEX: Record<PlayerColor, number> = {
   red: 0,
   green: 13,
   yellow: 26,
   blue: 39,
+  purple: 0,
+  orange: 13,
 };
 
 /**
- * The 4 colored starting squares on the main track (always safe).
+ * Starting track index (0..64) for each color on the 65-cell 5-player Pentagon perimeter track (5 arms × 13 physical cells).
+ * On each arm k, local index 8 (col = +1, row = 4) is the Colored Start Square.
  */
-export const START_SAFE_INDICES: number[] = [0, 13, 26, 39];
+export const START_TRACK_INDEX_5P: Record<PlayerColor, number> = {
+  red: 8,
+  green: 21,
+  yellow: 34,
+  blue: 47,
+  purple: 60,
+  orange: 8,
+};
 
 /**
- * The 4 star squares (8 steps ahead of each color's start square).
+ * Starting track index (0..77) for each color on the 78-cell 6-player Hexagon perimeter track (6 arms × 13 physical cells).
+ * On each arm k, local index 8 (col = +1, row = 4) is the Colored Start Square.
+ */
+export const START_TRACK_INDEX_6P: Record<PlayerColor, number> = {
+  red: 8,
+  green: 21,
+  yellow: 34,
+  blue: 47,
+  purple: 60,
+  orange: 73,
+};
+
+/**
+ * The colored starting squares on the main track (always safe) for 4P, 5P, and 6P boards.
+ */
+export const START_SAFE_INDICES: number[] = [0, 13, 26, 39];
+export const START_SAFE_INDICES_5P: number[] = [8, 21, 34, 47, 60];
+export const START_SAFE_INDICES_6P: number[] = [8, 21, 34, 47, 60, 73];
+
+/**
+ * The star safe squares on each arm (local index 3: col = -1, row = 3) for 4P, 5P, and 6P boards.
  */
 export const STAR_SAFE_INDICES: number[] = [8, 21, 34, 47];
+export const STAR_SAFE_INDICES_5P: number[] = [3, 16, 29, 42, 55];
+export const STAR_SAFE_INDICES_6P: number[] = [3, 16, 29, 42, 55, 68];
 
 export const COLOR_META: Record<
   PlayerColor,
@@ -100,6 +180,30 @@ export const COLOR_META: Record<
     bgClass: 'bg-blue-500',
     textClass: 'text-blue-400',
     borderClass: 'border-blue-500/40',
+  },
+  purple: {
+    label: 'Amethyst Purple',
+    symbol: '⬢',
+    primaryHex: '#A855F7',
+    secondaryHex: '#9333EA',
+    lightHex: '#D8B4FE',
+    darkHex: '#581C87',
+    glowHex: 'rgba(168, 85, 247, 0.45)',
+    bgClass: 'bg-purple-500',
+    textClass: 'text-purple-400',
+    borderClass: 'border-purple-500/40',
+  },
+  orange: {
+    label: 'Blaze Orange',
+    symbol: '✦',
+    primaryHex: '#F97316',
+    secondaryHex: '#EA580C',
+    lightHex: '#FDBA74',
+    darkHex: '#9A3412',
+    glowHex: 'rgba(249, 115, 22, 0.45)',
+    bgClass: 'bg-orange-500',
+    textClass: 'text-orange-400',
+    borderClass: 'border-orange-500/40',
   },
 };
 

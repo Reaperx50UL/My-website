@@ -1,4 +1,4 @@
-import { COLOR_META } from './constants';
+import { COLOR_META, getFinishStep } from './constants';
 import type {
   BlockadePassingEntitlement,
   GameEventLog,
@@ -408,7 +408,14 @@ export function breakTokenPair(
     return state;
   }
 
-  if (!canBreakPairAtPosition(targetPair, state.rules)) {
+  if (
+    !canBreakPairAtPosition(
+      targetPair,
+      state.rules,
+      undefined,
+      state.players.length
+    )
+  ) {
     return state;
   }
 
@@ -515,6 +522,7 @@ export function formTokenPair(
     return state;
   }
 
+  const finishStep = getFinishStep(state.players.length);
   let tokenA: Token | undefined;
   if (tokenAId) {
     tokenA = activeOwner.tokens.find((t) => t.id === tokenAId);
@@ -525,7 +533,7 @@ export function formTokenPair(
     for (const candidate of sortedCandidates) {
       if (
         candidate.steps < 0 ||
-        candidate.steps >= 56 ||
+        candidate.steps >= finishStep ||
         candidate.pairId
       ) {
         continue;
@@ -543,12 +551,12 @@ export function formTokenPair(
     }
   }
 
-  // Pairing is only available from Starting Point (0) up to Home Stretch (55), never in Home Yard (-1)
+  // Pairing is only available from Starting Point (0) up to Home Stretch, never in Home Yard (-1)
   if (
     !tokenA ||
     tokenA.pairId ||
     tokenA.steps < 0 ||
-    tokenA.steps >= 56
+    tokenA.steps >= finishStep
   ) {
     return state;
   }
@@ -567,7 +575,7 @@ export function formTokenPair(
     tokenB.id === tokenA.id ||
     tokenB.pairId ||
     tokenB.steps < 0 ||
-    tokenB.steps >= 56
+    tokenB.steps >= finishStep
   ) {
     return state;
   }

@@ -1,5 +1,5 @@
 import { getGlobalTrackIndex } from './boardLayout';
-import { FINISH_STEP, MAX_TRACK_STEPS } from './constants';
+import { getFinishStep, getMaxTrackSteps } from './constants';
 import type {
   BlockadePassingEntitlement,
   HouseRules,
@@ -45,6 +45,9 @@ export function applyMoveToPlayers(
   brokenPairTokenIdsThisRoll: string[] = [],
   turnNumber: number = 1
 ): MoveExecutionResult {
+  const playerCount = players.length;
+  const finishStep = getFinishStep(playerCount);
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
   const activeColor = players[activePlayerIndex].color;
   const capturedSet = new Set(move.capturesTokenIds);
   const movingTokenIds = new Set<string>(
@@ -65,7 +68,7 @@ export function applyMoveToPlayers(
             }
           : t
       );
-      const allHome = updatedTokens.every((t) => t.steps === FINISH_STEP);
+      const allHome = updatedTokens.every((t) => t.steps === finishStep);
       return {
         ...player,
         tokens: updatedTokens,
@@ -130,14 +133,15 @@ export function applyMoveToPlayers(
     if (!currentPair) return false;
     const currentPairTrackIdx = getGlobalTrackIndex(
       currentPair.color,
-      currentPair.steps
+      currentPair.steps,
+      playerCount
     );
     if (currentPairTrackIdx !== ent.trackIndex) return false;
 
     // Also ensure the entitled token is still an unpaired single token
     const owner = reconciled.players.find((pl) => pl.color === ent.color);
     const tok = owner?.tokens.find((t) => t.id === ent.tokenId);
-    if (!tok || tok.pairId || tok.steps < 0 || tok.steps > MAX_TRACK_STEPS) {
+    if (!tok || tok.pairId || tok.steps < 0 || tok.steps > maxTrackSteps) {
       return false;
     }
 
@@ -149,7 +153,7 @@ export function applyMoveToPlayers(
   if (
     !move.isPairMove &&
     move.toSteps >= 0 &&
-    move.toSteps <= MAX_TRACK_STEPS
+    move.toSteps <= maxTrackSteps
   ) {
     const movedOwner = reconciled.players[activePlayerIndex];
     const movedTokenAfter = movedOwner.tokens.find(
@@ -157,12 +161,17 @@ export function applyMoveToPlayers(
     );
     // Only grant single-token passing entitlement if the moved token remains a single token
     if (movedTokenAfter && !movedTokenAfter.pairId) {
-      const targetTrackIdx = getGlobalTrackIndex(activeColor, move.toSteps);
+      const targetTrackIdx = getGlobalTrackIndex(
+        activeColor,
+        move.toSteps,
+        playerCount
+      );
       if (targetTrackIdx !== null) {
         const oppPairsAtDest = getOpposingPairsAtTrackIndex(
           activeColor,
           targetTrackIdx,
-          reconciled.pairs
+          reconciled.pairs,
+          playerCount
         );
         for (const oppPair of oppPairsAtDest) {
           const alreadyExists = nextEntitlements.some(

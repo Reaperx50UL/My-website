@@ -1,5 +1,9 @@
-import { getGlobalTrackIndex, isSafeTrackIndex } from './boardLayout';
-import { FINISH_STEP, MAX_TRACK_STEPS, TOTAL_TRACK_CELLS } from './constants';
+import {
+  getGlobalTrackIndex,
+  getTotalTrackCellsForPlayerCount,
+  isSafeTrackIndex,
+} from './boardLayout';
+import { getFinishStep, getMaxTrackSteps } from './constants';
 import { breakTokenPair, formTokenPair } from './gameEngine';
 import type {
   AIDifficulty,
@@ -386,18 +390,27 @@ export function evaluateHardMoveScore(
     score += 48;
   }
 
+  const playerCount = players.length;
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
+  const finishStep = getFinishStep(playerCount);
+
   // 6. Single token landing on an opposing pair to gain a next-roll passing entitlement
   if (
     !move.isPairMove &&
     move.toSteps >= 0 &&
-    move.toSteps <= MAX_TRACK_STEPS
+    move.toSteps <= maxTrackSteps
   ) {
-    const destTrackIdx = getGlobalTrackIndex(aiColor, move.toSteps);
+    const destTrackIdx = getGlobalTrackIndex(
+      aiColor,
+      move.toSteps,
+      playerCount
+    );
     if (destTrackIdx !== null) {
       const oppPairsAtDest = getOpposingPairsAtTrackIndex(
         aiColor,
         destTrackIdx,
-        activePairs
+        activePairs,
+        playerCount
       );
       if (oppPairsAtDest.length > 0) {
         score += 24;
@@ -408,7 +421,7 @@ export function evaluateHardMoveScore(
   // 7. Evaluate danger at current position vs target position using the custom capture matrix
   const isPairAfterMove = Boolean(move.isPairMove || formsPair);
   const currentDanger =
-    move.fromSteps >= 0 && move.fromSteps <= MAX_TRACK_STEPS
+    move.fromSteps >= 0 && move.fromSteps <= maxTrackSteps
       ? computeSquareDanger(
           aiColor,
           move.fromSteps,
@@ -420,7 +433,7 @@ export function evaluateHardMoveScore(
       : 0;
 
   const targetDanger =
-    move.toSteps >= 0 && move.toSteps <= MAX_TRACK_STEPS
+    move.toSteps >= 0 && move.toSteps <= maxTrackSteps
       ? computeSquareDanger(
           aiColor,
           move.toSteps,
@@ -435,21 +448,28 @@ export function evaluateHardMoveScore(
   score -= targetDanger * 38;
 
   // 8. Safe square bonus / leaving safe square penalty
-  if (move.reachesSafeSquare && move.toSteps <= MAX_TRACK_STEPS) {
+  if (move.reachesSafeSquare && move.toSteps <= maxTrackSteps) {
     score += 45;
   }
-  if (move.fromSteps >= 0 && move.fromSteps <= MAX_TRACK_STEPS) {
-    const fromTrackIdx = getGlobalTrackIndex(aiColor, move.fromSteps)!;
-    if (isSafeTrackIndex(fromTrackIdx, rules) && !move.reachesSafeSquare) {
+  if (move.fromSteps >= 0 && move.fromSteps <= maxTrackSteps) {
+    const fromTrackIdx = getGlobalTrackIndex(
+      aiColor,
+      move.fromSteps,
+      playerCount
+    )!;
+    if (
+      isSafeTrackIndex(fromTrackIdx, rules, playerCount) &&
+      !move.reachesSafeSquare
+    ) {
       score -= 22;
     }
   }
 
   // 9. Reward advancing tokens closer to home path
-  if (move.toSteps <= MAX_TRACK_STEPS) {
+  if (move.toSteps <= maxTrackSteps) {
     score += move.toSteps * (move.isPairMove ? 1.4 : 1.1);
-  } else if (move.toSteps < FINISH_STEP) {
-    score += 55 + (move.toSteps - MAX_TRACK_STEPS) * 4;
+  } else if (move.toSteps < finishStep) {
+    score += 55 + (move.toSteps - maxTrackSteps) * 4;
   }
 
   void passingEntitlements;
@@ -466,7 +486,8 @@ function doesMoveFormPair(
   players: PlayerState[],
   pairs: TokenPair[]
 ): boolean {
-  if (move.toSteps < 0 || move.toSteps >= FINISH_STEP) return false;
+  const finishStep = getFinishStep(players.length);
+  if (move.toSteps < 0 || move.toSteps >= finishStep) return false;
   const owner = players.find((p) => p.color === playerColor);
   if (!owner) return false;
 
@@ -498,8 +519,11 @@ function computeSquareDanger(
   rules: HouseRules,
   pairs: TokenPair[]
 ): number {
-  const trackIdx = getGlobalTrackIndex(playerColor, steps);
-  if (trackIdx === null || isSafeTrackIndex(trackIdx, rules)) {
+  const playerCount = players.length;
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
+  const totalCells = getTotalTrackCellsForPlayerCount(playerCount);
+  const trackIdx = getGlobalTrackIndex(playerColor, steps, playerCount);
+  if (trackIdx === null || isSafeTrackIndex(trackIdx, rules, playerCount)) {
     return 0;
   }
 
@@ -509,12 +533,16 @@ function computeSquareDanger(
     // Only opposing pairs within 1, 2, or 3 steps behind can capture this pair
     for (const oppPair of pairs) {
       if (oppPair.color === playerColor) continue;
-      const oppTrackIdx = getGlobalTrackIndex(oppPair.color, oppPair.steps);
+      const oppTrackIdx = getGlobalTrackIndex(
+        oppPair.color,
+        oppPair.steps,
+        playerCount
+      );
       if (oppTrackIdx === null) continue;
       const distanceBehind =
-        (trackIdx - oppTrackIdx + TOTAL_TRACK_CELLS) % TOTAL_TRACK_CELLS;
+        (trackIdx - oppTrackIdx + totalCells) % totalCells;
       if (distanceBehind >= 1 && distanceBehind <= 3) {
-        if (oppPair.steps + distanceBehind <= MAX_TRACK_STEPS) {
+        if (oppPair.steps + distanceBehind <= maxTrackSteps) {
           threats += 1.5;
         }
       }
@@ -532,12 +560,16 @@ function computeSquareDanger(
     if (opp.color === playerColor || opp.hasFinished) continue;
     for (const oppToken of opp.tokens) {
       if (pairedTokenSet.has(oppToken.id) || oppToken.pairId) continue;
-      const oppTrackIdx = getGlobalTrackIndex(opp.color, oppToken.steps);
+      const oppTrackIdx = getGlobalTrackIndex(
+        opp.color,
+        oppToken.steps,
+        playerCount
+      );
       if (oppTrackIdx === null) continue;
       const distanceBehind =
-        (trackIdx - oppTrackIdx + TOTAL_TRACK_CELLS) % TOTAL_TRACK_CELLS;
+        (trackIdx - oppTrackIdx + totalCells) % totalCells;
       if (distanceBehind >= 1 && distanceBehind <= 6) {
-        if (oppToken.steps + distanceBehind <= MAX_TRACK_STEPS) {
+        if (oppToken.steps + distanceBehind <= maxTrackSteps) {
           threats += 1;
         }
       }

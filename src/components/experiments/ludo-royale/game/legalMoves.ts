@@ -3,7 +3,11 @@ import {
   getStepPathCoords,
   isSafeTrackIndex,
 } from './boardLayout';
-import { FINISH_STEP, HOME_PATH_START_STEP, MAX_TRACK_STEPS } from './constants';
+import {
+  getFinishStep,
+  getHomePathStartStep,
+  getMaxTrackSteps,
+} from './constants';
 import type {
   BlockadePassingEntitlement,
   HouseRules,
@@ -38,6 +42,7 @@ export function reconcileTokenPairs(
   pairs: TokenPair[];
   newlyFormedPairs: TokenPair[];
 } {
+  const finishStep = getFinishStep(players.length);
   const shouldAutoForm = Boolean(autoFormNewPairs);
   const brokenSet = new Set(brokenPairTokenIdsThisRoll);
   const tokenMap = new Map<string, Token>();
@@ -76,7 +81,7 @@ export function reconcileTokenPairs(
   const validPairs: TokenPair[] = [];
   const pairedTokenIds = new Set<string>();
 
-  // 1. Validate and retain still-valid existing pairs on the board (0..55, never in Home Yard -1)
+  // 1. Validate and retain still-valid existing pairs on the board (0..finishStep-1, never in Home Yard -1)
   for (const pair of candidatePairs) {
     const [idA, idB] = pair.tokenIds;
     if (brokenSet.has(idA) || brokenSet.has(idB)) continue;
@@ -87,8 +92,8 @@ export function reconcileTokenPairs(
     if (!tA || !tB) continue;
     if (tA.color !== tB.color || tA.color !== pair.color) continue;
     if (tA.steps !== tB.steps) continue;
-    // Pairing is prohibited in Home Yard (-1) and finished goal (56)
-    if (tA.steps < 0 || tA.steps >= FINISH_STEP) continue;
+    // Pairing is prohibited in Home Yard (-1) and finished goal
+    if (tA.steps < 0 || tA.steps >= finishStep) continue;
 
     const ordered = [tA, tB].sort((a, b) => a.index - b.index);
     validPairs.push({
@@ -110,7 +115,7 @@ export function reconcileTokenPairs(
       for (const token of player.tokens) {
         if (pairedTokenIds.has(token.id)) continue;
         if (brokenSet.has(token.id)) continue;
-        if (token.steps < 0 || token.steps >= FINISH_STEP) continue;
+        if (token.steps < 0 || token.steps >= finishStep) continue;
 
         const posKey = `board-${token.steps}`;
         const list = groups.get(posKey) || [];
@@ -150,7 +155,7 @@ export function reconcileTokenPairs(
     ...player,
     tokens: player.tokens.map((token) => {
       const assignedPair =
-        token.steps >= 0 && token.steps < FINISH_STEP
+        token.steps >= 0 && token.steps < finishStep
           ? pairByTokenId.get(token.id)
           : undefined;
       const nextPairId = assignedPair ? assignedPair.id : null;
@@ -186,6 +191,7 @@ export function getFormablePairOptionsForPlayer(
   existingPairs?: TokenPair[],
   _brokenPairTokenIdsThisRoll: string[] = []
 ): FormablePairOption[] {
+  const finishStep = getFinishStep(players.length);
   const reconciled = reconcileTokenPairs(players, existingPairs, [], false);
   const player = reconciled.players.find((p) => p.color === playerColor);
   if (!player || player.hasFinished) return [];
@@ -193,7 +199,7 @@ export function getFormablePairOptionsForPlayer(
   const bySteps = new Map<number, Token[]>();
   for (const tok of player.tokens) {
     if (tok.pairId) continue;
-    if (tok.steps < 0 || tok.steps >= FINISH_STEP) continue;
+    if (tok.steps < 0 || tok.steps >= finishStep) continue;
     const list = bySteps.get(tok.steps) || [];
     list.push(tok);
     bySteps.set(tok.steps, list);
@@ -222,13 +228,15 @@ export function getFormablePairOptionsForPlayer(
 /**
  * Checks whether a pair can be voluntarily broken at its current position.
  * Under Part 4 custom rules, voluntary pair breaking has NO location restrictions
- * across any eligible board square (ordinary track squares, starting squares, Safe Stars, and Home Stretch 0..55).
+ * across any eligible board square (ordinary track squares, starting squares, Safe Stars, and Home Stretch).
  */
 export function canBreakPairAtPosition(
   pairOrColor: TokenPair | PlayerColor,
   rulesOrSteps?: HouseRules | number,
-  _maybeRules?: HouseRules
+  _maybeRules?: HouseRules,
+  playerCount: number = 4
 ): boolean {
+  const finishStep = getFinishStep(playerCount);
   const steps: number =
     typeof pairOrColor === 'string'
       ? typeof rulesOrSteps === 'number'
@@ -236,7 +244,7 @@ export function canBreakPairAtPosition(
         : 0
       : pairOrColor.steps;
 
-  return steps >= 0 && steps < FINISH_STEP;
+  return steps >= 0 && steps < finishStep;
 }
 
 /**
@@ -263,12 +271,14 @@ export function hasValidPassingEntitlement(
 export function getOpposingPairsAtTrackIndex(
   moverColor: PlayerColor,
   trackIndex: number,
-  pairs: TokenPair[]
+  pairs: TokenPair[],
+  playerCount: number = 4
 ): TokenPair[] {
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
   return pairs.filter((pair) => {
     if (pair.color === moverColor) return false;
-    if (pair.steps < 0 || pair.steps > MAX_TRACK_STEPS) return false;
-    const idx = getGlobalTrackIndex(pair.color, pair.steps);
+    if (pair.steps < 0 || pair.steps > maxTrackSteps) return false;
+    const idx = getGlobalTrackIndex(pair.color, pair.steps, playerCount);
     return idx === trackIndex;
   });
 }
@@ -291,6 +301,7 @@ export function checkPathBlockade(params: {
   isPairMove: boolean;
   pairs: TokenPair[];
   passingEntitlements: BlockadePassingEntitlement[];
+  playerCount?: number;
 }): { blocked: boolean; consumesEntitlement: boolean } {
   const {
     moverColor,
@@ -300,18 +311,25 @@ export function checkPathBlockade(params: {
     isPairMove,
     pairs,
     passingEntitlements,
+    playerCount = 4,
   } = params;
 
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
   let consumesEntitlement = false;
 
-  // 1. Check starting square (if on main perimeter track 0..50)
-  if (fromSteps >= 0 && fromSteps <= MAX_TRACK_STEPS) {
-    const startTrackIdx = getGlobalTrackIndex(moverColor, fromSteps);
+  // 1. Check starting square (if on main perimeter track)
+  if (fromSteps >= 0 && fromSteps <= maxTrackSteps) {
+    const startTrackIdx = getGlobalTrackIndex(
+      moverColor,
+      fromSteps,
+      playerCount
+    );
     if (startTrackIdx !== null) {
       const oppPairsOnStart = getOpposingPairsAtTrackIndex(
         moverColor,
         startTrackIdx,
-        pairs
+        pairs,
+        playerCount
       );
       if (oppPairsOnStart.length > 0 && !isPairMove) {
         for (const oppPair of oppPairsOnStart) {
@@ -335,13 +353,14 @@ export function checkPathBlockade(params: {
   // 2. Check intermediate squares along the path (fromSteps + 1 .. toSteps - 1)
   if (fromSteps >= 0) {
     for (let step = fromSteps + 1; step < toSteps; step++) {
-      if (step <= MAX_TRACK_STEPS) {
-        const midTrackIdx = getGlobalTrackIndex(moverColor, step);
+      if (step <= maxTrackSteps) {
+        const midTrackIdx = getGlobalTrackIndex(moverColor, step, playerCount);
         if (midTrackIdx !== null) {
           const oppPairsAtMid = getOpposingPairsAtTrackIndex(
             moverColor,
             midTrackIdx,
-            pairs
+            pairs,
+            playerCount
           );
           for (const oppPair of oppPairsAtMid) {
             if (isPairMove) {
@@ -462,7 +481,11 @@ export function getBreakablePairIdsForPlayer(
   const activePairs = reconciled.pairs;
 
   return activePairs
-    .filter((pair) => pair.color === playerColor && canBreakPairAtPosition(pair, rules))
+    .filter(
+      (pair) =>
+        pair.color === playerColor &&
+        canBreakPairAtPosition(pair, rules, undefined, players.length)
+    )
     .map((pair) => pair.id);
 }
 
@@ -485,7 +508,9 @@ export function canBreakPairToUnlockMove(
   const syncedPlayers = reconciled.players;
   const activePairs = reconciled.pairs;
   const playerPairs = activePairs.filter(
-    (p) => p.color === playerColor && canBreakPairAtPosition(p, rules)
+    (p) =>
+      p.color === playerColor &&
+      canBreakPairAtPosition(p, rules, undefined, players.length)
   );
 
   for (const pair of playerPairs) {
@@ -555,6 +580,11 @@ export function evaluatePairMove(
     return null;
   }
 
+  const playerCount = players.length;
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
+  const homePathStartStep = getHomePathStartStep(playerCount);
+  const finishStep = getFinishStep(playerCount);
+
   const owner = players.find((p) => p.color === pair.color);
   if (!owner) return null;
 
@@ -562,16 +592,16 @@ export function evaluatePairMove(
   const secondaryToken = owner.tokens.find((t) => t.id === pair.tokenIds[1]);
   if (!primaryToken || !secondaryToken) return null;
 
-  if (pair.steps < 0 || pair.steps >= FINISH_STEP) {
+  if (pair.steps < 0 || pair.steps >= finishStep) {
     return null;
   }
 
-  // Pair is on the board from Starting Point (0) to Home Stretch (55) -> moves exactly half the dice value (diceValue / 2)
+  // Pair is on the board from Starting Point (0) to Home Stretch -> moves exactly half the dice value (diceValue / 2)
   const moveDistance = diceValue / 2;
   const targetSteps = pair.steps + moveDistance;
 
-  // Both tokens must be able to complete the movement legally without exceeding FINISH_STEP (56)
-  if (targetSteps > FINISH_STEP) {
+  // Both tokens must be able to complete the movement legally without exceeding finishStep
+  if (targetSteps > finishStep) {
     return null;
   }
 
@@ -584,21 +614,26 @@ export function evaluatePairMove(
     isPairMove: true,
     pairs,
     passingEntitlements,
+    playerCount,
   });
   if (blockadeCheck.blocked) {
     return null;
   }
 
   const entersHomePath =
-    pair.steps <= MAX_TRACK_STEPS && targetSteps >= HOME_PATH_START_STEP;
-  const reachesHome = targetSteps === FINISH_STEP;
+    pair.steps <= maxTrackSteps && targetSteps >= homePathStartStep;
+  const reachesHome = targetSteps === finishStep;
 
   let capturesTokenIds: string[] = [];
   let reachesSafeSquare = true;
 
-  if (targetSteps <= MAX_TRACK_STEPS) {
-    const targetTrackIdx = getGlobalTrackIndex(pair.color, targetSteps)!;
-    reachesSafeSquare = isSafeTrackIndex(targetTrackIdx, rules);
+  if (targetSteps <= maxTrackSteps) {
+    const targetTrackIdx = getGlobalTrackIndex(
+      pair.color,
+      targetSteps,
+      playerCount
+    )!;
+    reachesSafeSquare = isSafeTrackIndex(targetTrackIdx, rules, playerCount);
     if (!reachesSafeSquare) {
       capturesTokenIds = findCapturableOpponentTokens(
         pair.color,
@@ -621,7 +656,8 @@ export function evaluatePairMove(
       pair.color,
       pair.steps,
       targetSteps,
-      primaryToken.index
+      primaryToken.index,
+      playerCount
     ),
     capturesTokenIds,
     entersHomePath,
@@ -646,8 +682,13 @@ export function evaluateSingleTokenMove(
   pairs: TokenPair[] = [],
   passingEntitlements: BlockadePassingEntitlement[] = []
 ): LegalMove | null {
+  const playerCount = players.length;
+  const maxTrackSteps = getMaxTrackSteps(playerCount);
+  const homePathStartStep = getHomePathStartStep(playerCount);
+  const finishStep = getFinishStep(playerCount);
+
   // 1. Token already finished
-  if (token.steps >= FINISH_STEP) {
+  if (token.steps >= finishStep) {
     return null;
   }
 
@@ -657,8 +698,12 @@ export function evaluateSingleTokenMove(
       return null;
     }
     const toSteps = 0;
-    const targetTrackIdx = getGlobalTrackIndex(token.color, toSteps)!;
-    const isSafe = isSafeTrackIndex(targetTrackIdx, rules);
+    const targetTrackIdx = getGlobalTrackIndex(
+      token.color,
+      toSteps,
+      playerCount
+    )!;
+    const isSafe = isSafeTrackIndex(targetTrackIdx, rules, playerCount);
     const captures = isSafe
       ? []
       : findCapturableOpponentTokens(
@@ -674,7 +719,13 @@ export function evaluateSingleTokenMove(
       tokenIndex: token.index,
       fromSteps: -1,
       toSteps: 0,
-      pathCoords: getStepPathCoords(token.color, -1, 0, token.index),
+      pathCoords: getStepPathCoords(
+        token.color,
+        -1,
+        0,
+        token.index,
+        playerCount
+      ),
       capturesTokenIds: captures,
       entersHomePath: false,
       reachesHome: false,
@@ -685,11 +736,11 @@ export function evaluateSingleTokenMove(
     };
   }
 
-  // 3. Token is on the board (0..55)
+  // 3. Token is on the board
   const targetSteps = token.steps + diceValue;
 
-  // Exact roll required to reach FINISH_STEP (56)
-  if (targetSteps > FINISH_STEP) {
+  // Exact roll required to reach finishStep
+  if (targetSteps > finishStep) {
     return null;
   }
 
@@ -702,21 +753,26 @@ export function evaluateSingleTokenMove(
     isPairMove: false,
     pairs,
     passingEntitlements,
+    playerCount,
   });
   if (blockadeCheck.blocked) {
     return null;
   }
 
   const entersHomePath =
-    token.steps <= MAX_TRACK_STEPS && targetSteps >= HOME_PATH_START_STEP;
-  const reachesHome = targetSteps === FINISH_STEP;
+    token.steps <= maxTrackSteps && targetSteps >= homePathStartStep;
+  const reachesHome = targetSteps === finishStep;
 
   let capturesTokenIds: string[] = [];
   let reachesSafeSquare = true;
 
-  if (targetSteps <= MAX_TRACK_STEPS) {
-    const targetTrackIdx = getGlobalTrackIndex(token.color, targetSteps)!;
-    reachesSafeSquare = isSafeTrackIndex(targetTrackIdx, rules);
+  if (targetSteps <= maxTrackSteps) {
+    const targetTrackIdx = getGlobalTrackIndex(
+      token.color,
+      targetSteps,
+      playerCount
+    )!;
+    reachesSafeSquare = isSafeTrackIndex(targetTrackIdx, rules, playerCount);
     if (!reachesSafeSquare) {
       capturesTokenIds = findCapturableOpponentTokens(
         token.color,
@@ -727,7 +783,7 @@ export function evaluateSingleTokenMove(
       );
     }
   } else {
-    // Home path (51..55) and Finish (56) are always private and safe
+    // Home path and Finish are always private and safe
     reachesSafeSquare = true;
   }
 
@@ -740,7 +796,8 @@ export function evaluateSingleTokenMove(
       token.color,
       token.steps,
       targetSteps,
-      token.index
+      token.index,
+      playerCount
     ),
     capturesTokenIds,
     entersHomePath,
@@ -796,6 +853,7 @@ export function findCapturableOpponentTokens(
   isPairMove: boolean = false,
   pairs?: TokenPair[]
 ): string[] {
+  const playerCount = players.length;
   const activePairs = pairs ?? reconcileTokenPairs(players).pairs;
   const pairedTokenSet = new Set<string>();
   for (const pair of activePairs) {
@@ -808,7 +866,11 @@ export function findCapturableOpponentTokens(
     const capturedPairTokens: string[] = [];
     for (const pair of activePairs) {
       if (pair.color === moverColor) continue;
-      const oppTrackIdx = getGlobalTrackIndex(pair.color, pair.steps);
+      const oppTrackIdx = getGlobalTrackIndex(
+        pair.color,
+        pair.steps,
+        playerCount
+      );
       if (oppTrackIdx !== null && oppTrackIdx === targetTrackIndex) {
         capturedPairTokens.push(pair.tokenIds[0], pair.tokenIds[1]);
       }
@@ -822,7 +884,11 @@ export function findCapturableOpponentTokens(
     if (player.color === moverColor) continue;
     for (const oppToken of player.tokens) {
       if (pairedTokenSet.has(oppToken.id) || oppToken.pairId) continue;
-      const oppTrackIdx = getGlobalTrackIndex(oppToken.color, oppToken.steps);
+      const oppTrackIdx = getGlobalTrackIndex(
+        oppToken.color,
+        oppToken.steps,
+        playerCount
+      );
       if (oppTrackIdx !== null && oppTrackIdx === targetTrackIndex) {
         capturedSingleIds.push(oppToken.id);
       }
