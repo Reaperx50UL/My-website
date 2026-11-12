@@ -3,6 +3,12 @@ import { DiceStyle, HapticIntensity } from '../game/gameTypes';
 export interface DiceAudioIdentity {
   diceStyle: DiceStyle;
   assetFolder: string;
+  idleProfile:
+    | 'silent_tabletop'
+    | 'lava_magma_simmer'
+    | 'electro_tesla_hum'
+    | 'tesseract_hyper_drone'
+    | 'cosmo_nebula_choir';
   rollProfile:
     | 'classic_clatter'
     | 'lava_volcanic'
@@ -17,6 +23,18 @@ export interface DiceAudioIdentity {
     | 'cosmic_resonance';
 }
 
+export interface DiceIdleAudioSpec {
+  diceStyle: DiceStyle;
+  enabled: boolean;
+  idleProfile: DiceAudioIdentity['idleProfile'];
+  intervalMs: number;
+  baseDroneFreqHz: number;
+  harmonicFreqsHz: ReadonlyArray<number>;
+  accentBurstFreqsHz: ReadonlyArray<number>;
+  peakGain: number;
+  description: string;
+}
+
 export function getDiceAudioIdentity(
   diceStyle: DiceStyle = 'classic_ivory'
 ): DiceAudioIdentity {
@@ -25,6 +43,7 @@ export function getDiceAudioIdentity(
       return {
         diceStyle,
         assetFolder: '/audio/ludo/lava/',
+        idleProfile: 'lava_magma_simmer',
         rollProfile: 'lava_volcanic',
         landProfile: 'heavy_basalt_slam',
       };
@@ -32,6 +51,7 @@ export function getDiceAudioIdentity(
       return {
         diceStyle,
         assetFolder: '/audio/ludo/electro/',
+        idleProfile: 'electro_tesla_hum',
         rollProfile: 'electro_plasma',
         landProfile: 'electric_snap',
       };
@@ -39,6 +59,7 @@ export function getDiceAudioIdentity(
       return {
         diceStyle,
         assetFolder: '/audio/ludo/tesseract/',
+        idleProfile: 'tesseract_hyper_drone',
         rollProfile: 'tesseract_spatial',
         landProfile: 'dimensional_chime',
       };
@@ -46,6 +67,7 @@ export function getDiceAudioIdentity(
       return {
         diceStyle,
         assetFolder: '/audio/ludo/cosmo/',
+        idleProfile: 'cosmo_nebula_choir',
         rollProfile: 'cosmo_celestial',
         landProfile: 'cosmic_resonance',
       };
@@ -53,8 +75,89 @@ export function getDiceAudioIdentity(
       return {
         diceStyle,
         assetFolder: '/audio/ludo/classic/',
+        idleProfile: 'silent_tabletop',
         rollProfile: 'classic_clatter',
         landProfile: 'tabletop_thud',
+      };
+  }
+}
+
+/**
+ * Computes the design-matched procedural idle audio specification for each die style.
+ * - Lava Cube: Subterranean volcanic magma simmer, viscous bubble pops & steam vent hiss (slows & dims when cooling).
+ * - Electro Cube: 120Hz ionized Tesla coil harmonic hum & high-voltage micro-spark corona snaps.
+ * - Tesseract Cube: 4D crystal-glass binaural fifth shimmer & dimensional conduit harmonic pings.
+ * - Cosmo Cube: Deep-space celestial fifth drone & twinkling Lydian stardust bell glints.
+ */
+export function getDiceIdleAudioSpec(
+  diceStyle: DiceStyle = 'classic_ivory',
+  options?: { isCooling?: boolean }
+): DiceIdleAudioSpec {
+  const identity = getDiceAudioIdentity(diceStyle);
+  const isCooling = Boolean(options?.isCooling);
+
+  switch (diceStyle) {
+    case 'lava_cube':
+      return {
+        diceStyle,
+        enabled: true,
+        idleProfile: identity.idleProfile,
+        intervalMs: isCooling ? 3800 : 2500,
+        baseDroneFreqHz: isCooling ? 42 : 54,
+        harmonicFreqsHz: isCooling ? [63, 95] : [81, 135],
+        accentBurstFreqsHz: isCooling ? [155, 420] : [185, 340, 880],
+        peakGain: isCooling ? 0.014 : 0.026,
+        description: isCooling
+          ? 'Smoldering Basalt Ember Pulse'
+          : 'Subterranean Magma Simmer & Bubble Pop',
+      };
+    case 'electro_cube':
+      return {
+        diceStyle,
+        enabled: true,
+        idleProfile: identity.idleProfile,
+        intervalMs: 2100,
+        baseDroneFreqHz: 120,
+        harmonicFreqsHz: [240, 360],
+        accentBurstFreqsHz: [1680, 2340, 920],
+        peakGain: 0.022,
+        description: 'Ionized Tesla Hum & Micro-Spark Snaps',
+      };
+    case 'tesseract_cube':
+      return {
+        diceStyle,
+        enabled: true,
+        idleProfile: identity.idleProfile,
+        intervalMs: 2900,
+        baseDroneFreqHz: 528,
+        harmonicFreqsHz: [530.5, 792],
+        accentBurstFreqsHz: [1056, 1320, 1584],
+        peakGain: 0.021,
+        description: '4D Crystal-Glass Resonance & Conduit Ping',
+      };
+    case 'cosmo_cube':
+      return {
+        diceStyle,
+        enabled: true,
+        idleProfile: identity.idleProfile,
+        intervalMs: 3100,
+        baseDroneFreqHz: 130.81, // C3
+        harmonicFreqsHz: [196.0, 293.66], // G3, D4
+        accentBurstFreqsHz: [1046.5, 1318.51, 1479.98], // C6, E6, F#6 Lydian starlight chimes
+        peakGain: 0.023,
+        description: 'Celestial Nebula Pad & Starlight Chimes',
+      };
+    default:
+      return {
+        diceStyle,
+        enabled: false,
+        idleProfile: 'silent_tabletop',
+        intervalMs: 0,
+        baseDroneFreqHz: 0,
+        harmonicFreqsHz: [],
+        accentBurstFreqsHz: [],
+        peakGain: 0,
+        description: 'Silent Tabletop Rest',
       };
   }
 }
@@ -90,6 +193,11 @@ class SoundManager {
   private hapticIntensity: HapticIntensity = 'medium';
   private musicInterval: number | null = null;
   private activeDiceNodes: OscillatorNode[] = [];
+  private activeIdleNodes: OscillatorNode[] = [];
+  private idleInterval: number | null = null;
+  private activeIdleDiceStyle: DiceStyle | null = null;
+  private activeIdleCooling: boolean = false;
+  private idleCycleCounter: number = 0;
 
   private getContext(): AudioContext | null {
     if (!this.soundEnabled && !this.musicEnabled) return null;
@@ -110,8 +218,23 @@ class SoundManager {
   }
 
   public stopActiveDiceSounds(): void {
-    if (this.activeDiceNodes.length === 0) return;
-    for (const node of this.activeDiceNodes) {
+    if (this.activeDiceNodes.length > 0) {
+      for (const node of this.activeDiceNodes) {
+        try {
+          node.stop();
+          node.disconnect();
+        } catch {
+          // Ignore already-stopped nodes
+        }
+      }
+      this.activeDiceNodes = [];
+    }
+    this.stopActiveIdleNodes();
+  }
+
+  private stopActiveIdleNodes(): void {
+    if (this.activeIdleNodes.length === 0) return;
+    for (const node of this.activeIdleNodes) {
       try {
         node.stop();
         node.disconnect();
@@ -119,13 +242,20 @@ class SoundManager {
         // Ignore already-stopped nodes
       }
     }
-    this.activeDiceNodes = [];
+    this.activeIdleNodes = [];
   }
 
   private registerDiceOsc(osc: OscillatorNode): void {
     this.activeDiceNodes.push(osc);
     osc.onended = () => {
       this.activeDiceNodes = this.activeDiceNodes.filter((n) => n !== osc);
+    };
+  }
+
+  private registerIdleOsc(osc: OscillatorNode): void {
+    this.activeIdleNodes.push(osc);
+    osc.onended = () => {
+      this.activeIdleNodes = this.activeIdleNodes.filter((n) => n !== osc);
     };
   }
 
@@ -137,6 +267,7 @@ class SoundManager {
     this.soundEnabled = soundEnabled;
     if (!soundEnabled) {
       this.stopActiveDiceSounds();
+      this.stopDiceIdleLoop();
     }
     this.hapticIntensity = hapticIntensity;
     if (this.musicEnabled !== musicEnabled) {
@@ -763,6 +894,288 @@ class SoundManager {
       clearInterval(this.musicInterval);
       this.musicInterval = null;
     }
+  }
+
+  /**
+   * Synthesizes a single subtle, design-authentic idle sound cycle for the 4 animated special cubes:
+   * - `lava_cube`: Deep volcanic magma simmer + viscous magma bubble pop + subtle fissure steam crackle
+   *   (automatically shifts to a slower, quieter smoldering coal breath when `isCooling` is true).
+   * - `electro_cube`: 120Hz ionized Tesla coil hum + crisp electrostatic micro-spark snaps.
+   * - `tesseract_cube`: 4D crystal-glass binaural fifth shimmer + dimensional conduit harmonic ping.
+   * - `cosmo_cube`: Deep-space celestial fifth nebula pad + twinkling Lydian stardust bell glints.
+   */
+  public playDiceIdlePulse(
+    diceStyle: DiceStyle = 'classic_ivory',
+    options?: { isCooling?: boolean }
+  ): DiceIdleAudioSpec {
+    const spec = getDiceIdleAudioSpec(diceStyle, options);
+    if (!spec.enabled || !this.soundEnabled) {
+      return spec;
+    }
+
+    const ctx = this.getContext();
+    if (!ctx) {
+      return spec;
+    }
+
+    this.stopActiveIdleNodes();
+    const now = ctx.currentTime;
+    const cycleIdx = this.idleCycleCounter++;
+
+    if (spec.idleProfile === 'lava_magma_simmer') {
+      const isCooling = Boolean(options?.isCooling);
+      // 1. Subterranean volcanic magma swell (low triangle/sine wave)
+      const drone = ctx.createOscillator();
+      const droneGain = ctx.createGain();
+      drone.type = 'triangle';
+      drone.frequency.setValueAtTime(spec.baseDroneFreqHz, now);
+      drone.frequency.exponentialRampToValueAtTime(
+        spec.baseDroneFreqHz * 0.84,
+        now + (isCooling ? 0.65 : 0.48)
+      );
+      droneGain.gain.setValueAtTime(0.001, now);
+      droneGain.gain.linearRampToValueAtTime(spec.peakGain, now + 0.12);
+      droneGain.gain.exponentialRampToValueAtTime(
+        0.0008,
+        now + (isCooling ? 0.68 : 0.5)
+      );
+      drone.connect(droneGain);
+      droneGain.connect(ctx.destination);
+      this.registerIdleOsc(drone);
+      drone.start(now);
+      drone.stop(now + (isCooling ? 0.7 : 0.52));
+
+      // 2. Viscous molten magma bubble pop (pitch-up resonant sine drop)
+      if (!isCooling) {
+        const bubbleStart = now + 0.14;
+        const bubble = ctx.createOscillator();
+        const bGain = ctx.createGain();
+        bubble.type = 'sine';
+        const baseBubbleFreq =
+          spec.accentBurstFreqsHz[cycleIdx % spec.accentBurstFreqsHz.length] || 185;
+        bubble.frequency.setValueAtTime(baseBubbleFreq * 0.65, bubbleStart);
+        bubble.frequency.exponentialRampToValueAtTime(
+          baseBubbleFreq * 1.35,
+          bubbleStart + 0.065
+        );
+        bGain.gain.setValueAtTime(spec.peakGain * 0.72, bubbleStart);
+        bGain.gain.exponentialRampToValueAtTime(0.0008, bubbleStart + 0.072);
+        bubble.connect(bGain);
+        bGain.connect(ctx.destination);
+        this.registerIdleOsc(bubble);
+        bubble.start(bubbleStart);
+        bubble.stop(bubbleStart + 0.078);
+
+        // 3. Subtle pressurized fissure steam & ember micro-crackle
+        const hissStart = now + 0.24;
+        const crackle = ctx.createOscillator();
+        const cGain = ctx.createGain();
+        crackle.type = 'sawtooth';
+        crackle.frequency.setValueAtTime(880 + (cycleIdx % 3) * 110, hissStart);
+        crackle.frequency.exponentialRampToValueAtTime(340, hissStart + 0.045);
+        cGain.gain.setValueAtTime(spec.peakGain * 0.35, hissStart);
+        cGain.gain.exponentialRampToValueAtTime(0.0008, hissStart + 0.05);
+        crackle.connect(cGain);
+        cGain.connect(ctx.destination);
+        this.registerIdleOsc(crackle);
+        crackle.start(hissStart);
+        crackle.stop(hissStart + 0.055);
+      }
+      return spec;
+    }
+
+    if (spec.idleProfile === 'electro_tesla_hum') {
+      // 1. Subtle 120Hz ionized plasma core hum + 240Hz harmonic
+      const hum = ctx.createOscillator();
+      const humGain = ctx.createGain();
+      hum.type = 'sine';
+      hum.frequency.setValueAtTime(spec.baseDroneFreqHz, now);
+      hum.frequency.exponentialRampToValueAtTime(
+        spec.harmonicFreqsHz[0] || 240,
+        now + 0.26
+      );
+      humGain.gain.setValueAtTime(0.001, now);
+      humGain.gain.linearRampToValueAtTime(spec.peakGain * 0.75, now + 0.06);
+      humGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.28);
+      hum.connect(humGain);
+      humGain.connect(ctx.destination);
+      this.registerIdleOsc(hum);
+      hum.start(now);
+      hum.stop(now + 0.3);
+
+      // 2. Dual crisp electrostatic micro-spark snaps matching the compact body sparks
+      [0.05, 0.16].forEach((offset, idx) => {
+        const sparkTime = now + offset;
+        const spark = ctx.createOscillator();
+        const sGain = ctx.createGain();
+        spark.type = idx % 2 === 0 ? 'triangle' : 'sawtooth';
+        const startFreq =
+          spec.accentBurstFreqsHz[(cycleIdx + idx) % spec.accentBurstFreqsHz.length] ||
+          1680;
+        spark.frequency.setValueAtTime(startFreq, sparkTime);
+        spark.frequency.exponentialRampToValueAtTime(
+          startFreq * 0.38,
+          sparkTime + 0.028
+        );
+        sGain.gain.setValueAtTime(spec.peakGain * 0.68, sparkTime);
+        sGain.gain.exponentialRampToValueAtTime(0.0008, sparkTime + 0.032);
+        spark.connect(sGain);
+        sGain.connect(ctx.destination);
+        this.registerIdleOsc(spark);
+        spark.start(sparkTime);
+        spark.stop(sparkTime + 0.036);
+      });
+      return spec;
+    }
+
+    if (spec.idleProfile === 'tesseract_hyper_drone') {
+      // 1. 4D crystal-glass binaural shimmer chord (528Hz + 530.5Hz + 792Hz fifth)
+      const freqs = [spec.baseDroneFreqHz, ...spec.harmonicFreqsHz];
+      freqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.004, now + 0.46);
+        const voiceGain = idx === 0 ? spec.peakGain * 0.65 : spec.peakGain * 0.42;
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(voiceGain, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.48);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        this.registerIdleOsc(osc);
+        osc.start(now);
+        osc.stop(now + 0.5);
+      });
+
+      // 2. High crystalline 4D vertex conduit energy pulse ping
+      const pingTime = now + 0.14;
+      const ping = ctx.createOscillator();
+      const pGain = ctx.createGain();
+      ping.type = 'triangle';
+      const pingFreq =
+        spec.accentBurstFreqsHz[cycleIdx % spec.accentBurstFreqsHz.length] || 1056;
+      ping.frequency.setValueAtTime(pingFreq, pingTime);
+      ping.frequency.exponentialRampToValueAtTime(pingFreq * 1.25, pingTime + 0.14);
+      pGain.gain.setValueAtTime(spec.peakGain * 0.52, pingTime);
+      pGain.gain.exponentialRampToValueAtTime(0.0008, pingTime + 0.16);
+      ping.connect(pGain);
+      pGain.connect(ctx.destination);
+      this.registerIdleOsc(ping);
+      ping.start(pingTime);
+      ping.stop(pingTime + 0.17);
+      return spec;
+    }
+
+    if (spec.idleProfile === 'cosmo_nebula_choir') {
+      // 1. Zero-gravity deep-space fifth pad (C3 130.81Hz + G3 196.00Hz)
+      [spec.baseDroneFreqHz, spec.harmonicFreqsHz[0] || 196.0].forEach(
+        (freq, idx) => {
+          const pad = ctx.createOscillator();
+          const padGain = ctx.createGain();
+          pad.type = 'sine';
+          pad.frequency.setValueAtTime(freq, now);
+          pad.frequency.exponentialRampToValueAtTime(freq * 1.012, now + 0.54);
+          padGain.gain.setValueAtTime(0.001, now);
+          padGain.gain.linearRampToValueAtTime(
+            idx === 0 ? spec.peakGain * 0.72 : spec.peakGain * 0.52,
+            now + 0.14
+          );
+          padGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.56);
+          pad.connect(padGain);
+          padGain.connect(ctx.destination);
+          this.registerIdleOsc(pad);
+          pad.start(now);
+          pad.stop(now + 0.58);
+        }
+      );
+
+      // 2. Twinkling Lydian stardust bell glint matching the 4-point diamond stars
+      const starTime = now + 0.15;
+      const starOsc = ctx.createOscillator();
+      const starGain = ctx.createGain();
+      starOsc.type = 'sine';
+      const starFreq =
+        spec.accentBurstFreqsHz[cycleIdx % spec.accentBurstFreqsHz.length] ||
+        1046.5;
+      starOsc.frequency.setValueAtTime(starFreq, starTime);
+      starOsc.frequency.exponentialRampToValueAtTime(
+        starFreq * 1.02,
+        starTime + 0.22
+      );
+      starGain.gain.setValueAtTime(spec.peakGain * 0.55, starTime);
+      starGain.gain.exponentialRampToValueAtTime(0.0008, starTime + 0.24);
+      starOsc.connect(starGain);
+      starGain.connect(ctx.destination);
+      this.registerIdleOsc(starOsc);
+      starOsc.start(starTime);
+      starOsc.stop(starTime + 0.25);
+      return spec;
+    }
+
+    return spec;
+  }
+
+  /**
+   * Starts or updates the periodic ambient idle sound loop for the active die.
+   * Only runs for the 4 special animated cubes (`lava_cube`, `electro_cube`,
+   * `tesseract_cube`, `cosmo_cube`) while in idle state and when audio is enabled.
+   */
+  public startDiceIdleLoop(
+    diceStyle: DiceStyle = 'classic_ivory',
+    options?: { isCooling?: boolean }
+  ): boolean {
+    const isCooling = Boolean(options?.isCooling);
+    const spec = getDiceIdleAudioSpec(diceStyle, { isCooling });
+    if (!spec.enabled || !this.soundEnabled) {
+      this.stopDiceIdleLoop();
+      return false;
+    }
+
+    if (
+      this.idleInterval !== null &&
+      this.activeIdleDiceStyle === diceStyle &&
+      this.activeIdleCooling === isCooling
+    ) {
+      return true;
+    }
+
+    this.stopDiceIdleLoop();
+    this.activeIdleDiceStyle = diceStyle;
+    this.activeIdleCooling = isCooling;
+
+    if (typeof window !== 'undefined') {
+      this.playDiceIdlePulse(diceStyle, { isCooling });
+      this.idleInterval = window.setInterval(() => {
+        if (!this.soundEnabled || !this.activeIdleDiceStyle) {
+          this.stopDiceIdleLoop();
+          return;
+        }
+        this.playDiceIdlePulse(this.activeIdleDiceStyle, {
+          isCooling: this.activeIdleCooling,
+        });
+      }, spec.intervalMs);
+    }
+
+    return true;
+  }
+
+  public stopDiceIdleLoop(): void {
+    if (this.idleInterval !== null) {
+      clearInterval(this.idleInterval);
+      this.idleInterval = null;
+    }
+    this.activeIdleDiceStyle = null;
+    this.activeIdleCooling = false;
+    this.stopActiveIdleNodes();
+  }
+
+  public isDiceIdleLoopActive(): boolean {
+    return this.idleInterval !== null && this.activeIdleDiceStyle !== null;
+  }
+
+  public getActiveIdleDiceStyle(): DiceStyle | null {
+    return this.activeIdleDiceStyle;
   }
 }
 

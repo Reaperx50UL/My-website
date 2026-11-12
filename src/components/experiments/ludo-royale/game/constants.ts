@@ -1019,3 +1019,1328 @@ export const DEFAULT_STATS: PlayerStats = {
   unlockedAchievements: [],
   matchHistory: [],
 };
+
+/**
+ * Duration of inactivity (10 seconds) after which the Lava Cube transitions
+ * from its bright active lava flow state into its secondary "cooling ember"
+ * idle state where the glow dims and pulses slowly until reactivated.
+ */
+export const LAVA_COOLING_TIMEOUT_MS = 10000;
+
+export type LavaThermalState =
+  | 'active_flow'
+  | 'cooling_ember'
+  | 'erupting_roll'
+  | 'inactive';
+
+export function computeLavaThermalState(params: {
+  diceStyle: DiceStyle;
+  isRolling: boolean;
+  isLanding?: boolean;
+  elapsedIdleMs: number;
+  coolingTimeoutMs?: number;
+}): LavaThermalState {
+  const {
+    diceStyle,
+    isRolling,
+    isLanding = false,
+    elapsedIdleMs,
+    coolingTimeoutMs = LAVA_COOLING_TIMEOUT_MS,
+  } = params;
+
+  if (diceStyle !== 'lava_cube') {
+    return 'inactive';
+  }
+  if (isRolling || isLanding) {
+    return 'erupting_roll';
+  }
+  if (elapsedIdleMs > coolingTimeoutMs) {
+    return 'cooling_ember';
+  }
+  return 'active_flow';
+}
+
+/**
+ * Duration (in ms) that the molten 'lava drop' splash remains visible on the
+ * board surface when the Lava Cube lands after a roll.
+ */
+export const LAVA_DROP_SPLASH_DURATION_MS = 950;
+
+export interface LavaSplashDropSpec {
+  id: string;
+  x: number;
+  y: number;
+  angleDeg: number;
+  distance: number;
+  rx: number;
+  ry: number;
+  delayMs: number;
+  coreHex: string;
+  midHex: string;
+  crustHex: string;
+}
+
+export interface LavaBoardSplashEffect {
+  centerX: number;
+  centerY: number;
+  puddleRadius: number;
+  durationMs: number;
+  drops: LavaSplashDropSpec[];
+}
+
+export function buildLavaDropSplashSpec(
+  centerX = 750,
+  centerY = 750,
+  diceValue: number | null = 6
+): LavaBoardSplashEffect {
+  const safeVal = diceValue && diceValue >= 1 && diceValue <= 6 ? diceValue : 6;
+  const dropCount = 8;
+  const angleOffset = (safeVal * 23 * Math.PI) / 180;
+  const drops: LavaSplashDropSpec[] = [];
+
+  for (let i = 0; i < dropCount; i++) {
+    const baseAngle = (i / dropCount) * Math.PI * 2 + angleOffset;
+    const distance = 68 + ((i * 37 + safeVal * 13) % 86);
+    const x = Math.round((centerX + Math.cos(baseAngle) * distance) * 10) / 10;
+    const y = Math.round((centerY + Math.sin(baseAngle) * distance) * 10) / 10;
+    const angleDeg = Math.round((baseAngle * 180) / Math.PI);
+    const rx = 14 + (i % 3) * 5;
+    const ry = 9 + ((i + 1) % 3) * 3;
+    const delayMs = (i % 4) * 28;
+
+    drops.push({
+      id: `lava-drop-${i}`,
+      x,
+      y,
+      angleDeg,
+      distance,
+      rx,
+      ry,
+      delayMs,
+      coreHex: i % 2 === 0 ? '#FFF59D' : '#FFEE58',
+      midHex: i % 2 === 0 ? '#FF6D00' : '#FF9100',
+      crustHex: '#991B1B',
+    });
+  }
+
+  return {
+    centerX,
+    centerY,
+    puddleRadius: 56 + safeVal * 3,
+    durationMs: LAVA_DROP_SPLASH_DURATION_MS,
+    drops,
+  };
+}
+
+/**
+ * Specification for a periodic atmospheric volcanic 'steam vent' puff
+ * rising from the Lava Cube's cracks when it enters its 'spitting' lava state.
+ */
+export interface LavaSteamVentSpec {
+  id: string;
+  originX: number;
+  originY: number;
+  driftX: number;
+  riseY: number;
+  radiusX: number;
+  radiusY: number;
+  durationMs: number;
+  delayMs: number;
+  baseTintHex: string;
+  vaporHex: string;
+}
+
+/**
+ * Pure deterministic generator for periodic volcanic steam vent puffs rising
+ * from the Lava Cube's primary crack intersections during its spitting state.
+ */
+export function buildLavaSteamVentSpecs(count = 6): LavaSteamVentSpec[] {
+  const crackFissures: Array<{
+    x: number;
+    y: number;
+    driftX: number;
+    riseY: number;
+    rx: number;
+    ry: number;
+  }> = [
+    { x: 42, y: 34, driftX: -7, riseY: -26, rx: 6.8, ry: 5.0 },
+    { x: 78, y: 34, driftX: 8, riseY: -28, rx: 6.5, ry: 4.8 },
+    { x: 34, y: 58, driftX: -9, riseY: -24, rx: 7.2, ry: 5.2 },
+    { x: 86, y: 58, driftX: 9, riseY: -25, rx: 7.0, ry: 5.1 },
+    { x: 56, y: 28, driftX: -3, riseY: -30, rx: 6.2, ry: 4.6 },
+    { x: 66, y: 68, driftX: 5, riseY: -23, rx: 6.8, ry: 5.0 },
+  ];
+
+  const safeCount = Math.max(1, Math.min(12, Math.round(count)));
+  const vents: LavaSteamVentSpec[] = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    const fissure = crackFissures[i % crackFissures.length];
+    const cycleOffset = Math.floor(i / crackFissures.length);
+    vents.push({
+      id: `lava-steam-vent-${i}`,
+      originX: fissure.x + cycleOffset * 2,
+      originY: fissure.y - cycleOffset * 2,
+      driftX: fissure.driftX,
+      riseY: fissure.riseY,
+      radiusX: fissure.rx,
+      radiusY: fissure.ry,
+      durationMs: 740 + (i % 3) * 110,
+      delayMs: i * 115,
+      baseTintHex: i % 2 === 0 ? '#FDBA74' : '#FED7AA',
+      vaporHex: i % 2 === 0 ? '#E2E8F0' : '#CBD5E1',
+    });
+  }
+
+  return vents;
+}
+
+export interface ElectroIdleSparkSpec {
+  id: string;
+  rootX: number;
+  rootY: number;
+  sparkTipX: number;
+  sparkTipY: number;
+  mainBoltPath: string;
+  branchBoltPath: string;
+  snapDx: number;
+  snapDy: number;
+  durationMs: number;
+  delayMs: number;
+  coreHex: string;
+  plasmaHex: string;
+  coronaHex: string;
+}
+
+export interface ElectroBodyPulseSpec {
+  id: string;
+  conduitPath: string;
+  nodeX: number;
+  nodeY: number;
+  dashArray: string;
+  durationMs: number;
+  delayMs: number;
+  coreHex: string;
+  plasmaHex: string;
+}
+
+export interface ElectroRollingPulseSpec {
+  id: string;
+  originX: number;
+  originY: number;
+  pulseWavePath: string;
+  innerWavePath: string;
+  lightningBoltPath: string;
+  forkBranchPath: string;
+  sparkX: number;
+  sparkY: number;
+  burstDx: number;
+  burstDy: number;
+  durationMs: number;
+  delayMs: number;
+  coreHex: string;
+  plasmaHex: string;
+  coronaHex: string;
+}
+
+/**
+ * Pure deterministic generator for idle-state electric sparks snapping outward
+ * from the body and corner electrodes of the Electro Cube.
+ * Uses fine multi-segment fractal lightning geometry with acute-angle micro-branches.
+ */
+export function buildElectroIdleSparkSpecs(count = 8): ElectroIdleSparkSpec[] {
+  const presets: Array<{
+    rootX: number;
+    rootY: number;
+    sparkTipX: number;
+    sparkTipY: number;
+    mainBoltPath: string;
+    branchBoltPath: string;
+    snapDx: number;
+    snapDy: number;
+  }> = [
+    // 1. Upper-Left Corner Compact Micro-Spark
+    {
+      rootX: 33,
+      rootY: 35,
+      sparkTipX: 23,
+      sparkTipY: 28,
+      mainBoltPath:
+        'M 33 35 L 31 33 L 29 34 L 27 31 L 25 31 L 23 28',
+      branchBoltPath:
+        'M 29 34 L 27 36 M 27 31 L 25 28',
+      snapDx: -1.5,
+      snapDy: -1.2,
+    },
+    // 2. Upper-Right Corner Compact Micro-Spark
+    {
+      rootX: 87,
+      rootY: 35,
+      sparkTipX: 97,
+      sparkTipY: 28,
+      mainBoltPath:
+        'M 87 35 L 89 33 L 91 34 L 93 31 L 95 31 L 97 28',
+      branchBoltPath:
+        'M 91 34 L 93 36 M 93 31 L 95 28',
+      snapDx: 1.5,
+      snapDy: -1.2,
+    },
+    // 3. Mid-Left Conduit Compact Micro-Spark
+    {
+      rootX: 29,
+      rootY: 58,
+      sparkTipX: 19,
+      sparkTipY: 56,
+      mainBoltPath:
+        'M 29 58 L 27 57 L 25 59 L 23 56 L 21 57 L 19 56',
+      branchBoltPath:
+        'M 25 59 L 22 61 M 23 56 L 20 54',
+      snapDx: -2,
+      snapDy: 0,
+    },
+    // 4. Mid-Right Conduit Compact Micro-Spark
+    {
+      rootX: 91,
+      rootY: 62,
+      sparkTipX: 101,
+      sparkTipY: 64,
+      mainBoltPath:
+        'M 91 62 L 93 63 L 95 61 L 97 64 L 99 63 L 101 64',
+      branchBoltPath:
+        'M 95 61 L 98 59 M 97 64 L 100 66',
+      snapDx: 2,
+      snapDy: 0,
+    },
+    // 5. Lower-Left Corner Compact Micro-Spark
+    {
+      rootX: 33,
+      rootY: 85,
+      sparkTipX: 23,
+      sparkTipY: 92,
+      mainBoltPath:
+        'M 33 85 L 31 87 L 29 86 L 27 89 L 25 89 L 23 92',
+      branchBoltPath:
+        'M 29 86 L 26 85 M 27 89 L 26 92',
+      snapDx: -1.5,
+      snapDy: 1.5,
+    },
+    // 6. Lower-Right Corner Compact Micro-Spark
+    {
+      rootX: 87,
+      rootY: 85,
+      sparkTipX: 97,
+      sparkTipY: 92,
+      mainBoltPath:
+        'M 87 85 L 89 87 L 91 86 L 93 89 L 95 89 L 97 92',
+      branchBoltPath:
+        'M 91 86 L 94 85 M 93 89 L 94 92',
+      snapDx: 1.5,
+      snapDy: 1.5,
+    },
+    // 7. Top Energy Conduit Compact Skimming Micro-Spark
+    {
+      rootX: 55,
+      rootY: 29,
+      sparkTipX: 63,
+      sparkTipY: 23,
+      mainBoltPath:
+        'M 55 29 L 57 27 L 59 28 L 61 25 L 63 23',
+      branchBoltPath:
+        'M 59 28 L 57 24 M 61 25 L 64 24',
+      snapDx: 1,
+      snapDy: -1.2,
+    },
+    // 8. Bottom Energy Conduit Compact Micro-Spark
+    {
+      rootX: 65,
+      rootY: 91,
+      sparkTipX: 57,
+      sparkTipY: 97,
+      mainBoltPath:
+        'M 65 91 L 63 93 L 61 92 L 59 95 L 57 97',
+      branchBoltPath:
+        'M 61 92 L 63 96 M 59 95 L 56 96',
+      snapDx: -1,
+      snapDy: 1.5,
+    },
+  ];
+
+  const safeCount = Math.max(1, Math.min(12, Math.round(count)));
+  const sparks: ElectroIdleSparkSpec[] = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    const p = presets[i % presets.length];
+    sparks.push({
+      id: `electro-idle-spark-${i}`,
+      rootX: p.rootX,
+      rootY: p.rootY,
+      sparkTipX: p.sparkTipX,
+      sparkTipY: p.sparkTipY,
+      mainBoltPath: p.mainBoltPath,
+      branchBoltPath: p.branchBoltPath,
+      snapDx: p.snapDx,
+      snapDy: p.snapDy,
+      durationMs: 520 + (i % 4) * 75,
+      delayMs: i * 85,
+      coreHex: '#FFFFFF',
+      plasmaHex: i % 2 === 0 ? '#00F0FF' : '#38BDF8',
+      coronaHex: '#0284C7',
+    });
+  }
+
+  return sparks;
+}
+
+/**
+ * Pure deterministic generator for high-voltage electric pulses coursing
+ * through the internal body and circuit conduits of the Electro Cube.
+ */
+export function buildElectroBodyPulseSpecs(): ElectroBodyPulseSpec[] {
+  return [
+    {
+      id: 'electro-body-pulse-perimeter-top-right',
+      conduitPath:
+        'M 36 31 L 48 30 L 54 32 L 66 30 L 74 31 L 84 31 L 89 36 L 90 48 L 88 56 L 90 70 L 89 84',
+      nodeX: 60,
+      nodeY: 31,
+      dashArray: '14 38',
+      durationMs: 960,
+      delayMs: 0,
+      coreHex: '#FFFFFF',
+      plasmaHex: '#00F0FF',
+    },
+    {
+      id: 'electro-body-pulse-perimeter-bottom-left',
+      conduitPath:
+        'M 84 89 L 72 90 L 64 88 L 52 90 L 36 89 L 31 84 L 30 72 L 32 62 L 30 48 L 31 36',
+      nodeX: 60,
+      nodeY: 89,
+      dashArray: '14 38',
+      durationMs: 920,
+      delayMs: 140,
+      coreHex: '#FFFFFF',
+      plasmaHex: '#38BDF8',
+    },
+    {
+      id: 'electro-body-pulse-diag-a',
+      conduitPath:
+        'M 34 34 L 41 39 L 44 45 L 51 49 L 56 56 L 63 61 L 68 68 L 75 72 L 80 79 L 86 86',
+      nodeX: 44,
+      nodeY: 45,
+      dashArray: '12 34',
+      durationMs: 820,
+      delayMs: 80,
+      coreHex: '#FFFFFF',
+      plasmaHex: '#00F0FF',
+    },
+    {
+      id: 'electro-body-pulse-diag-b',
+      conduitPath:
+        'M 86 34 L 79 40 L 75 46 L 68 51 L 62 58 L 55 63 L 49 70 L 42 75 L 34 86',
+      nodeX: 75,
+      nodeY: 46,
+      dashArray: '12 34',
+      durationMs: 860,
+      delayMs: 260,
+      coreHex: '#FFFFFF',
+      plasmaHex: '#38BDF8',
+    },
+    {
+      id: 'electro-body-pulse-cross-h',
+      conduitPath:
+        'M 31 60 L 38 58 L 45 61 L 53 58 L 60 61 L 68 58 L 76 61 L 83 59 L 89 60',
+      nodeX: 45,
+      nodeY: 61,
+      dashArray: '11 32',
+      durationMs: 780,
+      delayMs: 190,
+      coreHex: '#FFFFFF',
+      plasmaHex: '#00F0FF',
+    },
+    {
+      id: 'electro-body-pulse-cross-v',
+      conduitPath:
+        'M 60 31 L 58 38 L 61 45 L 58 53 L 61 60 L 58 68 L 61 76 L 59 83 L 60 89',
+      nodeX: 61,
+      nodeY: 45,
+      dashArray: '11 32',
+      durationMs: 810,
+      delayMs: 340,
+      coreHex: '#FFFFFF',
+      plasmaHex: '#38BDF8',
+    },
+  ];
+}
+
+/**
+ * Pure deterministic generator for rolling-state high-voltage electric pulses
+ * and multi-branched fractal lightning discharges erupting outward from the Electro Cube.
+ */
+export function buildElectroRollingPulseSpecs(
+  count = 8
+): ElectroRollingPulseSpec[] {
+  const presets: Array<{
+    originX: number;
+    originY: number;
+    pulseWavePath: string;
+    innerWavePath: string;
+    lightningBoltPath: string;
+    forkBranchPath: string;
+    sparkX: number;
+    sparkY: number;
+    burstDx: number;
+    burstDy: number;
+  }> = [
+    // 1. Upper-Left Whipping High-Voltage Lightning & Plasma Pulse Filament
+    {
+      originX: 44,
+      originY: 44,
+      pulseWavePath:
+        'M 44 44 L 38 41 L 34 36 L 28 35 L 23 30 L 17 29 L 12 25',
+      innerWavePath:
+        'M 40 47 L 33 45 L 27 41 L 20 42 L 15 38',
+      lightningBoltPath:
+        'M 44 44 L 39 39 L 36 41 L 31 35 L 27 36 L 22 31 L 17 31 L 12 26',
+      forkBranchPath:
+        'M 31 35 L 29 29 L 24 26 M 22 31 L 16 35 L 11 34',
+      sparkX: 10,
+      sparkY: 25,
+      burstDx: -7,
+      burstDy: -3,
+    },
+    // 2. Upper-Right Whipping High-Voltage Lightning & Plasma Pulse Filament
+    {
+      originX: 96,
+      originY: 44,
+      pulseWavePath:
+        'M 96 44 L 102 41 L 106 36 L 112 35 L 117 30 L 123 29 L 128 25',
+      innerWavePath:
+        'M 100 47 L 107 45 L 113 41 L 120 42 L 125 38',
+      lightningBoltPath:
+        'M 96 44 L 101 39 L 104 41 L 109 35 L 113 36 L 118 31 L 123 31 L 128 26',
+      forkBranchPath:
+        'M 109 35 L 111 29 L 116 26 M 118 31 L 124 35 L 129 34',
+      sparkX: 130,
+      sparkY: 25,
+      burstDx: 7,
+      burstDy: -3,
+    },
+    // 3. Mid-Left High-Voltage Plasma Surge & Multi-Forked Streamer
+    {
+      originX: 38,
+      originY: 68,
+      pulseWavePath:
+        'M 38 68 L 31 65 L 26 68 L 19 64 L 13 67 L 7 64',
+      innerWavePath:
+        'M 37 73 L 30 75 L 23 72 L 16 75 L 10 73',
+      lightningBoltPath:
+        'M 38 68 L 32 66 L 29 70 L 23 66 L 18 69 L 13 65 L 7 67',
+      forkBranchPath:
+        'M 29 70 L 24 76 L 18 78 M 18 69 L 14 61 L 9 59',
+      sparkX: 5,
+      sparkY: 66,
+      burstDx: -9,
+      burstDy: 0,
+    },
+    // 4. Mid-Right High-Voltage Plasma Surge & Multi-Forked Streamer
+    {
+      originX: 102,
+      originY: 72,
+      pulseWavePath:
+        'M 102 72 L 109 75 L 114 72 L 121 76 L 127 73 L 133 76',
+      innerWavePath:
+        'M 103 67 L 110 65 L 117 68 L 124 65 L 130 67',
+      lightningBoltPath:
+        'M 102 72 L 108 74 L 111 70 L 117 74 L 122 71 L 127 75 L 133 73',
+      forkBranchPath:
+        'M 111 70 L 116 64 L 122 62 M 122 71 L 126 79 L 131 81',
+      sparkX: 135,
+      sparkY: 74,
+      burstDx: 9,
+      burstDy: 0,
+    },
+    // 5. Lower-Left High-Voltage Discharge & Grounding Streamer
+    {
+      originX: 44,
+      originY: 96,
+      pulseWavePath:
+        'M 44 96 L 38 99 L 34 104 L 28 105 L 23 110 L 17 112 L 13 116',
+      innerWavePath:
+        'M 48 99 L 43 105 L 37 108 L 32 114 L 26 117',
+      lightningBoltPath:
+        'M 44 96 L 39 101 L 36 99 L 31 105 L 27 104 L 22 109 L 17 110 L 13 115',
+      forkBranchPath:
+        'M 31 105 L 33 112 L 29 116 M 22 109 L 15 106 L 10 108',
+      sparkX: 11,
+      sparkY: 117,
+      burstDx: -7,
+      burstDy: 6,
+    },
+    // 6. Lower-Right High-Voltage Discharge & Grounding Streamer
+    {
+      originX: 96,
+      originY: 96,
+      pulseWavePath:
+        'M 96 96 L 102 99 L 106 104 L 112 105 L 117 110 L 123 112 L 127 116',
+      innerWavePath:
+        'M 92 99 L 97 105 L 103 108 L 108 114 L 114 117',
+      lightningBoltPath:
+        'M 96 96 L 101 101 L 104 99 L 109 105 L 113 104 L 118 109 L 123 110 L 127 115',
+      forkBranchPath:
+        'M 109 105 L 107 112 L 111 116 M 118 109 L 125 106 L 130 108',
+      sparkX: 129,
+      sparkY: 117,
+      burstDx: 7,
+      burstDy: 6,
+    },
+    // 7. Upper Crown Jacob's-Ladder Skimming Plasma Pulse (stays compact below HUD text)
+    {
+      originX: 62,
+      originY: 38,
+      pulseWavePath:
+        'M 52 36 L 58 31 L 64 33 L 71 29 L 78 32 L 85 29',
+      innerWavePath:
+        'M 56 39 L 63 35 L 70 37 L 77 34',
+      lightningBoltPath:
+        'M 62 38 L 65 33 L 69 35 L 74 29 L 79 31 L 84 27',
+      forkBranchPath:
+        'M 69 35 L 66 28 L 62 26 M 74 29 L 79 26',
+      sparkX: 86,
+      sparkY: 26,
+      burstDx: 3,
+      burstDy: -3,
+    },
+    // 8. Lower Base High-Voltage Plasma Arc & Forked Tendrils
+    {
+      originX: 70,
+      originY: 102,
+      pulseWavePath:
+        'M 54 104 L 61 109 L 68 107 L 75 112 L 82 109 L 88 113',
+      innerWavePath:
+        'M 58 101 L 66 105 L 74 103 L 82 106',
+      lightningBoltPath:
+        'M 70 102 L 67 107 L 72 110 L 68 115 L 73 119 L 69 123',
+      forkBranchPath:
+        'M 72 110 L 79 113 L 84 112 M 68 115 L 61 118 L 57 117',
+      sparkX: 68,
+      sparkY: 125,
+      burstDx: -2,
+      burstDy: 6,
+    },
+  ];
+
+  const safeCount = Math.max(1, Math.min(12, Math.round(count)));
+  const pulses: ElectroRollingPulseSpec[] = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    const p = presets[i % presets.length];
+    pulses.push({
+      id: `electro-rolling-pulse-${i}`,
+      originX: p.originX,
+      originY: p.originY,
+      pulseWavePath: p.pulseWavePath,
+      innerWavePath: p.innerWavePath,
+      lightningBoltPath: p.lightningBoltPath,
+      forkBranchPath: p.forkBranchPath,
+      sparkX: p.sparkX,
+      sparkY: p.sparkY,
+      burstDx: p.burstDx,
+      burstDy: p.burstDy,
+      durationMs: 440 + (i % 3) * 65,
+      delayMs: i * 58,
+      coreHex: '#FFFFFF',
+      plasmaHex: i % 2 === 0 ? '#00F0FF' : '#38BDF8',
+      coronaHex: '#0284C7',
+    });
+  }
+
+  return pulses;
+}
+
+export interface ElectroCircularWaveRingSpec {
+  id: string;
+  centerX: number;
+  centerY: number;
+  baseRadius: number;
+  /** 36-segment closed 360-degree jagged circular electric wave path */
+  waveRingPath: string;
+  /** Counter-phased harmonic circular plasma filament path */
+  harmonicRingPath: string;
+  /** Radial micro-sparks snapping off the expanding circular wavefront */
+  radialSparksPath: string;
+  durationMs: number;
+  delayMs: number;
+  coreHex: string;
+  plasmaHex: string;
+  coronaHex: string;
+}
+
+/**
+ * Generates staggered concentric 360-degree realistic circular electric pulse waves
+ * that expand outward from the rolling Electro Cube in a wave-like pattern.
+ */
+export function buildElectroCircularWaveRings(
+  count = 3
+): ElectroCircularWaveRingSpec[] {
+  const safeCount = Math.max(1, Math.min(6, Math.round(count)));
+  const cx = 70;
+  const cy = 70;
+  const rings: ElectroCircularWaveRingSpec[] = [];
+
+  for (let rIdx = 0; rIdx < safeCount; rIdx++) {
+    // Larger launch radius outside the cube perimeter so expanding circular electric waves are more prominent
+    const baseRadius = 43;
+    const segments = 48;
+    const mainPts: string[] = [];
+    const harmPts: string[] = [];
+    const sparkSegments: string[] = [];
+
+    for (let s = 0; s < segments; s++) {
+      const theta = (s / segments) * Math.PI * 2;
+      // Clean 8-crest wave-like sinusoidal undulation + crisp lightning micro-kink
+      const waveUndulation = Math.sin(theta * 8 + rIdx * 2.09) * 1.65;
+      const crinkleA =
+        waveUndulation +
+        Math.sin(theta * 16 + rIdx * 1.7) * 0.82 +
+        Math.cos(theta * 24 - rIdx * 1.3) * 0.48;
+      const crinkleB =
+        -waveUndulation * 0.65 +
+        Math.cos(theta * 16 - rIdx * 2.1) * 0.65;
+
+      const radA = baseRadius + crinkleA;
+      const radB = baseRadius * 0.96 + crinkleB;
+
+      const xA = Number((cx + Math.cos(theta) * radA).toFixed(2));
+      const yA = Number((cy + Math.sin(theta) * radA).toFixed(2));
+      const xB = Number((cx + Math.cos(theta) * radB).toFixed(2));
+      const yB = Number((cy + Math.sin(theta) * radB).toFixed(2));
+
+      mainPts.push(`${s === 0 ? 'M' : 'L'} ${xA} ${yA}`);
+      harmPts.push(`${s === 0 ? 'M' : 'L'} ${xB} ${yB}`);
+
+      // Emit 6 clean radial electric leaders at the wave crests
+      if (s % 8 === (rIdx * 2) % 8) {
+        const midR = radA + 2.6;
+        const tipR = radA + 5.2;
+        const mTheta = theta + 0.04;
+        const tTheta = theta - 0.03;
+        const mx = Number((cx + Math.cos(mTheta) * midR).toFixed(2));
+        const my = Number((cy + Math.sin(mTheta) * midR).toFixed(2));
+        const tx = Number((cx + Math.cos(tTheta) * tipR).toFixed(2));
+        const ty = Number((cy + Math.sin(tTheta) * tipR).toFixed(2));
+        sparkSegments.push(`M ${xA} ${yA} L ${mx} ${my} L ${tx} ${ty}`);
+      }
+    }
+
+    mainPts.push('Z');
+    harmPts.push('Z');
+
+    rings.push({
+      id: `electro-circular-wave-${rIdx}`,
+      centerX: cx,
+      centerY: cy,
+      baseRadius,
+      waveRingPath: mainPts.join(' '),
+      harmonicRingPath: harmPts.join(' '),
+      radialSparksPath: sparkSegments.join(' '),
+      durationMs: 585,
+      delayMs: rIdx * 195,
+      coreHex: '#FFFFFF',
+      plasmaHex: rIdx % 2 === 0 ? '#00F0FF' : '#38BDF8',
+      coronaHex: '#0284C7',
+    });
+  }
+
+  return rings;
+}
+
+// ============================================================================
+// TESSERACT CUBE: 4D-WARP ROLLING STATE & 6-FACE INSIDE-OUT CSS 3D TRANSFORMS
+// ============================================================================
+
+export type TesseractWarpFaceId =
+  | 'front'
+  | 'back'
+  | 'right'
+  | 'left'
+  | 'top'
+  | 'bottom';
+
+export type TesseractWarpPhase =
+  | 'idle_3d'
+  | 'warping_4d'
+  | 'realigning_4d'
+  | 'inactive';
+
+export interface TesseractWarpFaceSpec {
+  id: string;
+  faceId: TesseractWarpFaceId;
+  faceValue: number;
+  axis: 'X' | 'Y' | 'Z';
+  polarity: 1 | -1;
+  dimensionLabel: string;
+  /** Standard 3D cube face resting CSS transform */
+  restTransform: string;
+  /** Continuous idle 4D hypercube precession & dimensional breathing CSS transform */
+  idlePrecessTransform: string;
+  /** 4D inside-out eversion transform where the outer face inverts across the w-axis through the hypercube core */
+  insideOutTransform: string;
+  /** 4D orthogonal hyperplane shift transform where the face projects across dimensions */
+  dimensionalShiftTransform: string;
+  /** Staggered phase offset (ms) so opposite hypercube face pairs invert sequentially */
+  warpDelayMs: number;
+  /** Full 4D-warp cycle duration (ms) */
+  warpDurationMs: number;
+  primaryBorderHex: string;
+  secondaryGlowHex: string;
+  /** Normalized [x, y] coordinates in 0..100 face space for this face's pip value (1..6) */
+  pipCoords: Array<[number, number]>;
+}
+
+export interface TesseractIdleEnergyPulseSpec {
+  id: string;
+  path: string;
+  dashArray: string;
+  durationMs: number;
+  delayMs: number;
+  strokeHex: string;
+}
+
+/**
+ * Generates deterministic 4D hypercube conduit pulse paths for the Tesseract Cube's
+ * transparent idle animation (traveling dimensional light packets along the 8 diagonal
+ * 4D vertex struts and nested inner hypercube chambers).
+ */
+export function buildTesseractIdleEnergyPulses(): TesseractIdleEnergyPulseSpec[] {
+  return [
+    {
+      id: 'tesseract-idle-pulse-strut-tl-br',
+      path: 'M 12 12 L 28 28 L 38 38 L 62 62 L 72 72 L 88 88',
+      dashArray: '14 42',
+      durationMs: 1850,
+      delayMs: 0,
+      strokeHex: '#67E8F9',
+    },
+    {
+      id: 'tesseract-idle-pulse-strut-tr-bl',
+      path: 'M 88 12 L 72 28 L 62 38 L 38 62 L 28 72 L 12 88',
+      dashArray: '14 42',
+      durationMs: 1850,
+      delayMs: 420,
+      strokeHex: '#E879F9',
+    },
+    {
+      id: 'tesseract-idle-pulse-inner-chamber',
+      path: 'M 28 28 L 72 28 L 72 72 L 28 72 Z',
+      dashArray: '22 56',
+      durationMs: 2200,
+      delayMs: 180,
+      strokeHex: '#67E8F9',
+    },
+    {
+      id: 'tesseract-idle-pulse-deep-core',
+      path: 'M 38 38 L 62 38 L 62 62 L 38 62 Z',
+      dashArray: '16 40',
+      durationMs: 1650,
+      delayMs: 310,
+      strokeHex: '#F0ABFC',
+    },
+  ];
+}
+
+/**
+ * Computes the current 4D dimensional phase of the Tesseract Cube.
+ */
+export function computeTesseractWarpPhase(params: {
+  diceStyle: DiceStyle;
+  isRolling: boolean;
+  isLanding?: boolean;
+}): TesseractWarpPhase {
+  const { diceStyle, isRolling, isLanding = false } = params;
+  if (diceStyle !== 'tesseract_cube') {
+    return 'inactive';
+  }
+  if (isRolling) {
+    return 'warping_4d';
+  }
+  if (isLanding) {
+    return 'realigning_4d';
+  }
+  return 'idle_3d';
+}
+
+const TESSERACT_PIP_LAYOUTS: Record<number, Array<[number, number]>> = {
+  1: [[50, 50]],
+  2: [
+    [29, 29],
+    [71, 71],
+  ],
+  3: [
+    [27, 27],
+    [50, 50],
+    [73, 73],
+  ],
+  4: [
+    [29, 29],
+    [71, 29],
+    [29, 71],
+    [71, 71],
+  ],
+  5: [
+    [27, 27],
+    [73, 27],
+    [50, 50],
+    [27, 73],
+    [73, 73],
+  ],
+  6: [
+    [29, 25],
+    [71, 25],
+    [29, 50],
+    [71, 50],
+    [29, 75],
+    [71, 75],
+  ],
+};
+
+/**
+ * Builds deterministic CSS 3D transform specifications for all 6 faces of the Tesseract Cube
+ * ('front', 'back', 'right', 'left', 'top', 'bottom') so that during the rolling state,
+ * the 6 faces momentarily flip inside-out through the 4D hypercube core and shift dimensions
+ * via CSS 3D transform transitions while preserving opposite-faces-sum-to-7 topology.
+ */
+export function buildTesseractWarpFaceSpecs(
+  activeFrontValue = 6,
+  cubeHalfExtentPx = 22
+): TesseractWarpFaceSpec[] {
+  const frontVal =
+    activeFrontValue >= 1 && activeFrontValue <= 6
+      ? Math.round(activeFrontValue)
+      : 6;
+  const backVal = 7 - frontVal;
+
+  // Pick orthogonal right/top values that never collide with front/back and sum to 7 with their opposites
+  const remaining = [1, 2, 3, 4, 5, 6].filter(
+    (v) => v !== frontVal && v !== backVal
+  );
+  const rightVal = remaining[0] ?? 3;
+  const leftVal = 7 - rightVal;
+  const topRemaining = remaining.filter((v) => v !== rightVal && v !== leftVal);
+  const topVal = topRemaining[0] ?? 2;
+  const bottomVal = 7 - topVal;
+
+  const z = Math.max(12, Math.min(48, Math.round(cubeHalfExtentPx)));
+  const idleZ = Math.max(10, Math.round(z * 0.78));
+  const innerZ = Math.round(z * 0.48);
+  const shiftZ = Math.round(z * 1.28);
+
+  const faceConfigs: Array<{
+    faceId: TesseractWarpFaceId;
+    faceValue: number;
+    axis: 'X' | 'Y' | 'Z';
+    polarity: 1 | -1;
+    dimensionLabel: string;
+    baseRotation: string;
+    idleRotation: string;
+    insideOutRotation: string;
+    shiftRotation: string;
+    warpDelayMs: number;
+    primaryBorderHex: string;
+    secondaryGlowHex: string;
+  }> = [
+    {
+      faceId: 'front',
+      faceValue: frontVal,
+      axis: 'Z',
+      polarity: 1,
+      dimensionLabel: '+W/+Z',
+      baseRotation: 'rotateX(0deg) rotateY(0deg)',
+      idleRotation: 'rotateX(6deg) rotateY(-8deg) rotateZ(12deg)',
+      insideOutRotation: 'rotateX(180deg) rotateY(0deg) rotateZ(45deg)',
+      shiftRotation: 'rotateX(24deg) rotateY(-28deg) rotateZ(90deg)',
+      warpDelayMs: 0,
+      primaryBorderHex: '#67E8F9',
+      secondaryGlowHex: '#C084FC',
+    },
+    {
+      faceId: 'back',
+      faceValue: backVal,
+      axis: 'Z',
+      polarity: -1,
+      dimensionLabel: '-W/-Z',
+      baseRotation: 'rotateX(0deg) rotateY(180deg)',
+      idleRotation: 'rotateX(-6deg) rotateY(188deg) rotateZ(-12deg)',
+      insideOutRotation: 'rotateX(180deg) rotateY(180deg) rotateZ(-45deg)',
+      shiftRotation: 'rotateX(-24deg) rotateY(152deg) rotateZ(-90deg)',
+      warpDelayMs: 55,
+      primaryBorderHex: '#E879F9',
+      secondaryGlowHex: '#38BDF8',
+    },
+    {
+      faceId: 'right',
+      faceValue: rightVal,
+      axis: 'X',
+      polarity: 1,
+      dimensionLabel: '+W/+X',
+      baseRotation: 'rotateX(0deg) rotateY(90deg)',
+      idleRotation: 'rotateX(8deg) rotateY(82deg) rotateZ(12deg)',
+      insideOutRotation: 'rotateX(0deg) rotateY(-90deg) rotateZ(45deg)',
+      shiftRotation: 'rotateX(28deg) rotateY(118deg) rotateZ(90deg)',
+      warpDelayMs: 110,
+      primaryBorderHex: '#38BDF8',
+      secondaryGlowHex: '#E879F9',
+    },
+    {
+      faceId: 'left',
+      faceValue: leftVal,
+      axis: 'X',
+      polarity: -1,
+      dimensionLabel: '-W/-X',
+      baseRotation: 'rotateX(0deg) rotateY(-90deg)',
+      idleRotation: 'rotateX(-8deg) rotateY(-82deg) rotateZ(-12deg)',
+      insideOutRotation: 'rotateX(0deg) rotateY(90deg) rotateZ(-45deg)',
+      shiftRotation: 'rotateX(-28deg) rotateY(-118deg) rotateZ(-90deg)',
+      warpDelayMs: 165,
+      primaryBorderHex: '#C084FC',
+      secondaryGlowHex: '#67E8F9',
+    },
+    {
+      faceId: 'top',
+      faceValue: topVal,
+      axis: 'Y',
+      polarity: 1,
+      dimensionLabel: '+W/+Y',
+      baseRotation: 'rotateX(90deg) rotateY(0deg)',
+      idleRotation: 'rotateX(82deg) rotateY(8deg) rotateZ(12deg)',
+      insideOutRotation: 'rotateX(-90deg) rotateY(180deg) rotateZ(45deg)',
+      shiftRotation: 'rotateX(118deg) rotateY(24deg) rotateZ(90deg)',
+      warpDelayMs: 220,
+      primaryBorderHex: '#67E8F9',
+      secondaryGlowHex: '#F472B6',
+    },
+    {
+      faceId: 'bottom',
+      faceValue: bottomVal,
+      axis: 'Y',
+      polarity: -1,
+      dimensionLabel: '-W/-Y',
+      baseRotation: 'rotateX(-90deg) rotateY(0deg)',
+      idleRotation: 'rotateX(-82deg) rotateY(-8deg) rotateZ(-12deg)',
+      insideOutRotation: 'rotateX(90deg) rotateY(180deg) rotateZ(-45deg)',
+      shiftRotation: 'rotateX(-118deg) rotateY(-24deg) rotateZ(-90deg)',
+      warpDelayMs: 275,
+      primaryBorderHex: '#E879F9',
+      secondaryGlowHex: '#67E8F9',
+    },
+  ];
+
+  return faceConfigs.map((cfg) => ({
+    id: `tesseract-warp-face-${cfg.faceId}`,
+    faceId: cfg.faceId,
+    faceValue: cfg.faceValue,
+    axis: cfg.axis,
+    polarity: cfg.polarity,
+    dimensionLabel: cfg.dimensionLabel,
+    restTransform: `${cfg.baseRotation} translateZ(${z}px) scale3d(1, 1, 1)`,
+    idlePrecessTransform: `${cfg.idleRotation} translateZ(${idleZ}px) scale3d(0.76, 0.76, 0.76)`,
+    insideOutTransform: `${cfg.insideOutRotation} translateZ(-${innerZ}px) scale3d(-0.56, 0.56, 0.56)`,
+    dimensionalShiftTransform: `${cfg.shiftRotation} translateZ(${shiftZ}px) scale3d(1.12, 1.12, 1.12)`,
+    warpDelayMs: cfg.warpDelayMs,
+    warpDurationMs: 620,
+    primaryBorderHex: cfg.primaryBorderHex,
+    secondaryGlowHex: cfg.secondaryGlowHex,
+    pipCoords: TESSERACT_PIP_LAYOUTS[cfg.faceValue] ?? TESSERACT_PIP_LAYOUTS[6],
+  }));
+}
+
+// ============================================================================
+// COSMO CUBE: IDLE CELESTIAL GALAXY ORBITS & ROLLING SUPERNOVA VORTEX SPECS
+// ============================================================================
+
+export interface CosmoIdleOrbitSpec {
+  id: string;
+  rx: number;
+  ry: number;
+  tiltDeg: number;
+  strokeHex: string;
+  dashArray: string;
+  planetX: number;
+  planetY: number;
+  planetRadius: number;
+  planetHex: string;
+  moonX: number;
+  moonY: number;
+  moonHex: string;
+  durationMs: number;
+  direction: 'cw' | 'ccw';
+}
+
+export interface CosmoIdleStarGlintSpec {
+  id: string;
+  cx: number;
+  cy: number;
+  diamondPath: string;
+  colorHex: string;
+  durationMs: number;
+  delayMs: number;
+}
+
+export interface CosmoIdleCelestialSpec {
+  galaxySpiralArms: ReadonlyArray<{
+    id: string;
+    armPath: string;
+    glowHex: string;
+    coreHex: string;
+  }>;
+  orbits: ReadonlyArray<CosmoIdleOrbitSpec>;
+  starGlints: ReadonlyArray<CosmoIdleStarGlintSpec>;
+}
+
+/**
+ * Generates the idle-state celestial animation specs for the Cosmo Cube
+ * ("A Universe In Your Hands"): a 4-arm swirling spiral galaxy vortex,
+ * tilted golden-amber & rose-magenta elliptical planetary orbits with
+ * revolving planets/moons, and twinkling 4-point diamond starlight glints.
+ */
+export function buildCosmoIdleCelestialSpecs(): CosmoIdleCelestialSpec {
+  const cx = 50;
+  const cy = 50;
+  const armColors: ReadonlyArray<readonly [string, string]> = [
+    ['rgba(244, 114, 182, 0.65)', '#F5D0FE'],
+    ['rgba(192, 132, 252, 0.68)', '#E9D5FF'],
+    ['rgba(56, 189, 248, 0.64)', '#BAE6FD'],
+    ['rgba(251, 191, 36, 0.62)', '#FEF08A'],
+  ];
+
+  const galaxySpiralArms = armColors.map(([glowHex, coreHex], idx) => {
+    const startAngle = (idx * Math.PI) / 2;
+    const pts: string[] = [];
+    const steps = 18;
+    for (let s = 0; s <= steps; s++) {
+      const prog = s / steps;
+      const theta = startAngle + prog * Math.PI * 1.45;
+      const rad = 3.5 + prog * 26.5;
+      const x = Number((cx + Math.cos(theta) * rad).toFixed(2));
+      const y = Number((cy + Math.sin(theta) * rad * 0.86).toFixed(2));
+      pts.push(`${s === 0 ? 'M' : 'L'} ${x} ${y}`);
+    }
+    return {
+      id: `cosmo-idle-spiral-arm-${idx}`,
+      armPath: pts.join(' '),
+      glowHex,
+      coreHex,
+    };
+  });
+
+  const orbits: CosmoIdleOrbitSpec[] = [
+    {
+      id: 'cosmo-idle-orbit-gold',
+      rx: 46,
+      ry: 15.5,
+      tiltDeg: -30,
+      strokeHex: '#FBBF24',
+      dashArray: '16 7',
+      planetX: 96,
+      planetY: 50,
+      planetRadius: 2.3,
+      planetHex: '#FDE68A',
+      moonX: 4,
+      moonY: 50,
+      moonHex: '#38BDF8',
+      durationMs: 4600,
+      direction: 'cw',
+    },
+    {
+      id: 'cosmo-idle-orbit-rose',
+      rx: 43,
+      ry: 18.5,
+      tiltDeg: 26,
+      strokeHex: '#F472B6',
+      dashArray: '12 8',
+      planetX: 7,
+      planetY: 50,
+      planetRadius: 2.0,
+      planetHex: '#F5D0FE',
+      moonX: 93,
+      moonY: 50,
+      moonHex: '#C084FC',
+      durationMs: 5400,
+      direction: 'ccw',
+    },
+  ];
+
+  const starCoords: ReadonlyArray<readonly [number, number, number, string]> = [
+    [12, 14, 3.2, '#FDE68A'],
+    [88, 15, 2.9, '#BAE6FD'],
+    [11, 86, 3.0, '#F5D0FE'],
+    [89, 86, 3.3, '#FDE68A'],
+    [50, 5, 2.7, '#FFFFFF'],
+    [50, 95, 2.8, '#38BDF8'],
+  ];
+
+  const starGlints: CosmoIdleStarGlintSpec[] = starCoords.map(
+    ([sx, sy, size, colorHex], idx) => {
+      const inner = Number((size * 0.34).toFixed(2));
+      const diamondPath = [
+        `M ${sx} ${Number((sy - size).toFixed(2))}`,
+        `L ${Number((sx + inner).toFixed(2))} ${Number((sy - inner).toFixed(2))}`,
+        `L ${Number((sx + size).toFixed(2))} ${sy}`,
+        `L ${Number((sx + inner).toFixed(2))} ${Number((sy + inner).toFixed(2))}`,
+        `L ${sx} ${Number((sy + size).toFixed(2))}`,
+        `L ${Number((sx - inner).toFixed(2))} ${Number((sy + inner).toFixed(2))}`,
+        `L ${Number((sx - size).toFixed(2))} ${sy}`,
+        `L ${Number((sx - inner).toFixed(2))} ${Number((sy - inner).toFixed(2))}`,
+        'Z',
+      ].join(' ');
+      return {
+        id: `cosmo-idle-star-${idx}`,
+        cx: sx,
+        cy: sy,
+        diamondPath,
+        colorHex,
+        durationMs: 1800 + (idx % 3) * 320,
+        delayMs: idx * 210,
+      };
+    }
+  );
+
+  return {
+    galaxySpiralArms,
+    orbits,
+    starGlints,
+  };
+}
+
+export interface CosmoRollingSpiralArmSpec {
+  id: string;
+  spiralArmPath: string;
+  starlightTrailPath: string;
+  coreHex: string;
+  nebulaHex: string;
+  tipX: number;
+  tipY: number;
+  delayMs: number;
+}
+
+export interface CosmoRollingCometSpec {
+  id: string;
+  cometTailPath: string;
+  headX: number;
+  headY: number;
+  headHex: string;
+  tailHex: string;
+  durationMs: number;
+  delayMs: number;
+}
+
+export interface CosmoRollingSupernovaSpec {
+  spiralArms: ReadonlyArray<CosmoRollingSpiralArmSpec>;
+  comets: ReadonlyArray<CosmoRollingCometSpec>;
+  accretionRingRadius: number;
+}
+
+/**
+ * Generates the unique rolling-state Cosmic Supernova & Spiral Galaxy Vortex
+ * specs for the Cosmo Cube: 4 expanding logarithmic spiral galaxy arms
+ * whipping outward around the cube perimeter, 3 blazing shooting-star comet
+ * arcs streaking around the cube, and a pulsing supernova accretion ring.
+ */
+export function buildCosmoRollingSupernovaSpecs(): CosmoRollingSupernovaSpec {
+  const cx = 60;
+  const cy = 60;
+  const palette: ReadonlyArray<readonly [string, string]> = [
+    ['#FFFFFF', '#F472B6'],
+    ['#FEF08A', '#FBBF24'],
+    ['#FFFFFF', '#38BDF8'],
+    ['#F5D0FE', '#C084FC'],
+  ];
+
+  const spiralArms: CosmoRollingSpiralArmSpec[] = palette.map(
+    ([coreHex, nebulaHex], idx) => {
+      const startAngle = (idx * Math.PI) / 2;
+      const mainPts: string[] = [];
+      const trailPts: string[] = [];
+      const steps = 18;
+      let tipX = cx;
+      let tipY = cy;
+
+      for (let s = 0; s <= steps; s++) {
+        const prog = s / steps;
+        const theta = startAngle + prog * Math.PI * 0.92;
+        const rad = 32 + prog * 21;
+        const x = Number((cx + Math.cos(theta) * rad).toFixed(2));
+        const y = Number((cy + Math.sin(theta) * rad).toFixed(2));
+        const tx = Number((cx + Math.cos(theta - 0.14) * (rad * 0.95)).toFixed(2));
+        const ty = Number((cy + Math.sin(theta - 0.14) * (rad * 0.95)).toFixed(2));
+        mainPts.push(`${s === 0 ? 'M' : 'L'} ${x} ${y}`);
+        trailPts.push(`${s === 0 ? 'M' : 'L'} ${tx} ${ty}`);
+        if (s === steps) {
+          tipX = x;
+          tipY = y;
+        }
+      }
+
+      return {
+        id: `cosmo-rolling-spiral-${idx}`,
+        spiralArmPath: mainPts.join(' '),
+        starlightTrailPath: trailPts.join(' '),
+        coreHex,
+        nebulaHex,
+        tipX,
+        tipY,
+        delayMs: idx * 95,
+      };
+    }
+  );
+
+  const cometConfigs: ReadonlyArray<
+    readonly [number, number, string, string, number]
+  > = [
+    [0.15, 48, '#FEF08A', '#F472B6', 520],
+    [2.25, 50, '#FFFFFF', '#38BDF8', 560],
+    [4.35, 46, '#F5D0FE', '#C084FC', 490],
+  ];
+
+  const comets: CosmoRollingCometSpec[] = cometConfigs.map(
+    ([startAngle, radius, headHex, tailHex, durationMs], idx) => {
+      const arcSteps = 14;
+      const arcSpan = Math.PI * 0.55;
+      const pts: string[] = [];
+      let headX = cx;
+      let headY = cy;
+
+      for (let s = 0; s <= arcSteps; s++) {
+        const prog = s / arcSteps;
+        const theta = startAngle + prog * arcSpan;
+        const r = radius - (1 - prog) * 3;
+        const x = Number((cx + Math.cos(theta) * r).toFixed(2));
+        const y = Number((cy + Math.sin(theta) * r).toFixed(2));
+        pts.push(`${s === 0 ? 'M' : 'L'} ${x} ${y}`);
+        if (s === arcSteps) {
+          headX = x;
+          headY = y;
+        }
+      }
+
+      return {
+        id: `cosmo-rolling-comet-${idx}`,
+        cometTailPath: pts.join(' '),
+        headX,
+        headY,
+        headHex,
+        tailHex,
+        durationMs,
+        delayMs: idx * 140,
+      };
+    }
+  );
+
+  return {
+    spiralArms,
+    comets,
+    accretionRingRadius: 48,
+  };
+}
+
+
+

@@ -40,12 +40,23 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
   onCycleDiceStyle,
   onRoll,
 }) => {
+  const [interactionTrigger, setInteractionTrigger] = React.useState(0);
   const colorMeta = COLOR_META[activeColor] || COLOR_META.red;
   const styleOpt = getDiceStyleOption(diceStyle);
   const rolledSix = !isRolling && value === 6;
 
+  const notifyInteraction = () => {
+    if (diceStyle === 'lava_cube') {
+      setInteractionTrigger((c) => c + 1);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-1.5 sm:gap-2 w-full">
+    <div
+      className="flex flex-col gap-1.5 sm:gap-2 w-full"
+      onPointerDown={notifyInteraction}
+      onTouchStart={notifyInteraction}
+    >
       {/* Player Tag & Style Switcher Bar */}
       <div className="flex items-center justify-between w-full px-0.5 gap-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -92,6 +103,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
         <div
           className="relative shrink-0 flex items-center justify-center p-1"
           data-testid="hud-2d-die-container"
+          onPointerEnter={notifyInteraction}
         >
           <ThreeDimensionalDie
             value={value}
@@ -102,6 +114,7 @@ export const DiceRoller: React.FC<DiceRollerProps> = ({
             size={60}
             reducedMotion={reducedMotion}
             interactive={true}
+            interactionTrigger={interactionTrigger}
             onClick={() => {
               if (canRoll && !isRolling) {
                 onRoll();

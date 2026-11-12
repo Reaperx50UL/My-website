@@ -1025,20 +1025,222 @@
 
 @keyframes lavaCrackPulse {
   0%, 100% {
-    opacity: 0.68;
-    filter: brightness(0.92);
+    opacity: 0.78;
+    filter: brightness(0.96) saturate(1.1);
   }
   28% {
     opacity: 1;
-    filter: brightness(1.35);
+    filter: brightness(1.42) saturate(1.3);
   }
   46% {
-    opacity: 0.78;
-    filter: brightness(1.0);
+    opacity: 0.84;
+    filter: brightness(1.06) saturate(1.15);
   }
   70% {
+    opacity: 1;
+    filter: brightness(1.32) saturate(1.25);
+  }
+}
+
+@keyframes lavaFlowStream {
+  0% {
+    stroke-dashoffset: 36;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes lavaFlowStreamReverse {
+  0% {
+    stroke-dashoffset: -36;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Secondary Cooling Idle State (>10s without roll/interaction): Dimmed, Slow Smoldering Pulse */
+@keyframes lavaCoolingAuraPulse {
+  0%, 100% {
+    transform: scale(0.84);
+    opacity: 0.18;
+  }
+  50% {
+    transform: scale(0.96);
+    opacity: 0.42;
+  }
+}
+
+@keyframes lavaCoolingCrackPulse {
+  0%, 100% {
+    opacity: 0.36;
+    filter: brightness(0.58) saturate(0.85);
+  }
+  50% {
+    opacity: 0.62;
+    filter: brightness(0.84) saturate(1.02);
+  }
+}
+
+@keyframes lavaCoolingFlowStream {
+  0% {
+    stroke-dashoffset: 36;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes lavaBubblePop {
+  0%, 100% {
+    transform: scale(0.75);
+    opacity: 0.55;
+  }
+  45% {
+    transform: scale(1.38);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(0.5);
+    opacity: 0.25;
+  }
+}
+
+@keyframes lavaSpitErupt {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(0.32, 0.32);
+    opacity: 0;
+    filter: brightness(1.45);
+  }
+  18% {
+    transform: translate(
+        calc(var(--spit-dx, 14px) * 0.36),
+        calc(var(--spit-dy, -12px) * 0.44 - 3px)
+      )
+      rotate(calc(var(--spit-rot, 22deg) * 0.35))
+      scale(1.14, 0.88);
+    opacity: 1;
+    filter: brightness(1.3);
+  }
+  52% {
+    transform: translate(
+        calc(var(--spit-dx, 14px) * 0.74),
+        calc(var(--spit-dy, -12px) * 0.76 - 1px)
+      )
+      rotate(calc(var(--spit-rot, 22deg) * 0.72))
+      scale(0.96, 1.08);
     opacity: 0.98;
-    filter: brightness(1.25);
+    filter: brightness(1.12);
+  }
+  82% {
+    transform: translate(
+        calc(var(--spit-dx, 14px) * 0.94),
+        calc(var(--spit-dy, -12px) * 0.92 + 5px)
+      )
+      rotate(var(--spit-rot, 22deg))
+      scale(1.02, 0.94);
+    opacity: 0.82;
+    filter: brightness(0.95);
+  }
+  100% {
+    transform: translate(
+        var(--spit-dx, 14px),
+        calc(var(--spit-dy, -12px) + 10px)
+      )
+      rotate(calc(var(--spit-rot, 22deg) * 1.15))
+      scale(0.65, 0.65);
+    opacity: 0;
+    filter: brightness(0.75);
+  }
+}
+
+
+/* Periodic Volcanic Steam Vent Puffs Rising from Lava Cube Cracks During Spitting State */
+@keyframes lavaSteamVentRise {
+  0% {
+    transform: translate(0px, 2px) scale(0.35, 0.42);
+    opacity: 0;
+  }
+  20% {
+    transform: translate(
+        calc(var(--steam-dx, -6px) * 0.25),
+        calc(var(--steam-dy, -26px) * 0.22)
+      )
+      scale(0.78, 0.72);
+    opacity: 0.62;
+  }
+  52% {
+    transform: translate(
+        calc(var(--steam-dx, -6px) * 0.65),
+        calc(var(--steam-dy, -26px) * 0.56)
+      )
+      scale(1.22, 1.08);
+    opacity: 0.48;
+  }
+  82% {
+    transform: translate(
+        calc(var(--steam-dx, -6px) * 0.92),
+        calc(var(--steam-dy, -26px) * 0.85)
+      )
+      scale(1.58, 1.38);
+    opacity: 0.22;
+  }
+  100% {
+    transform: translate(
+        var(--steam-dx, -6px),
+        var(--steam-dy, -26px)
+      )
+      scale(1.85, 1.56);
+    opacity: 0;
+  }
+}
+
+/* Board Surface Lava Drop Splash When Lava Cube Lands After a Roll */
+@keyframes lavaBoardPuddleSplash {
+  0% {
+    transform: scale(0.18);
+    opacity: 0;
+    filter: brightness(1.5);
+  }
+  18% {
+    transform: scale(1.08);
+    opacity: 1;
+    filter: brightness(1.35);
+  }
+  52% {
+    transform: scale(1.22);
+    opacity: 0.92;
+    filter: brightness(1.1);
+  }
+  80% {
+    transform: scale(1.28);
+    opacity: 0.48;
+    filter: brightness(0.72);
+  }
+  100% {
+    transform: scale(1.32);
+    opacity: 0;
+    filter: brightness(0.5);
+  }
+}
+
+@keyframes lavaDropSplatterOut {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  22% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  62% {
+    transform: scale(1.2);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
   }
 }
 
@@ -1128,6 +1330,150 @@
   }
 }
 
+/* Continuous High-Voltage Electric Current Pulses Coursing Through the Entire Body of the Electro Cube */
+@keyframes electroBodyPulseStream {
+  0% {
+    stroke-dashoffset: 88;
+    opacity: 0.72;
+    filter: brightness(1.05);
+  }
+  30% {
+    opacity: 1;
+    filter: brightness(1.52);
+  }
+  65% {
+    opacity: 0.88;
+    filter: brightness(1.25);
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.72;
+    filter: brightness(1.05);
+  }
+}
+
+/* Idle State Realistic Tesla Electric Sparks Snapping Out of the Cube Body */
+@keyframes electroIdleSparkSnap {
+  0% {
+    transform: translate(0px, 0px) scale(0.65);
+    opacity: 0;
+    filter: brightness(1.1);
+  }
+  14% {
+    transform: translate(
+        calc(var(--spark-dx, 4px) * 0.45),
+        calc(var(--spark-dy, -3px) * 0.45)
+      )
+      scale(1.08);
+    opacity: 1;
+    filter: brightness(1.65);
+  }
+  28% {
+    transform: translate(
+        calc(var(--spark-dx, 4px) * 0.72),
+        calc(var(--spark-dy, -3px) * 0.72)
+      )
+      scale(0.94);
+    opacity: 0.28;
+    filter: brightness(1.15);
+  }
+  44% {
+    transform: translate(var(--spark-dx, 4px), var(--spark-dy, -3px))
+      scale(1.14);
+    opacity: 0.96;
+    filter: brightness(1.55);
+  }
+  68% {
+    transform: translate(
+        calc(var(--spark-dx, 4px) * 1.15),
+        calc(var(--spark-dy, -3px) * 1.15)
+      )
+      scale(0.98);
+    opacity: 0.42;
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: translate(
+        calc(var(--spark-dx, 4px) * 1.25),
+        calc(var(--spark-dy, -3px) * 1.25)
+      )
+      scale(0.75);
+    opacity: 0;
+    filter: brightness(0.9);
+  }
+}
+
+/* Rolling State High-Voltage Electric Pulses & Lightning Discharges Erupting Out of the Cube */
+@keyframes electroRollPulseErupt {
+  0% {
+    transform: translate(0px, 0px) scale(0.45);
+    opacity: 0;
+    filter: brightness(1.6);
+  }
+  20% {
+    transform: translate(
+        calc(var(--electro-dx, 10px) * 0.42),
+        calc(var(--electro-dy, -5px) * 0.42)
+      )
+      scale(1.06);
+    opacity: 1;
+    filter: brightness(1.55);
+  }
+  42% {
+    transform: translate(
+        calc(var(--electro-dx, 10px) * 0.72),
+        calc(var(--electro-dy, -5px) * 0.72)
+      )
+      scale(0.96);
+    opacity: 0.55;
+    filter: brightness(1.2);
+  }
+  64% {
+    transform: translate(
+        calc(var(--electro-dx, 10px) * 0.92),
+        calc(var(--electro-dy, -5px) * 0.92)
+      )
+      scale(1.14);
+    opacity: 0.98;
+    filter: brightness(1.5);
+  }
+  100% {
+    transform: translate(var(--electro-dx, 10px), var(--electro-dy, -5px))
+      scale(1.22);
+    opacity: 0;
+    filter: brightness(0.95);
+  }
+}
+
+/* Expanding 360-degree realistic circular electric pulse wave rings during Electro Cube roll */
+@keyframes electroCircularWaveExpand {
+  0% {
+    transform: scale(0.88) rotate(0deg);
+    opacity: 0;
+    filter: brightness(1.38);
+  }
+  20% {
+    transform: scale(1.02) rotate(9deg);
+    opacity: 0.94;
+    filter: brightness(1.55);
+  }
+  55% {
+    transform: scale(1.20) rotate(20deg);
+    opacity: 0.78;
+    filter: brightness(1.35);
+  }
+  82% {
+    transform: scale(1.31) rotate(28deg);
+    opacity: 0.38;
+    filter: brightness(1.15);
+  }
+  100% {
+    transform: scale(1.39) rotate(34deg);
+    opacity: 0;
+    filter: brightness(0.95);
+  }
+}
+
 /* 3. TESSERACT CUBE IDLE — 4D Dimensional Phase-Breathing & Inner Hypercube Precession */
 @keyframes diceIdleTesseract {
   0%, 100% {
@@ -1166,6 +1512,52 @@
   transform-style: preserve-3d;
 }
 
+/* Tesseract Cube Idle 4D Internal Hypercube Precession & Conduit Energy Flow */
+@keyframes tesseractIdleManifoldPrecess {
+  0%, 100% {
+    transform: rotateX(-16deg) rotateY(20deg) rotateZ(0deg) scale3d(0.88, 0.88, 0.88);
+  }
+  33% {
+    transform: rotateX(-24deg) rotateY(34deg) rotateZ(8deg) scale3d(0.94, 0.94, 0.94);
+  }
+  66% {
+    transform: rotateX(-10deg) rotateY(10deg) rotateZ(-8deg) scale3d(0.91, 0.91, 0.91);
+  }
+}
+
+@keyframes tesseractIdleFacePulse {
+  0%, 100% {
+    transform: var(--tess-rest-transform);
+    opacity: 0.52;
+    filter: brightness(1.05);
+  }
+  50% {
+    transform: var(--tess-idle-transform);
+    opacity: 0.84;
+    filter: brightness(1.32) hue-rotate(18deg);
+  }
+}
+
+@keyframes tesseractIdleCorePrecess {
+  0%, 100% {
+    transform: rotateX(18deg) rotateY(-22deg) rotateZ(0deg) scale3d(0.52, 0.52, 0.52);
+    opacity: 0.72;
+  }
+  50% {
+    transform: rotateX(-42deg) rotateY(54deg) rotateZ(45deg) scale3d(0.76, 0.76, 0.76);
+    opacity: 0.96;
+  }
+}
+
+@keyframes tesseractIdleEnergyFlow {
+  0% {
+    stroke-dashoffset: 78;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
 @keyframes tesseractInnerShift {
   0%, 100% {
     transform: rotate(0deg) scale(0.92);
@@ -1187,6 +1579,73 @@
     opacity: 1;
   }
 }
+
+/* TESSERACT CUBE ROLLING — Enhanced 4D-Warp 6-Face Inside-Out Inversion & Dimensional Shift */
+@keyframes tesseract4DManifoldPrecess {
+  0% {
+    transform: rotateX(-18deg) rotateY(24deg) rotateZ(0deg) scale3d(0.94, 0.94, 0.94);
+  }
+  24% {
+    transform: rotateX(175deg) rotateY(-155deg) rotateZ(105deg) scale3d(1.12, 0.94, 1.12);
+  }
+  50% {
+    transform: rotateX(-215deg) rotateY(225deg) rotateZ(210deg) scale3d(0.94, 1.14, 0.94);
+  }
+  76% {
+    transform: rotateX(345deg) rotateY(-335deg) rotateZ(305deg) scale3d(1.08, 1.08, 1.08);
+  }
+  100% {
+    transform: rotateX(342deg) rotateY(-336deg) rotateZ(360deg) scale3d(0.94, 0.94, 0.94);
+  }
+}
+
+@keyframes tesseractFace4DWarp {
+  0%, 100% {
+    transform: var(--tess-rest-transform);
+    opacity: 0.88;
+    filter: brightness(1.15) hue-rotate(0deg);
+  }
+  24% {
+    /* Momentarily flips inside-out through the 4D hypercube core (w-axis inversion) */
+    transform: var(--tess-inside-out-transform);
+    opacity: 1;
+    filter: brightness(1.65) hue-rotate(42deg);
+  }
+  52% {
+    /* Shifts dimensions outward across the orthogonal 4D hyperplane */
+    transform: var(--tess-shift-transform);
+    opacity: 0.96;
+    filter: brightness(1.48) hue-rotate(-38deg);
+  }
+  78% {
+    /* Counter-folds through the inner tesseract chamber before realigning */
+    transform: var(--tess-inside-out-transform);
+    opacity: 0.95;
+    filter: brightness(1.52) hue-rotate(28deg);
+  }
+}
+
+@keyframes tesseractCore4DEversion {
+  0%, 100% {
+    transform: rotateX(22deg) rotateY(-28deg) rotateZ(0deg) scale3d(0.44, 0.44, 0.44);
+    opacity: 0.76;
+  }
+  24% {
+    /* As the 6 outer faces fold inside-out, the inner 4D chamber expands outward to replace them */
+    transform: rotateX(-165deg) rotateY(158deg) rotateZ(-90deg) scale3d(1.24, 1.24, 1.24);
+    opacity: 1;
+  }
+  52% {
+    transform: rotateX(210deg) rotateY(-215deg) rotateZ(-180deg) scale3d(0.38, 0.38, 0.38);
+    opacity: 0.82;
+  }
+  78% {
+    transform: rotateX(-342deg) rotateY(338deg) rotateZ(-270deg) scale3d(1.18, 1.18, 1.18);
+    opacity: 0.98;
+  }
+}
+
+
 
 /* 4. COSMO CUBE IDLE — Zero-Gravity Celestial Float & Supernova Nebula Pulse */
 @keyframes diceIdleCosmo {
@@ -1214,12 +1673,98 @@
 
 @keyframes cosmoStarTwinkle {
   0%, 100% {
-    opacity: 0.45;
-    transform: scale(0.88);
+    opacity: 0.42;
+    transform: scale(0.82) rotate(0deg);
   }
   50% {
     opacity: 1;
-    transform: scale(1.22);
+    transform: scale(1.28) rotate(45deg);
+  }
+}
+
+@keyframes cosmoGalaxySwirlIdle {
+  0% {
+    transform: rotate(0deg) scale(0.96);
+    opacity: 0.78;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.04);
+    opacity: 0.96;
+  }
+  100% {
+    transform: rotate(360deg) scale(0.96);
+    opacity: 0.78;
+  }
+}
+
+@keyframes cosmoOrbitCwIdle {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cosmoOrbitCcwIdle {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes cosmoSupernovaSpiralWhip {
+  0% {
+    transform: scale(0.74) rotate(0deg);
+    opacity: 0;
+    filter: brightness(1.35);
+  }
+  22% {
+    transform: scale(0.94) rotate(68deg);
+    opacity: 0.96;
+    filter: brightness(1.65);
+  }
+  65% {
+    transform: scale(1.14) rotate(195deg);
+    opacity: 0.82;
+    filter: brightness(1.38);
+  }
+  100% {
+    transform: scale(1.26) rotate(300deg);
+    opacity: 0;
+    filter: brightness(0.95);
+  }
+}
+
+@keyframes cosmoCometStreakSpin {
+  0% {
+    transform: rotate(0deg) scale(0.92);
+    opacity: 0;
+  }
+  20% {
+    transform: rotate(72deg) scale(1.0);
+    opacity: 0.98;
+  }
+  80% {
+    transform: rotate(288deg) scale(1.06);
+    opacity: 0.88;
+  }
+  100% {
+    transform: rotate(360deg) scale(0.96);
+    opacity: 0;
+  }
+}
+
+@keyframes cosmoQuasarPulseRoll {
+  0%, 100% {
+    transform: scale(0.88) rotate(0deg);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.18) rotate(90deg);
+    opacity: 1;
   }
 }
 
@@ -1257,6 +1802,56 @@
   animation: lavaCrackPulse 2.6s ease-in-out infinite;
 }
 
+.animate-lava-flow-stream {
+  animation: lavaFlowStream 1.4s linear infinite;
+}
+
+.animate-lava-flow-reverse {
+  animation: lavaFlowStreamReverse 1.85s linear infinite;
+}
+
+.animate-lava-aura-cooling {
+  animation: lavaCoolingAuraPulse 5.6s ease-in-out infinite;
+}
+
+.animate-lava-crack-cooling {
+  animation: lavaCoolingCrackPulse 5.6s ease-in-out infinite;
+}
+
+.animate-lava-flow-cooling {
+  animation: lavaCoolingFlowStream 5.4s linear infinite;
+}
+
+.animate-lava-bubble {
+  animation: lavaBubblePop 1.7s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-lava-spit {
+  animation: lavaSpitErupt 0.56s cubic-bezier(0.22, 0.68, 0.36, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-lava-steam-vent {
+  animation: lavaSteamVentRise 0.78s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-lava-board-puddle {
+  animation: lavaBoardPuddleSplash 0.92s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-lava-drop-splatter {
+  animation: lavaDropSplatterOut 0.88s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .animate-ember-rise {
   animation: emberRise 1.6s ease-out infinite;
 }
@@ -1275,6 +1870,30 @@
 
 .animate-electro-arc {
   animation: electroArcFlicker 1.5s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-electro-body-pulse {
+  animation: electroBodyPulseStream 0.9s linear infinite;
+}
+
+.animate-electro-idle-spark {
+  animation: electroIdleSparkSnap 0.68s cubic-bezier(0.19, 1, 0.22, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-electro-roll-pulse {
+  animation: electroRollPulseErupt 0.48s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-electro-circular-wave {
+  animation: electroCircularWaveExpand 0.56s cubic-bezier(0.16, 0.84, 0.34, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 .animate-dice-idle-tesseract {
@@ -1297,6 +1916,65 @@
   transform-origin: center;
 }
 
+.tesseract-4d-warp-stage {
+  perspective: 460px;
+  transform-style: preserve-3d;
+}
+
+.tesseract-4d-warp-manifold {
+  transform-style: preserve-3d;
+  transition:
+    transform 0.44s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.32s ease;
+}
+
+.animate-tesseract-idle-manifold {
+  animation: tesseractIdleManifoldPrecess 3.2s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+.animate-tesseract-4d-manifold {
+  animation: tesseract4DManifoldPrecess 0.66s cubic-bezier(0.25, 0.9, 0.35, 1) infinite;
+  transform-style: preserve-3d;
+}
+
+.tesseract-4d-face {
+  transform-style: preserve-3d;
+  backface-visibility: visible;
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.32s ease,
+    filter 0.32s ease,
+    box-shadow 0.32s ease;
+}
+
+.animate-tesseract-idle-face {
+  animation: tesseractIdleFacePulse 2.8s ease-in-out infinite;
+  transform-style: preserve-3d;
+  backface-visibility: visible;
+}
+
+.animate-tesseract-4d-face {
+  animation: tesseractFace4DWarp 0.62s cubic-bezier(0.22, 0.88, 0.34, 1) infinite;
+  transform-style: preserve-3d;
+  backface-visibility: visible;
+}
+
+.animate-tesseract-idle-core {
+  animation: tesseractIdleCorePrecess 2.8s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+.animate-tesseract-4d-core {
+  animation: tesseractCore4DEversion 0.62s cubic-bezier(0.22, 0.88, 0.34, 1) infinite;
+  transform-style: preserve-3d;
+}
+
+.animate-tesseract-idle-energy {
+  animation: tesseractIdleEnergyFlow 1.8s linear infinite;
+}
+
+
 .animate-dice-idle-cosmo {
   animation: diceIdleCosmo 3.2s ease-in-out infinite;
 }
@@ -1307,6 +1985,42 @@
 
 .animate-cosmo-twinkle {
   animation: cosmoStarTwinkle 2.0s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-cosmo-galaxy-idle {
+  animation: cosmoGalaxySwirlIdle 6.8s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-cosmo-orbit-cw {
+  animation: cosmoOrbitCwIdle 4.8s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-cosmo-orbit-ccw {
+  animation: cosmoOrbitCcwIdle 5.6s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-cosmo-spiral-roll {
+  animation: cosmoSupernovaSpiralWhip 0.62s cubic-bezier(0.16, 0.84, 0.34, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-cosmo-comet-roll {
+  animation: cosmoCometStreakSpin 0.54s linear infinite;
+  transform-box: view-box;
+  transform-origin: 60px 60px;
+}
+
+.animate-cosmo-quasar-roll {
+  animation: cosmoQuasarPulseRoll 0.48s ease-in-out infinite;
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -1446,12 +2160,39 @@
   .animate-dice-shadow-bounce,
   .animate-dice-shadow-breathe,
   .animate-lava-crack,
+  .animate-lava-aura-cooling,
+  .animate-lava-crack-cooling,
+  .animate-lava-flow-cooling,
+  .animate-lava-flow-stream,
+  .animate-lava-flow-reverse,
+  .animate-lava-bubble,
+  .animate-lava-spit,
+  .animate-lava-steam-vent,
+  .animate-lava-board-puddle,
+  .animate-lava-drop-splatter,
   .animate-ember-rise,
   .animate-electro-channel-pulse,
   .animate-electro-arc,
+  .animate-electro-body-pulse,
+  .animate-electro-idle-spark,
+  .animate-electro-roll-pulse,
+  .animate-electro-circular-wave,
   .animate-tesseract-inner,
   .animate-tesseract-outer,
+  .animate-tesseract-idle-manifold,
+  .animate-tesseract-idle-face,
+  .animate-tesseract-idle-core,
+  .animate-tesseract-idle-energy,
+  .animate-tesseract-4d-manifold,
+  .animate-tesseract-4d-face,
+  .animate-tesseract-4d-core,
   .animate-cosmo-twinkle,
+  .animate-cosmo-galaxy-idle,
+  .animate-cosmo-orbit-cw,
+  .animate-cosmo-orbit-ccw,
+  .animate-cosmo-spiral-roll,
+  .animate-cosmo-comet-roll,
+  .animate-cosmo-quasar-roll,
   .animate-pip-pulse-subtle {
     animation: none !important;
   }

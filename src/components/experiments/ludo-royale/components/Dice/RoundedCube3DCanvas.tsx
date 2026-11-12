@@ -11,6 +11,7 @@ export interface RoundedCube3DCanvasProps {
   activeColor: PlayerColor;
   size: number;
   reducedMotion?: boolean;
+  isCooling?: boolean;
 }
 
 const TEX_SIZE = 180;
@@ -978,9 +979,40 @@ function getOrCreateFaceBuffer(
         }
       };
 
-      strokeFissures('rgba(215, 25, 0, 0.85)', 3.8);
-      strokeFissures('#FF6D00', 2.0);
-      strokeFissures('#FFEE58', 0.85);
+      strokeFissures('rgba(225, 28, 0, 0.92)', 4.6);
+      strokeFissures('#FF6D00', 2.6);
+      strokeFissures('#FFF176', 1.15);
+
+      // Glowing magma confluence pools at major crack intersections
+      const magmaJunctions: Array<[number, number, number]> = [
+        [32, 16, 2.8],
+        [50, 17, 3.0],
+        [73, 18, 2.8],
+        [23, 25, 2.6],
+        [29, 39, 3.2],
+        [46, 33, 2.9],
+        [60, 37, 2.9],
+        [75, 34, 2.8],
+        [28, 49, 3.0],
+        [68, 49, 3.0],
+        [34, 61, 3.1],
+        [48, 66, 3.2],
+        [62, 62, 3.1],
+        [20, 69, 2.7],
+        [77, 69, 2.7],
+        [46, 82, 3.0],
+      ];
+      for (const [jx, jy, jr] of magmaJunctions) {
+        const jGrad = ctx.createRadialGradient(jx, jy, 0.2, jx, jy, jr * 1.6);
+        jGrad.addColorStop(0, '#FFFDE7');
+        jGrad.addColorStop(0.45, '#FF9100');
+        jGrad.addColorStop(0.85, 'rgba(255, 45, 0, 0.65)');
+        jGrad.addColorStop(1, 'rgba(180, 10, 0, 0)');
+        ctx.beginPath();
+        ctx.arc(jx, jy, jr * 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = jGrad;
+        ctx.fill();
+      }
 
       // Fine secondary hair-cracks across the dark volcanic rock
       const hairCracks: Array<Array<[number, number]>> = [
@@ -1015,8 +1047,8 @@ function getOrCreateFaceBuffer(
           [56, 57],
         ],
       ];
-      ctx.strokeStyle = '#FF5500';
-      ctx.lineWidth = 0.9;
+      ctx.strokeStyle = '#FF6D00';
+      ctx.lineWidth = 1.15;
       for (const hc of hairCracks) {
         ctx.beginPath();
         ctx.moveTo(hc[0][0], hc[0][1]);
@@ -1371,14 +1403,24 @@ function getOrCreateFaceBuffer(
     // 9. TESSERACT CUBE ("BEYOND DIMENSIONS") — Exact Match to Reference
     // ========================================================================
     else if (diceStyle === 'tesseract_cube') {
-      // Deep translucent violet-indigo hypercube crystal interior
+      // Deep see-through crystal-glass dark cosmos interior so internal 4D geometry shines clearly
       const bg = ctx.createRadialGradient(50, 50, 4, 50, 50, 82);
-      bg.addColorStop(0, '#3B1578');
-      bg.addColorStop(0.42, '#1E0B45');
-      bg.addColorStop(0.78, '#0E0526');
-      bg.addColorStop(1, '#050212');
+      bg.addColorStop(0, '#160E36');
+      bg.addColorStop(0.45, '#0C0924');
+      bg.addColorStop(0.82, '#070618');
+      bg.addColorStop(1, '#050412');
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, 100, 100);
+
+      // Diagonal optical glass sheen streaks (gives see-through crystal glass refraction)
+      const sheenGrad = ctx.createLinearGradient(8, 8, 92, 92);
+      sheenGrad.addColorStop(0, 'rgba(255, 255, 255, 0.24)');
+      sheenGrad.addColorStop(0.24, 'rgba(103, 232, 249, 0.28)');
+      sheenGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
+      sheenGrad.addColorStop(0.76, 'rgba(232, 121, 249, 0.26)');
+      sheenGrad.addColorStop(1, 'rgba(255, 255, 255, 0.20)');
+      ctx.fillStyle = sheenGrad;
+      ctx.fillRect(6, 6, 88, 88);
 
       // Prismatic glass refraction planes (cyan top/left, magenta-violet bottom/right)
       tracePolygon(ctx, [
@@ -1387,7 +1429,7 @@ function getOrCreateFaceBuffer(
         [76, 24],
         [24, 24],
       ]);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.20)';
+      ctx.fillStyle = 'rgba(103, 232, 249, 0.30)';
       ctx.fill();
 
       tracePolygon(ctx, [
@@ -1396,7 +1438,7 @@ function getOrCreateFaceBuffer(
         [24, 76],
         [6, 94],
       ]);
-      ctx.fillStyle = 'rgba(192, 132, 252, 0.18)';
+      ctx.fillStyle = 'rgba(192, 132, 252, 0.26)';
       ctx.fill();
 
       tracePolygon(ctx, [
@@ -1405,7 +1447,7 @@ function getOrCreateFaceBuffer(
         [76, 76],
         [76, 24],
       ]);
-      ctx.fillStyle = 'rgba(109, 40, 217, 0.22)';
+      ctx.fillStyle = 'rgba(139, 92, 246, 0.28)';
       ctx.fill();
 
       tracePolygon(ctx, [
@@ -1414,7 +1456,7 @@ function getOrCreateFaceBuffer(
         [76, 76],
         [94, 94],
       ]);
-      ctx.fillStyle = 'rgba(217, 70, 239, 0.16)';
+      ctx.fillStyle = 'rgba(232, 121, 249, 0.25)';
       ctx.fill();
 
       // 8-Point Starburst / Octagram Geometric Laser Grid passing through (50,50)
@@ -1647,15 +1689,15 @@ function getOrCreateFaceBuffer(
       drawGalaxySpiralArm(Math.PI * 0.5, 'rgba(56, 189, 248, 0.46)', '#BAE6FD');
       drawGalaxySpiralArm(Math.PI * 1.5, 'rgba(99, 102, 241, 0.44)', '#C7D2FE');
 
-      // Bright galactic nucleus glow
-      const coreGlow = ctx.createRadialGradient(50, 50, 1, 50, 50, 20);
-      coreGlow.addColorStop(0, '#FFFFFF');
-      coreGlow.addColorStop(0.32, 'rgba(245, 208, 254, 0.92)');
-      coreGlow.addColorStop(0.68, 'rgba(168, 85, 247, 0.45)');
+      // Rich galactic nucleus glow (balanced so star-orb pips stand out crisply)
+      const coreGlow = ctx.createRadialGradient(50, 50, 1, 50, 50, 15);
+      coreGlow.addColorStop(0, 'rgba(245, 208, 254, 0.68)');
+      coreGlow.addColorStop(0.38, 'rgba(192, 132, 252, 0.42)');
+      coreGlow.addColorStop(0.72, 'rgba(124, 58, 237, 0.22)');
       coreGlow.addColorStop(1, 'rgba(15, 7, 40, 0)');
       ctx.fillStyle = coreGlow;
       ctx.beginPath();
-      ctx.arc(50, 50, 20, 0, Math.PI * 2);
+      ctx.arc(50, 50, 15, 0, Math.PI * 2);
       ctx.fill();
 
       // Golden-Amber & Rose-Gold Elliptical Planetary Orbital Rings (Exact match to reference)
@@ -2112,15 +2154,15 @@ function getOrCreateFaceBuffer(
       } else if (diceStyle === 'cosmo_cube') {
         const neb = fbm(u * 10, v * 10, seed, 2);
         h = 0.3 + (neb - 0.5) * 0.06 + luma * 0.2;
-        if (luma > 0.22 || b > 100 || r > 120) {
+        if (luma > 0.28 || b > 125 || r > 140) {
           const glow = smoothstep(
-            0.2,
-            0.82,
+            0.28,
+            0.88,
             Math.max(luma, Math.max(r, b) / 255)
           );
-          er = Math.round(r * glow * 0.94);
-          eg = Math.round(g * glow * 0.94);
-          eb = Math.round(b * glow * 0.98);
+          er = Math.round(r * glow * 0.62);
+          eg = Math.round(g * glow * 0.62);
+          eb = Math.round(b * glow * 0.68);
         }
         rough = 0.08;
       } else if (diceStyle === 'royal_gold') {
@@ -2394,11 +2436,23 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
   activeColor,
   size,
   reducedMotion = false,
+  isCooling = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rollStartRef = useRef<number>(performance.now());
   const landStartRef = useRef<number>(performance.now());
   const isVisibleRef = useRef<boolean>(true);
+  const isCoolingRef = useRef<boolean>(isCooling);
+  const coolingBlendRef = useRef<number>(isCooling ? 1 : 0);
+  const lastFrameTimeRef = useRef<number>(performance.now());
+
+  useEffect(() => {
+    isCoolingRef.current = isCooling;
+    if (!isCooling || isRolling || isLanding) {
+      // Immediately reactivate bright lava flow upon interaction or roll
+      coolingBlendRef.current = 0;
+    }
+  }, [isCooling, isRolling, isLanding]);
 
   useEffect(() => {
     if (isRolling) {
@@ -2490,7 +2544,26 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
         return;
       }
 
+      const dtSec = clamp((now - lastFrameTimeRef.current) * 0.001, 0.001, 0.1);
+      lastFrameTimeRef.current = now;
       const tSec = now * 0.001;
+
+      // Smoothly transition into cooling state (>10s idle), or snap immediately to 0 on interaction
+      if (
+        diceStyle === 'lava_cube' &&
+        isCoolingRef.current &&
+        !isRolling &&
+        !isLanding
+      ) {
+        coolingBlendRef.current = clamp(
+          coolingBlendRef.current + dtSec * 0.85,
+          0,
+          1
+        );
+      } else {
+        coolingBlendRef.current = 0;
+      }
+      const coolingBlend = coolingBlendRef.current;
 
       // ======================================================================
       // 1. COMPUTE 3D POSE (rx, ry, rz, scale, pan) & PULSATING EMISSIVE GLOW
@@ -2529,10 +2602,14 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
             rz = p * Math.PI * 4;
             scale = 0.94 + 0.09 * Math.sin(p * Math.PI);
           } else if (diceStyle === 'cosmo_cube') {
-            rx = p * Math.PI * 2 + Math.sin(p * Math.PI * 2) * 0.45;
-            ry = p * Math.PI * 4;
-            rz = p * Math.PI * 2;
-            scale = 0.94 + 0.08 * Math.sin(p * Math.PI);
+            // Unique 3D Celestial Gyroscopic Orbital Precession & Supernova Spin
+            rx = p * Math.PI * 2 + Math.sin(p * Math.PI * 4) * 0.52;
+            ry = p * Math.PI * 4 + Math.cos(p * Math.PI * 2) * 0.38;
+            rz = -p * Math.PI * 2 + Math.sin(p * Math.PI * 6) * 0.28;
+            scale = 0.92 + 0.12 * Math.sin(p * Math.PI);
+            emissivePulse = 0.92 + 0.18 * Math.sin(p * Math.PI * 4);
+            rollPanX += Math.cos(p * Math.PI * 4) * 0.032;
+            rollPanY += Math.sin(p * Math.PI * 2) * 0.04;
           } else {
             rx = p * Math.PI * 4;
             ry = p * Math.PI * 2 + Math.sin(p * Math.PI * 2) * 0.32;
@@ -2555,10 +2632,18 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
           ry = 0.0;
           rz = 0.0;
           if (diceStyle === 'lava_cube') {
-            const pulse = 0.5 + 0.5 * Math.sin(tSec * 2.8);
-            const sharpPulse = Math.pow(pulse, 1.5);
-            scale = 0.99 + sharpPulse * 0.035;
-            emissivePulse = 0.78 + sharpPulse * 0.92;
+            // Active flow pulse (2.8 rad/s) vs Secondary cooling ember pulse (1.05 rad/s, dimmed glow)
+            const activePulse = 0.5 + 0.5 * Math.sin(tSec * 2.8);
+            const sharpActive = Math.pow(activePulse, 1.5);
+            const activeScale = 0.99 + sharpActive * 0.035;
+            const activeEmissive = 0.78 + sharpActive * 0.92;
+
+            const coolPulse = 0.5 + 0.5 * Math.sin(tSec * 1.05);
+            const coolScale = 0.986 + coolPulse * 0.012;
+            const coolEmissive = 0.24 + coolPulse * 0.28;
+
+            scale = mix(activeScale, coolScale, coolingBlend);
+            emissivePulse = mix(activeEmissive, coolEmissive, coolingBlend);
           } else if (diceStyle === 'electro_cube') {
             const wave = 0.5 + 0.5 * Math.sin(tSec * 3.6);
             const spark = Math.pow(0.5 + 0.5 * Math.sin(tSec * 9.5), 3.0);
@@ -2570,8 +2655,12 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
             emissivePulse = 0.80 + phase * 0.86;
           } else if (diceStyle === 'cosmo_cube') {
             const breath = 0.5 + 0.5 * Math.sin(tSec * 2.2);
-            scale = 0.99 + breath * 0.035;
-            emissivePulse = 0.82 + breath * 0.80;
+            // Gentle zero-gravity celestial orbital float in idle state
+            rx = Math.sin(tSec * 1.45) * 0.075;
+            ry = Math.cos(tSec * 1.15) * 0.085;
+            rz = Math.sin(tSec * 0.9) * 0.035;
+            scale = 0.985 + breath * 0.038;
+            emissivePulse = 0.78 + breath * 0.36;
           } else {
             const gentle = 0.5 + 0.5 * Math.sin(tSec * 1.8);
             scale = 0.995 + gentle * 0.015;
@@ -2859,12 +2948,20 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
           // ==================================================================
           // 4. VOLUMETRIC 3D INNER HYPERCUBE & GALAXY PARALLAX (TESSERACT & COSMO)
           // ==================================================================
-          if (diceStyle === 'tesseract_cube' && bevelAmount < 0.75) {
-            const innerX = hitX + dirX * 0.42;
-            const innerY = hitY + dirY * 0.42;
-            const innerZ = hitZ + dirZ * 0.42;
-            const ca = Math.cos(-tSec * 2.1),
-              sa = Math.sin(-tSec * 2.1);
+          if (diceStyle === 'tesseract_cube' && bevelAmount < 0.78) {
+            const warpSpeed = isRolling ? 8.4 : 2.35;
+            const wPhase = isRolling
+              ? Math.sin(tSec * 9.8)
+              : Math.sin(tSec * 2.6);
+            // Continuous 4D hypercube breathing in idle + rapid inside-out eversion in rolling
+            const depthParallax = isRolling
+              ? 0.42 - wPhase * 0.2
+              : 0.42 - wPhase * 0.07;
+            const innerX = hitX + dirX * depthParallax;
+            const innerY = hitY + dirY * depthParallax;
+            const innerZ = hitZ + dirZ * depthParallax;
+            const ca = Math.cos(-tSec * warpSpeed),
+              sa = Math.sin(-tSec * warpSpeed);
             const rxIn = innerX * ca - innerZ * sa;
             const rzIn = innerX * sa + innerZ * ca;
             const ryIn = innerY * ca - rzIn * sa;
@@ -2874,34 +2971,282 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
             const ayIn = Math.abs(ryIn);
             const azIn = Math.abs(rzIn2);
             const maxIn = Math.max(axIn, Math.max(ayIn, azIn));
-            const dEdge1 = Math.hypot(axIn - 0.42, ayIn - 0.42);
-            const dEdge2 = Math.hypot(axIn - 0.42, azIn - 0.42);
-            const dEdge3 = Math.hypot(ayIn - 0.42, azIn - 0.42);
+            const cellHalf = isRolling
+              ? 0.42 + wPhase * 0.15
+              : 0.41 + wPhase * 0.05;
+            const dEdge1 = Math.hypot(axIn - cellHalf, ayIn - cellHalf);
+            const dEdge2 = Math.hypot(axIn - cellHalf, azIn - cellHalf);
+            const dEdge3 = Math.hypot(ayIn - cellHalf, azIn - cellHalf);
             const minEdge =
-              maxIn <= 0.46
+              maxIn <= cellHalf + 0.05
                 ? Math.min(dEdge1, Math.min(dEdge2, dEdge3))
                 : 1.0;
-            const innerWire = smoothstep(0.065, 0.008, minEdge);
-            if (innerWire > 0) {
-              emR += innerWire * 135;
-              emG += innerWire * 220;
-              emB += innerWire * 245;
-            }
-          } else if (diceStyle === 'cosmo_cube' && bevelAmount < 0.8) {
-            const deepX = hitX + dirX * 0.35;
-            const deepY = hitY + dirY * 0.35;
-            const deepZ = hitZ + dirZ * 0.35;
-            const rDeep = Math.hypot(deepX, deepY, deepZ);
-            const coreNova = smoothstep(0.65, 0.0, rDeep);
-            const swirl =
+            const innerWire = smoothstep(0.072, 0.009, minEdge);
+
+            // Second counter-rotating deep 4D chamber + diagonal vertex struts
+            const deepHalf = isRolling
+              ? 0.24 - wPhase * 0.09
+              : 0.23 - wPhase * 0.04;
+            const dDeep1 = Math.hypot(axIn - deepHalf, ayIn - deepHalf);
+            const dDeep2 = Math.hypot(axIn - deepHalf, azIn - deepHalf);
+            const dDeep3 = Math.hypot(ayIn - deepHalf, azIn - deepHalf);
+            const minDeep =
+              maxIn <= deepHalf + 0.05
+                ? Math.min(dDeep1, Math.min(dDeep2, dDeep3))
+                : 1.0;
+            const deepWire = smoothstep(0.064, 0.008, minDeep);
+
+            // Diagonal 4D corner struts where |x| ≈ |y| ≈ |z|
+            const diagDist = Math.hypot(axIn - ayIn, ayIn - azIn);
+            const diagStrut =
+              maxIn <= 0.62 ? smoothstep(0.065, 0.008, diagDist) : 0;
+            const strutPulse =
+              0.5 + 0.5 * Math.sin(maxIn * 18.0 - tSec * (isRolling ? 14.0 : 5.2));
+
+            // Internal crystal glass refraction caustics (subtle so dark window panes stay see-through)
+            const glassSky =
               0.5 +
               0.5 *
                 Math.sin(
-                  Math.atan2(deepY, deepX) * 2 - rDeep * 6 + tSec * 2.4
+                  rxIn * 4.2 + ryIn * 3.8 - tSec * (isRolling ? 6.5 : 1.9)
                 );
-            emR += coreNova * swirl * 80;
-            emG += coreNova * (1 - swirl) * 70;
-            emB += coreNova * 115;
+            colR = mix(colR, 28 + glassSky * 45, 0.18);
+            colG = mix(colG, 62 + glassSky * 65, 0.18);
+            colB = mix(colB, 145 + glassSky * 75, 0.22);
+
+            const totalWire = clamp(
+              innerWire * 1.15 +
+                deepWire * 1.05 +
+                diagStrut * (0.55 + 0.55 * strutPulse),
+              0,
+              1.45
+            );
+            if (totalWire > 0) {
+              const shiftTint = 0.5 + 0.5 * wPhase;
+              emR += totalWire * mix(95, 245, shiftTint);
+              emG += totalWire * mix(238, 120, shiftTint);
+              emB += totalWire * 255;
+            }
+          } else if (diceStyle === 'cosmo_cube' && bevelAmount < 0.82) {
+            const spinRate = isRolling ? 9.2 : 2.35;
+            const deepX = hitX + dirX * 0.36;
+            const deepY = hitY + dirY * 0.36;
+            const deepZ = hitZ + dirZ * 0.36;
+            const rDeep = Math.hypot(deepX, deepY, deepZ);
+            const coreNova = smoothstep(0.68, 0.0, rDeep);
+            const galAngle = Math.atan2(deepY, deepX);
+            // 4-arm swirling logarithmic spiral galaxy vortex + counter-rotating nebula wave
+            const swirlArm =
+              0.5 +
+              0.5 *
+                Math.sin(
+                  galAngle * 2.0 - rDeep * 7.8 + tSec * spinRate
+                );
+            const swirlArm2 =
+              0.5 +
+              0.5 *
+                Math.cos(
+                  galAngle * 4.0 - rDeep * 11.2 + tSec * (spinRate * 1.25)
+                );
+            // Tilted inner planetary ring band inside the cosmic volume
+            const ringPlane = Math.abs(deepY * 0.82 + deepX * 0.42 - deepZ * 0.38);
+            const ringBand =
+              smoothstep(0.09, 0.01, ringPlane) *
+              smoothstep(0.18, 0.36, rDeep) *
+              smoothstep(0.64, 0.44, rDeep);
+
+            const rollBoost = isRolling ? 0.62 : 0.46;
+            emR +=
+              (coreNova * (swirlArm * 65 + swirlArm2 * 32) + ringBand * 110) *
+              rollBoost;
+            emG +=
+              (coreNova * ((1 - swirlArm) * 48 + swirlArm2 * 28) + ringBand * 82) *
+              rollBoost;
+            emB +=
+              (coreNova * (85 + swirlArm2 * 38) + ringBand * 45) *
+              rollBoost;
+          } else if (diceStyle === 'lava_cube') {
+            // Real-time 3D directional magma advection flowing through volcanic cracks
+            // Slows down and dims into smoldering deep-crimson coals when coolingBlend -> 1
+            const flowSpeed = isRolling
+              ? 8.5
+              : mix(3.4, 0.72, coolingBlend);
+            const streamA =
+              0.5 +
+              0.5 *
+                Math.sin(
+                  hitX * 7.2 +
+                    hitY * 5.8 -
+                    hitZ * 4.6 -
+                    tSec * flowSpeed +
+                    Math.sin(hitY * 9.0 + tSec * mix(2.1, 0.55, coolingBlend)) *
+                      1.35
+                );
+            const streamB =
+              0.5 +
+              0.5 *
+                Math.cos(
+                  hitX * 5.4 -
+                    hitY * 8.1 +
+                    hitZ * 6.2 +
+                    tSec * (flowSpeed * 0.82) +
+                    Math.cos(hitX * 8.5 - tSec * mix(1.9, 0.48, coolingBlend)) *
+                      1.2
+                );
+            const hotSurge =
+              Math.pow(streamA * streamB, 1.85) * (1 - coolingBlend * 0.76);
+            const crackIntensity = clamp((emR - 16) / 175, 0, 1);
+
+            if (crackIntensity > 0.02) {
+              const activeBoost = isRolling ? 1.55 : 1.15;
+              const surgeBoost = mix(activeBoost, 0.34, coolingBlend);
+              const coolEmberWave =
+                0.5 + 0.5 * Math.sin(tSec * 1.05 + hitX * 2.4 + hitY * 2.4);
+
+              // Active bright orange/yellow magma vs cooled dark crimson-amber crust
+              const targetR = mix(255, 145 + coolEmberWave * 55, coolingBlend);
+              const targetG = mix(
+                88 + hotSurge * 165,
+                18 + coolEmberWave * 28,
+                coolingBlend
+              );
+              const targetB = mix(12 + hotSurge * 155, 4, coolingBlend);
+
+              colR = mix(
+                colR,
+                targetR,
+                crackIntensity * (0.45 + 0.55 * streamA)
+              );
+              colG = mix(
+                colG,
+                targetG,
+                crackIntensity *
+                  mix(0.38 + 0.62 * hotSurge, 0.65, coolingBlend)
+              );
+              colB = mix(
+                colB,
+                targetB,
+                crackIntensity *
+                  mix(hotSurge * 0.85, 0.75, coolingBlend)
+              );
+
+              // When cooling, suppress the static white-hot yellow/green emissive channels into a deep red smolder
+              emR =
+                emR * mix(1.0, 0.42 + coolEmberWave * 0.22, coolingBlend) +
+                crackIntensity *
+                  (48 + streamA * 95 + hotSurge * 115) *
+                  surgeBoost;
+              emG =
+                emG * mix(1.0, 0.16 + coolEmberWave * 0.1, coolingBlend) +
+                crackIntensity *
+                  (18 + streamA * 68 + hotSurge * 145) *
+                  surgeBoost *
+                  (1 - coolingBlend * 0.65);
+              emB =
+                emB * (1 - coolingBlend * 0.92) +
+                crackIntensity *
+                  (hotSurge * 92) *
+                  surgeBoost *
+                  (1 - coolingBlend * 0.9);
+
+              // Liquid magma surface ripple normal perturbation (gentler when cooling)
+              const ripple =
+                Math.sin(
+                  hitX * 14.0 + hitY * 14.0 - tSec * (flowSpeed * 1.4)
+                ) *
+                0.14 *
+                (1 - coolingBlend * 0.7) *
+                crackIntensity;
+              nx = clamp(nx + ripple, -1, 1);
+              ny = clamp(ny - ripple, -1, 1);
+            } else if (bevelAmount > 0.35) {
+              // Sub-surface volcanic rim veins flowing along beveled edges
+              const rimVein =
+                Math.pow(streamA, 3.0) * smoothstep(0.35, 0.88, bevelAmount);
+              const rimScale = 1 - coolingBlend * 0.72;
+              emR += rimVein * (isRolling ? 145 : 75) * rimScale;
+              emG += rimVein * (isRolling ? 68 : 28) * rimScale;
+            }
+          } else if (diceStyle === 'electro_cube') {
+            // High-contrast 3D high-voltage electric pulses & traveling wave-packets
+            // coursing through the cube's conductive channels, seams, pips, and 3D filaments
+            // while keeping the dark navy-slate metallic chassis & silver armor crisp
+            const pulseSpeed = isRolling ? 12.0 : 5.2;
+            const waveA =
+              0.5 +
+              0.5 *
+                Math.sin(
+                  hitX * 9.5 +
+                    hitY * 7.8 -
+                    hitZ * 6.4 -
+                    tSec * pulseSpeed +
+                    Math.sin(hitY * 12.0 + tSec * 3.8) * 1.4
+                );
+            const waveB =
+              0.5 +
+              0.5 *
+                Math.cos(
+                  hitX * 7.6 -
+                    hitY * 9.2 +
+                    hitZ * 8.1 +
+                    tSec * (pulseSpeed * 0.88) +
+                    Math.cos(hitX * 11.0 - tSec * 3.4) * 1.3
+                );
+            const electricSurge = Math.pow(waveA * waveB, 1.85);
+            const conduitIntensity = clamp((emB - 20) / 165, 0, 1);
+
+            // Narrow 3D lightning vein wave that snakes across the dark metallic body
+            const bodyVeinField = Math.abs(
+              Math.sin(
+                hitX * 11.5 -
+                  hitY * 9.8 +
+                  hitZ * 7.2 -
+                  tSec * (pulseSpeed * 0.65) +
+                  Math.sin(hitX * 16.0 + hitY * 14.0) * 0.85
+              )
+            );
+            const sharpBodyVein =
+              smoothstep(0.92, 0.995, 1.0 - bodyVeinField) *
+              Math.pow(waveA, 1.6);
+
+            if (conduitIntensity > 0.02) {
+              const boost = isRolling ? 1.55 : 1.22;
+              const coreFlash = Math.pow(electricSurge, 1.75);
+
+              colR = mix(
+                colR,
+                195 + coreFlash * 60,
+                conduitIntensity * (0.38 + 0.62 * electricSurge)
+              );
+              colG = mix(
+                colG,
+                244 + coreFlash * 11,
+                conduitIntensity * (0.48 + 0.52 * waveA)
+              );
+              colB = mix(colB, 255, conduitIntensity * 0.88);
+
+              emR +=
+                conduitIntensity *
+                (38 + electricSurge * 135 + coreFlash * 90) *
+                boost;
+              emG +=
+                conduitIntensity *
+                (75 + waveA * 98 + electricSurge * 115) *
+                boost;
+              emB +=
+                conduitIntensity *
+                (95 + waveA * 105 + electricSurge * 125) *
+                boost;
+            } else if (sharpBodyVein > 0.01) {
+              // Razor-sharp traveling electric pulse filaments snaking through the dark metallic chassis
+              const veinGain = isRolling ? 1.35 : 0.95;
+              colR = mix(colR, 210, sharpBodyVein * 0.65);
+              colG = mix(colG, 248, sharpBodyVein * 0.82);
+              colB = mix(colB, 255, sharpBodyVein * 0.95);
+              emR += sharpBodyVein * 110 * veinGain;
+              emG += sharpBodyVein * 210 * veinGain;
+              emB += sharpBodyVein * 255 * veinGain;
+            }
           }
 
           // ==================================================================
@@ -2968,11 +3313,1220 @@ export const RoundedCube3DCanvas: React.FC<RoundedCube3DCanvasProps> = ({
           data[outIdx] = clamp(Math.round(finalR), 0, 255);
           data[outIdx + 1] = clamp(Math.round(finalG), 0, 255);
           data[outIdx + 2] = clamp(Math.round(finalB), 0, 255);
-          data[outIdx + 3] = Math.round(alphaCoverage * 255);
+
+          // For Tesseract Cube, apply genuine optical crystal-glass translucency on the interior window panes
+          // while keeping the outer bevel frame, hypercube struts, and glowing pips crisp and opaque
+          let outAlpha = alphaCoverage;
+          if (diceStyle === 'tesseract_cube') {
+            const lumEm = clamp((emR + emG + emB) / 360, 0, 1);
+            const rimOpaque = smoothstep(0.36, 0.78, bevelAmount);
+            const glassTransmittance = clamp(
+              0.24 +
+                rimOpaque * 0.68 +
+                lumEm * 0.65 +
+                fresnel * 0.48 +
+                surfaceSpec * 0.45,
+              0.26,
+              1.0
+            );
+            outAlpha = alphaCoverage * glassTransmittance;
+          }
+          data[outIdx + 3] = Math.round(outAlpha * 255);
         }
       }
 
       ctx.putImageData(imgData, 0, 0);
+
+      // ======================================================================
+      // 6. LAVA CUBE REAL-TIME OOZING CRACK MAGMA & ROLLING VISCOUS LAVA ERUPTION
+      // ======================================================================
+      if (diceStyle === 'lava_cube' && !reducedMotion) {
+        const cMid = res * 0.5;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Helper to paint a self-luminous, organic molten lava glob with radial thermal gradient
+        // (white-yellow incandescent core -> fiery molten orange -> volcanic crimson mantle -> subtle dark slag rim)
+        const drawViscousLavaBlob = (
+          bx: number,
+          by: number,
+          angleRad: number,
+          radius: number,
+          stretch: number,
+          wobble: number,
+          alpha: number,
+          coolDimFactor = 0
+        ) => {
+          if (alpha <= 0.02 || radius <= 0.4) return;
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(angleRad);
+
+          const rx = radius * stretch;
+          const ry = radius * (1.0 + wobble * 0.18);
+
+          // 1. Soft radiant thermal bloom halo around the molten lava glob
+          const haloR = Math.max(rx, ry) * 1.85;
+          const haloGrad = ctx.createRadialGradient(
+            rx * 0.1,
+            0,
+            radius * 0.1,
+            0,
+            0,
+            haloR
+          );
+          const haloAlpha = alpha * (1 - coolDimFactor * 0.65) * 0.52;
+          haloGrad.addColorStop(0, `rgba(255, 145, 0, ${haloAlpha.toFixed(3)})`);
+          haloGrad.addColorStop(
+            0.55,
+            `rgba(255, 45, 0, ${(haloAlpha * 0.55).toFixed(3)})`
+          );
+          haloGrad.addColorStop(1, 'rgba(185, 28, 28, 0)');
+          ctx.fillStyle = haloGrad;
+          ctx.beginPath();
+          ctx.arc(0, 0, haloR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 2. Organic asymmetric liquid teardrop/globule silhouette with radial magma gradient
+          const grad = ctx.createRadialGradient(
+            rx * 0.24,
+            -ry * 0.08,
+            radius * 0.08,
+            0,
+            0,
+            Math.max(rx, ry) * 1.18
+          );
+          if (coolDimFactor > 0.45) {
+            grad.addColorStop(0, `rgba(255, 167, 38, ${(0.92 * alpha).toFixed(3)})`);
+            grad.addColorStop(0.45, `rgba(234, 88, 12, ${(0.9 * alpha).toFixed(3)})`);
+            grad.addColorStop(0.82, `rgba(185, 28, 28, ${(0.88 * alpha).toFixed(3)})`);
+            grad.addColorStop(1, `rgba(69, 10, 10, ${(0.75 * alpha).toFixed(3)})`);
+          } else {
+            grad.addColorStop(0, `rgba(255, 253, 231, ${(0.98 * alpha).toFixed(3)})`);
+            grad.addColorStop(0.26, `rgba(255, 238, 88, ${(0.96 * alpha).toFixed(3)})`);
+            grad.addColorStop(0.56, `rgba(255, 125, 0, ${(0.95 * alpha).toFixed(3)})`);
+            grad.addColorStop(0.84, `rgba(220, 38, 38, ${(0.92 * alpha).toFixed(3)})`);
+            grad.addColorStop(1, `rgba(95, 15, 10, ${(0.82 * alpha).toFixed(3)})`);
+          }
+
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(rx * 1.12, 0);
+          ctx.bezierCurveTo(
+            rx * 0.92,
+            ry * (1.06 + wobble * 0.16),
+            -rx * 0.38,
+            ry * (0.86 - wobble * 0.12),
+            -rx * 1.18,
+            ry * 0.08
+          );
+          ctx.bezierCurveTo(
+            -rx * 1.32,
+            -ry * 0.08,
+            -rx * 0.35,
+            -ry * (0.88 + wobble * 0.12),
+            rx * 0.9,
+            -ry * (1.04 - wobble * 0.16)
+          );
+          ctx.closePath();
+          ctx.fill();
+
+          // 3. Partial cooling volcanic basalt crust crescent along the trailing outer edge
+          ctx.strokeStyle = `rgba(55, 10, 8, ${(0.62 * alpha).toFixed(3)})`;
+          ctx.lineWidth = Math.max(0.7, radius * 0.22);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.86, Math.PI * 0.65, Math.PI * 1.35);
+          ctx.stroke();
+
+          ctx.restore();
+        };
+
+        if (!isRolling && !isLanding) {
+          // IDLE STATE: Organic oozing molten lava droplets & bubbles creeping through the fissure network
+          // When coolingBlend -> 1 (>10s idle), droplets slow down and dim into deep smoldering crimson coals
+          const crackStreams: ReadonlyArray<
+            readonly [number, number, number, number, number]
+          > = [
+            [-0.22, -0.58, -0.14, -0.22, 0.0],
+            [-0.14, -0.22, -0.27, -0.21, 0.18],
+            [-0.27, -0.21, -0.56, -0.21, 0.35],
+            [0.22, -0.58, 0.16, -0.22, 0.12],
+            [0.16, -0.22, 0.0, -0.3, 0.3],
+            [0.0, -0.3, -0.14, -0.22, 0.48],
+            [0.56, -0.21, 0.3, -0.21, 0.22],
+            [0.3, -0.21, 0.16, -0.22, 0.42],
+            [-0.27, -0.21, -0.21, 0.01, 0.52],
+            [-0.21, 0.01, -0.38, 0.07, 0.68],
+            [-0.38, 0.07, -0.56, 0.22, 0.84],
+            [0.3, -0.21, 0.24, 0.01, 0.27],
+            [0.24, 0.01, 0.36, 0.08, 0.49],
+            [0.36, 0.08, 0.56, 0.22, 0.71],
+            [-0.21, 0.01, 0.05, 0.15, 0.61],
+            [0.05, 0.15, 0.24, 0.01, 0.79],
+            [-0.21, 0.01, -0.22, 0.26, 0.38],
+            [-0.22, 0.26, -0.22, 0.56, 0.58],
+            [0.05, 0.15, 0.2, 0.26, 0.44],
+            [0.2, 0.26, 0.22, 0.56, 0.66],
+          ];
+
+          const streamSpeed = mix(0.62, 0.15, coolingBlend);
+          const coolDim = 1 - coolingBlend * 0.68;
+
+          for (let i = 0; i < crackStreams.length; i++) {
+            const [nx0, ny0, nx1, ny1, phaseOffset] = crackStreams[i];
+            const prog = (tSec * streamSpeed + phaseOffset) % 1.0;
+            const segAngle = Math.atan2(ny1 - ny0, nx1 - nx0);
+            const perpX = -Math.sin(segAngle) * res * 0.008;
+            const perpY = Math.cos(segAngle) * res * 0.008;
+            const slither = Math.sin(prog * Math.PI * 3 + i) * 0.85;
+
+            const xHead =
+              cMid +
+              (nx0 * (1 - prog) + nx1 * prog) * res +
+              perpX * slither;
+            const yHead =
+              cMid +
+              (ny0 * (1 - prog) + ny1 * prog) * res +
+              perpY * slither;
+
+            const alpha = Math.sin(prog * Math.PI) * coolDim * 0.82;
+            const baseR = Math.max(1.2, res * 0.016 * (1 - coolingBlend * 0.25));
+            const wobble = Math.sin(tSec * 5.2 + i * 1.7);
+
+            // Main oozing lava globule inside the crack
+            drawViscousLavaBlob(
+              xHead,
+              yHead,
+              segAngle,
+              baseR,
+              1.28,
+              wobble,
+              alpha,
+              coolingBlend
+            );
+
+            // Pinched trailing sub-droplet coalescing behind the head
+            const trailProg = Math.max(0, prog - 0.12);
+            const xTrail =
+              cMid +
+              (nx0 * (1 - trailProg) + nx1 * trailProg) * res -
+              perpX * slither * 0.6;
+            const yTrail =
+              cMid +
+              (ny0 * (1 - trailProg) + ny1 * trailProg) * res -
+              perpY * slither * 0.6;
+            drawViscousLavaBlob(
+              xTrail,
+              yTrail,
+              segAngle,
+              baseR * 0.7,
+              1.15,
+              -wobble,
+              alpha * 0.72,
+              coolingBlend
+            );
+          }
+        } else {
+          // ROLLING / LANDING ("SPITTING") STATE:
+          // 1. Periodic subtle 'steam vent' puffs rising upward from the Lava Cube's volcanic cracks
+          const ventCount = 8;
+          const ventCycleRate = isRolling ? 2.15 : 1.65;
+          for (let v = 0; v < ventCount; v++) {
+            const ventCycle = (tSec * ventCycleRate + v * 0.37) % 1.0;
+            // Periodic duty cycle: each crack vents a rising steam puff for 78% of its cycle, then pauses briefly
+            if (ventCycle < 0.78) {
+              const p = ventCycle / 0.78; // normalized 0..1 puff progress
+              const steamAlpha =
+                Math.sin(p * Math.PI) * (isRolling ? 0.38 : 0.28);
+
+              // Anchor each vent at a volcanic crack junction on the cube
+              const fissureAngle =
+                (v / ventCount) * Math.PI * 2 +
+                Math.sin(v * 1.9) * 0.22;
+              const fissureRadius = res * (0.14 + (v % 3) * 0.045);
+              const ventOriginX = cMid + Math.cos(fissureAngle) * fissureRadius;
+              const ventOriginY = cMid + Math.sin(fissureAngle) * fissureRadius;
+
+              // Steam rises upward (-Y) with gentle S-curve atmospheric thermal drift
+              const swayX =
+                Math.sin(p * Math.PI * 1.8 + v * 2.1) * res * 0.042 +
+                Math.cos(fissureAngle) * res * 0.035 * p;
+              const riseY = -p * res * (isRolling ? 0.24 : 0.19);
+              const puffX = ventOriginX + swayX;
+              const puffY = ventOriginY + riseY;
+
+              // Billowing expansion as the steam puff rises and cools
+              const puffR =
+                res * (0.024 + p * 0.05) * (0.9 + (v % 2) * 0.16);
+
+              // Primary billowing steam lobe + secondary trailing thermal wisp
+              for (let lobe = 0; lobe < 2; lobe++) {
+                const lobeScale = lobe === 0 ? 1.0 : 0.68;
+                const lx =
+                  puffX +
+                  (lobe === 0 ? 0 : -swayX * 0.28 + (v % 2 === 0 ? 2.2 : -2.2));
+                const ly = puffY + (lobe === 0 ? 0 : puffR * 0.48);
+                const lr = Math.max(1.5, puffR * lobeScale);
+                const la = steamAlpha * (lobe === 0 ? 1.0 : 0.72);
+
+                const steamGrad = ctx.createRadialGradient(
+                  lx,
+                  ly + lr * 0.22,
+                  lr * 0.08,
+                  lx,
+                  ly,
+                  lr
+                );
+                // Warm magma-illuminated vapor at the base transitioning to soft volcanic steam gray-white
+                const warmMix = Math.max(0, 1.0 - p * 1.35);
+                const rCol = Math.round(226 + warmMix * 29);
+                const gCol = Math.round(232 - warmMix * 62);
+                const bCol = Math.round(240 - warmMix * 130);
+
+                steamGrad.addColorStop(
+                  0,
+                  `rgba(${rCol}, ${gCol}, ${bCol}, ${la.toFixed(3)})`
+                );
+                steamGrad.addColorStop(
+                  0.52,
+                  `rgba(203, 213, 225, ${(la * 0.62).toFixed(3)})`
+                );
+                steamGrad.addColorStop(1, 'rgba(148, 163, 184, 0)');
+
+                ctx.fillStyle = steamGrad;
+                ctx.beginPath();
+                ctx.ellipse(
+                  lx,
+                  ly,
+                  lr * (1.12 + 0.12 * Math.sin(p * Math.PI + v)),
+                  lr * 0.84,
+                  Math.sin(p * 2.5 + v) * 0.35,
+                  0,
+                  Math.PI * 2
+                );
+                ctx.fill();
+              }
+            }
+          }
+
+          // 2. Cube spits realistic, viscous, 3D-projected molten magma tongues & coalescing globs from its rotating cracks!
+          // Anchor volcanic vents in 3D cube space so eruptions physically tumble and whip with the 3D cube's rotation
+          const vents3D: ReadonlyArray<readonly [number, number, number]> = [
+            [-0.62, -0.48, 0.62],
+            [0.64, -0.44, 0.62],
+            [-0.68, 0.18, 0.68],
+            [0.68, 0.22, 0.66],
+            [-0.48, 0.64, 0.58],
+            [0.52, 0.62, 0.58],
+            [0.12, -0.68, 0.66],
+            [-0.58, -0.22, -0.66],
+            [0.62, 0.26, -0.64],
+            [0.0, 0.66, -0.66],
+          ];
+
+          const projectWorldToCanvas = (wx: number, wy: number, wz: number) => {
+            const zDist = Math.max(1.2, camZ - wz);
+            const projWx = (1.9 * wx) / zDist;
+            const projWy = (1.9 * wy) / zDist;
+            const sxNorm = (projWx - panX) / fovScale;
+            const syNorm = (projWy - panY) / fovScale;
+            return {
+              px: (sxNorm + 1.0) * 0.5 * res,
+              py: (syNorm + 1.0) * 0.5 * res,
+            };
+          };
+
+          const speed = isRolling ? 2.65 : 1.95;
+
+          for (let i = 0; i < vents3D.length; i++) {
+            const [lx, ly, lz] = vents3D[i];
+            // Rotate 3D crack coordinate by the cube's current 3D rotation matrix R
+            const wx0 = r00 * lx + r01 * ly + r02 * lz;
+            const wy0 = r10 * lx + r11 * ly + r12 * lz;
+            const wz0 = r20 * lx + r21 * ly + r22 * lz;
+
+            // Only erupt from fissures on the front/horizon hemisphere facing the camera
+            if (wz0 < -0.22) continue;
+
+            const seed = i * 1.6180339;
+            const life = (tSec * speed + seed) % 1.0;
+            const fade = Math.sin(life * Math.PI);
+
+            // Outward 3D velocity with rotational spin curl + downward volcanic gravity
+            const spinWhip = isRolling ? 0.52 : 0.18;
+            const vwx = (wx0 * 0.85 - wy0 * spinWhip) * (isRolling ? 0.92 : 0.62);
+            const vwy = (wy0 * 0.85 + wx0 * spinWhip) * (isRolling ? 0.82 : 0.58) - 0.12;
+            const vwz = wz0 * 0.35;
+            const grav3D = 0.95;
+
+            const sample3DArc = (tau: number) => {
+              const tClamped = Math.max(0, tau);
+              const curWx = wx0 + vwx * tClamped;
+              const curWy =
+                wy0 + vwy * tClamped + 0.5 * grav3D * tClamped * tClamped;
+              const curWz = wz0 + vwz * tClamped;
+              return projectWorldToCanvas(curWx, curWy, curWz);
+            };
+
+            const basePt = sample3DArc(0);
+            const midPt = sample3DArc(life * 0.52);
+            const headPt = sample3DArc(life);
+            const dropPt = sample3DArc(Math.min(1.08, life * 1.24));
+
+            const dx = headPt.px - basePt.px;
+            const dy = headPt.py - basePt.py;
+            const tangent = Math.atan2(dy, dx);
+            const perpX = -Math.sin(tangent);
+            const perpY = Math.cos(tangent);
+
+            const wobble = Math.sin(tSec * 13.5 + i * 2.1);
+            const headR = Math.max(
+              2.0,
+              res * 0.036 * (0.92 + 0.25 * Math.sin(life * Math.PI))
+            );
+            const baseR = headR * 0.58;
+
+            // A. Continuous curved liquid magma tongue stretching from the 3D crack (basePt) to the molten head (headPt)
+            if (life > 0.04) {
+              const ctrlX = midPt.px + perpX * res * 0.018 * wobble;
+              const ctrlY = midPt.py + perpY * res * 0.018 * wobble;
+
+              const tongueGrad = ctx.createLinearGradient(
+                basePt.px,
+                basePt.py,
+                headPt.px,
+                headPt.py
+              );
+              tongueGrad.addColorStop(
+                0,
+                `rgba(255, 253, 231, ${(0.95 * fade).toFixed(3)})`
+              );
+              tongueGrad.addColorStop(
+                0.35,
+                `rgba(255, 214, 0, ${(0.94 * fade).toFixed(3)})`
+              );
+              tongueGrad.addColorStop(
+                0.72,
+                `rgba(255, 87, 34, ${(0.92 * fade).toFixed(3)})`
+              );
+              tongueGrad.addColorStop(
+                1,
+                `rgba(185, 28, 28, ${(0.88 * fade).toFixed(3)})`
+              );
+
+              ctx.fillStyle = tongueGrad;
+              ctx.beginPath();
+              ctx.moveTo(basePt.px + perpX * baseR, basePt.py + perpY * baseR);
+              ctx.quadraticCurveTo(
+                ctrlX + perpX * headR * 0.62,
+                ctrlY + perpY * headR * 0.62,
+                headPt.px + perpX * headR * 0.85,
+                headPt.py + perpY * headR * 0.85
+              );
+              ctx.lineTo(
+                headPt.px - perpX * headR * 0.85,
+                headPt.py - perpY * headR * 0.85
+              );
+              ctx.quadraticCurveTo(
+                ctrlX - perpX * headR * 0.62,
+                ctrlY - perpY * headR * 0.62,
+                basePt.px - perpX * baseR,
+                basePt.py - perpY * baseR
+              );
+              ctx.closePath();
+              ctx.fill();
+            }
+
+            // B. Primary bulbous molten lava glob head with white-hot core & cooling basalt slag crust
+            drawViscousLavaBlob(
+              headPt.px,
+              headPt.py,
+              tangent,
+              headR,
+              1.36 + 0.16 * Math.sin(life * Math.PI),
+              wobble,
+              fade
+            );
+
+            // C. Pinched leading spatter droplet separating ahead along the parabolic gravity arc
+            if (life > 0.22) {
+              drawViscousLavaBlob(
+                dropPt.px,
+                dropPt.py,
+                tangent + 0.18,
+                headR * 0.48,
+                1.22,
+                -wobble,
+                fade * 0.82
+              );
+            }
+          }
+        }
+
+        ctx.restore();
+      }
+
+      // ======================================================================
+      // 7. ELECTRO CUBE REAL-TIME BODY PULSES, IDLE TESLA SPARKS & ROLLING PULSE DISCHARGES
+      // ======================================================================
+      if (diceStyle === 'electro_cube' && !reducedMotion) {
+        const cMid = res * 0.5;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Helper: 8-segment fractal midpoint-displaced high-voltage lightning renderer
+        // with natural root-to-tip tapering and acute-angle secondary micro-branches
+        const drawRealisticElectricArc = (
+          x0: number,
+          y0: number,
+          x1: number,
+          y1: number,
+          jitterSeed: number,
+          alpha: number,
+          thicknessScale = 1.0,
+          withBranch = true,
+          taperToTip = false
+        ) => {
+          if (alpha <= 0.03) return;
+          const dx = x1 - x0;
+          const dy = y1 - y0;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 1.2) return;
+          const nx = -dy / dist;
+          const ny = dx / dist;
+
+          // Build 8-segment fine fractal lightning polyline with acute deflections
+          const pts: Array<[number, number]> = [[x0, y0]];
+          const segs = 7;
+          const maxAmp = Math.min(res * 0.038, dist * 0.19);
+          for (let k = 1; k < segs; k++) {
+            const frac = k / segs;
+            const envelope = Math.sin(frac * Math.PI);
+            const h =
+              Math.sin(jitterSeed * (5.17 + k * 3.13) + k * 2.4) * 0.62 +
+              Math.cos(jitterSeed * (11.3 + k * 1.97) - k * 1.7) * 0.38;
+            const offset = h * maxAmp * envelope;
+            pts.push([x0 + dx * frac + nx * offset, y0 + dy * frac + ny * offset]);
+          }
+          pts.push([x1, y1]);
+
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          // Render with natural root-to-tip taper when snapping into open air
+          for (let k = 0; k < pts.length - 1; k++) {
+            const [ax, ay] = pts[k];
+            const [bx, by] = pts[k + 1];
+            const taper = taperToTip
+              ? Math.max(0.28, 1.0 - (k / (pts.length - 1)) * 0.68)
+              : 1.0;
+
+            // Pass 1: Outer cobalt-blue plasma corona
+            ctx.strokeStyle = `rgba(2, 132, 199, ${(0.52 * alpha * taper).toFixed(3)})`;
+            ctx.lineWidth = 3.2 * thicknessScale * taper;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+
+            // Pass 2: Mid electric cyan streamer
+            ctx.strokeStyle = `rgba(0, 240, 255, ${(0.92 * alpha * taper).toFixed(3)})`;
+            ctx.lineWidth = 1.55 * thicknessScale * taper;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+
+            // Pass 3: Inner razor-sharp white-hot core filament
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(0.98 * alpha * taper).toFixed(3)})`;
+            ctx.lineWidth = 0.68 * thicknessScale * taper;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+          }
+
+          // Acute-angle forked secondary micro-branches
+          if (withBranch && pts.length >= 6) {
+            const branchIndices = [2, 4];
+            for (let bIdx = 0; bIdx < branchIndices.length; bIdx++) {
+              const pIdx = branchIndices[bIdx];
+              const [px, py] = pts[pIdx];
+              const bSign =
+                Math.sin(jitterSeed * 3.7 + bIdx * 2.9) >= 0 ? 1 : -1;
+              const bScale = bIdx === 0 ? 0.28 : 0.2;
+              const bx1 =
+                px + dx * (bScale * 0.55) + nx * maxAmp * 0.82 * bSign;
+              const by1 =
+                py + dy * (bScale * 0.55) + ny * maxAmp * 0.82 * bSign;
+              const bx2 =
+                bx1 + dx * (bScale * 0.52) + nx * maxAmp * 0.36 * bSign;
+              const by2 =
+                by1 + dy * (bScale * 0.52) + ny * maxAmp * 0.36 * bSign;
+
+              ctx.strokeStyle = `rgba(0, 240, 255, ${(0.76 * alpha).toFixed(3)})`;
+              ctx.lineWidth = 0.95 * thicknessScale;
+              ctx.beginPath();
+              ctx.moveTo(px, py);
+              ctx.lineTo(bx1, by1);
+              ctx.lineTo(bx2, by2);
+              ctx.stroke();
+
+              ctx.strokeStyle = `rgba(255, 255, 255, ${(0.88 * alpha).toFixed(3)})`;
+              ctx.lineWidth = 0.42 * thicknessScale;
+              ctx.beginPath();
+              ctx.moveTo(px, py);
+              ctx.lineTo(bx1, by1);
+              ctx.lineTo(bx2, by2);
+              ctx.stroke();
+            }
+          }
+        };
+
+        // Helper: Subtle root ionization glow
+        const drawPlasmaNodeFlare = (
+          nx: number,
+          ny: number,
+          radius: number,
+          alpha: number
+        ) => {
+          if (alpha <= 0.03 || radius <= 0.5) return;
+          const grad = ctx.createRadialGradient(nx, ny, 0.15, nx, ny, radius);
+          grad.addColorStop(
+            0,
+            `rgba(255, 255, 255, ${(0.92 * alpha).toFixed(3)})`
+          );
+          grad.addColorStop(
+            0.35,
+            `rgba(0, 240, 255, ${(0.78 * alpha).toFixed(3)})`
+          );
+          grad.addColorStop(
+            0.72,
+            `rgba(2, 132, 199, ${(0.32 * alpha).toFixed(3)})`
+          );
+          grad.addColorStop(1, 'rgba(3, 105, 161, 0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(nx, ny, radius, 0, Math.PI * 2);
+          ctx.fill();
+        };
+
+        const tick = Math.floor(tSec * 26);
+
+        if (!isRolling && !isLanding) {
+          // IDLE STATE:
+          // 1. Crisp high-voltage electric pulses racing through the cube's internal conduits & body
+          const bodyCircuits: ReadonlyArray<
+            readonly [number, number, number, number, number]
+          > = [
+            [-0.25, -0.56, 0.25, -0.56, 0.0],
+            [0.56, -0.25, 0.56, 0.25, 0.24],
+            [0.25, 0.56, -0.25, 0.56, 0.48],
+            [-0.56, 0.25, -0.56, -0.25, 0.72],
+            [-0.44, -0.44, 0.44, 0.44, 0.15],
+            [0.44, -0.44, -0.44, 0.44, 0.55],
+            [-0.48, 0.0, 0.48, 0.0, 0.35],
+            [0.0, -0.48, 0.0, 0.48, 0.82],
+          ];
+
+          for (let i = 0; i < bodyCircuits.length; i++) {
+            const [nx0, ny0, nx1, ny1, phase] = bodyCircuits[i];
+            const prog = (tSec * 1.55 + phase) % 1.0;
+            const pulseAlpha = Math.sin(prog * Math.PI) * 0.88;
+
+            const x0 = cMid + nx0 * res * 0.5;
+            const y0 = cMid + ny0 * res * 0.5;
+            const x1 = cMid + nx1 * res * 0.5;
+            const y1 = cMid + ny1 * res * 0.5;
+
+            const headT = prog;
+            const tailT = Math.max(0, prog - 0.34);
+            const hx = x0 + (x1 - x0) * headT;
+            const hy = y0 + (y1 - y0) * headT;
+            const tx = x0 + (x1 - x0) * tailT;
+            const ty = y0 + (y1 - y0) * tailT;
+
+            drawRealisticElectricArc(
+              tx,
+              ty,
+              hx,
+              hy,
+              tick * 1.3 + i * 3.7,
+              pulseAlpha,
+              0.68,
+              i % 2 === 0,
+              false
+            );
+            drawPlasmaNodeFlare(hx, hy, res * 0.032, pulseAlpha * 0.85);
+          }
+
+          // 2. Compact, realistic tapered fractal electric sparks snapping out of the body of the cube
+          const idleSparkCount = 8;
+          for (let s = 0; s < idleSparkCount; s++) {
+            const sparkCycle = (tSec * 2.25 + s * 0.39) % 1.0;
+            if (sparkCycle < 0.66) {
+              const p = sparkCycle / 0.66;
+              const sparkAlpha = Math.sin(p * Math.PI) * 0.94;
+              const baseAngle =
+                (s / idleSparkCount) * Math.PI * 2 +
+                Math.sin(s * 2.3 + tick * 0.25) * 0.12;
+
+              // Smaller, tighter spark excursion hugging the cube body & corners
+              const rStart = res * 0.27;
+              const rEnd = res * (0.312 + p * 0.052);
+              const sx0 = cMid + Math.cos(baseAngle) * rStart;
+              const sy0 = cMid + Math.sin(baseAngle) * rStart;
+              const bendAngle =
+                baseAngle + Math.sin(tick * 0.7 + s * 1.9) * 0.16;
+              const sx1 = cMid + Math.cos(bendAngle) * rEnd;
+              const sy1 = cMid + Math.sin(bendAngle) * rEnd;
+
+              drawPlasmaNodeFlare(sx0, sy0, res * 0.025, sparkAlpha * 0.82);
+              drawRealisticElectricArc(
+                sx0,
+                sy0,
+                sx1,
+                sy1,
+                tick * 1.7 + s * 5.1,
+                sparkAlpha,
+                0.62,
+                true,
+                true
+              );
+            }
+          }
+        } else {
+          // ROLLING / LANDING STATE:
+          // 1. Sleek, decluttered concentric 360-degree circular electric pulse waves expanding in a wave-like pattern
+          const waveCount = 2;
+          for (let w = 0; w < waveCount; w++) {
+            const waveLife = (tSec * 2.15 + w / waveCount) % 1.0;
+            const waveAlpha = Math.sin(waveLife * Math.PI) * 0.94;
+            if (waveAlpha > 0.05) {
+              // Larger radius expanding cleanly outside the cube silhouette in a rhythmic wave-like ripple
+              const baseWaveR = res * (0.34 + waveLife * 0.155);
+              const ringSegs = 60;
+              const ringPts: Array<{ x: number; y: number; theta: number; r: number }> = [];
+
+              for (let k = 0; k < ringSegs; k++) {
+                const theta = (k / ringSegs) * Math.PI * 2;
+                // Smooth 8-crest travelling wave undulation + subtle high-voltage micro-kink
+                const waveUndulation =
+                  Math.sin(theta * 8.0 - tSec * 14.0 + w * 2.4) * (res * 0.012);
+                const h =
+                  Math.sin(k * 12.9898 + (tick + w * 7) * 78.233) * 43758.5453;
+                const jitter = ((h - Math.floor(h)) * 2.0 - 1.0) * (res * 0.0085);
+                const rNode = baseWaveR + waveUndulation + jitter;
+                ringPts.push({
+                  x: cMid + Math.cos(theta) * rNode,
+                  y: cMid + Math.sin(theta) * rNode,
+                  theta,
+                  r: rNode,
+                });
+              }
+
+              const traceWaveRing = () => {
+                ctx.beginPath();
+                for (let k = 0; k < ringPts.length; k++) {
+                  if (k === 0) ctx.moveTo(ringPts[k].x, ringPts[k].y);
+                  else ctx.lineTo(ringPts[k].x, ringPts[k].y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+              };
+
+              const wScale = 1.0 - waveLife * 0.32;
+              // Pass A: Deep cobalt-blue outer ionized wave corona
+              ctx.strokeStyle = `rgba(2, 132, 199, ${(0.42 * waveAlpha).toFixed(3)})`;
+              ctx.lineWidth = Math.max(1.2, res * 0.024 * wScale);
+              traceWaveRing();
+
+              // Pass B: Electric cyan plasma wave ring
+              ctx.strokeStyle = `rgba(0, 240, 255, ${(0.86 * waveAlpha).toFixed(3)})`;
+              ctx.lineWidth = Math.max(0.75, res * 0.012 * wScale);
+              traceWaveRing();
+
+              // Pass C: White-hot razor-sharp circular wave core
+              ctx.strokeStyle = `rgba(255, 255, 255, ${(0.95 * waveAlpha).toFixed(3)})`;
+              ctx.lineWidth = Math.max(0.4, res * 0.0055 * wScale);
+              traceWaveRing();
+            }
+          }
+
+          // 2. 4 Clean 3D-projected perimeter corner streamers (never crossing the center face)
+          const electroNodes3D: ReadonlyArray<
+            readonly [number, number, number]
+          > = [
+            [-0.72, -0.72, 0.56],
+            [0.72, -0.72, 0.56],
+            [-0.72, 0.72, 0.56],
+            [0.72, 0.72, 0.56],
+          ];
+
+          const projectNodeToCanvas = (wx: number, wy: number, wz: number) => {
+            const zDist = Math.max(1.2, camZ - wz);
+            const projWx = (1.9 * wx) / zDist;
+            const projWy = (1.9 * wy) / zDist;
+            const sxNorm = (projWx - panX) / fovScale;
+            const syNorm = (projWy - panY) / fovScale;
+            return {
+              px: (sxNorm + 1.0) * 0.5 * res,
+              py: (syNorm + 1.0) * 0.5 * res,
+            };
+          };
+
+          const pulseSpeed = isRolling ? 2.8 : 2.0;
+          for (let i = 0; i < electroNodes3D.length; i++) {
+            const [lx, ly, lz] = electroNodes3D[i];
+            const wx0 = r00 * lx + r01 * ly + r02 * lz;
+            const wy0 = r10 * lx + r11 * ly + r12 * lz;
+            const wz0 = r20 * lx + r21 * ly + r22 * lz;
+
+            if (wz0 < -0.15) continue;
+
+            const rootPt = projectNodeToCanvas(wx0, wy0, wz0);
+            // Guard: only emit from outer perimeter so the tumbling 3D cube face stays crystal-clear
+            const distFromCenter = Math.hypot(rootPt.px - cMid, rootPt.py - cMid);
+            if (distFromCenter < res * 0.22) continue;
+
+            const life = (tSec * pulseSpeed + i * 0.25) % 1.0;
+            const fade = Math.sin(life * Math.PI);
+
+            const spinCurl = isRolling ? 0.42 : 0.16;
+            const vwx =
+              (wx0 * 0.68 - wy0 * spinCurl) * (isRolling ? 0.64 : 0.46);
+            const vwy =
+              (wy0 * 0.68 + wx0 * spinCurl) * (isRolling ? 0.64 : 0.46);
+            const vwz = wz0 * 0.25;
+
+            const tipPt = projectNodeToCanvas(
+              wx0 + vwx * life,
+              wy0 + vwy * life,
+              wz0 + vwz * life
+            );
+
+            drawPlasmaNodeFlare(rootPt.px, rootPt.py, res * 0.024, fade * 0.72);
+            drawRealisticElectricArc(
+              rootPt.px,
+              rootPt.py,
+              tipPt.px,
+              tipPt.py,
+              tick * 2.1 + i * 6.7,
+              fade * 0.84,
+              0.58,
+              false,
+              true
+            );
+          }
+        }
+
+        ctx.restore();
+      }
+
+      // ======================================================================
+      // 8. TESSERACT CUBE REAL-TIME 4D TRANSPARENT HYPERCUBE IDLE & ROLLING PROJECTION
+      // ======================================================================
+      if (diceStyle === 'tesseract_cube' && !reducedMotion) {
+        const cMid = res * 0.5;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        const project3DToCanvas = (wx: number, wy: number, wz: number) => {
+          const zDist = Math.max(1.2, camZ - wz);
+          const projWx = (1.9 * wx) / zDist;
+          const projWy = (1.9 * wy) / zDist;
+          const sxNorm = (projWx - panX) / fovScale;
+          const syNorm = (projWy - panY) / fovScale;
+          return {
+            px: (sxNorm + 1.0) * 0.5 * res,
+            py: (syNorm + 1.0) * 0.5 * res,
+          };
+        };
+
+        // 8 unit cube corner signs
+        const signs: ReadonlyArray<readonly [number, number, number]> = [
+          [-1, -1, -1],
+          [1, -1, -1],
+          [1, 1, -1],
+          [-1, 1, -1],
+          [-1, -1, 1],
+          [1, -1, 1],
+          [1, 1, 1],
+          [-1, 1, 1],
+        ];
+        // 12 edges of a 3D cube connecting the 8 corners
+        const cubeEdges: ReadonlyArray<readonly [number, number]> = [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0],
+          [4, 5],
+          [5, 6],
+          [6, 7],
+          [7, 4],
+          [0, 4],
+          [1, 5],
+          [2, 6],
+          [3, 7],
+        ];
+
+        // In idle state: smooth continuous 4D Clifford precession inside the transparent crystal cube
+        // In rolling state: rapid 4D w-axis inside-out eversion where inner and outer chambers invert
+        const precessAngle = tSec * (isRolling ? 5.8 : 1.65);
+        const ca = Math.cos(precessAngle);
+        const sa = Math.sin(precessAngle);
+        const cb = Math.cos(precessAngle * 0.72);
+        const sb = Math.sin(precessAngle * 0.72);
+
+        const wOsc = Math.sin(tSec * (isRolling ? 8.8 : 2.4));
+        const outerScale = isRolling ? 0.56 - wOsc * 0.16 : 0.58;
+        const innerScale = isRolling
+          ? 0.30 + wOsc * 0.22
+          : 0.28 + wOsc * 0.05;
+
+        const outerPts: Array<{ px: number; py: number }> = [];
+        const innerPts: Array<{ px: number; py: number }> = [];
+
+        for (let i = 0; i < 8; i++) {
+          const [sx, sy, sz] = signs[i];
+          // Outer chamber vertices aligned with the 3D crystal cube
+          const ox = sx * outerScale;
+          const oy = sy * outerScale;
+          const oz = sz * outerScale;
+          const wOx = r00 * ox + r01 * oy + r02 * oz;
+          const wOy = r10 * ox + r11 * oy + r12 * oz;
+          const wOz = r20 * ox + r21 * oy + r22 * oz;
+          outerPts.push(project3DToCanvas(wOx, wOy, wOz));
+
+          // Inner 4D chamber vertices rotating independently inside the transparent crystal
+          const ix0 = sx * innerScale;
+          const iy0 = sy * innerScale;
+          const iz0 = sz * innerScale;
+          const ix1 = ix0 * ca - iz0 * sa;
+          const iz1 = ix0 * sa + iz0 * ca;
+          const iy1 = iy0 * cb - iz1 * sb;
+          const iz2 = iy0 * sb + iz1 * cb;
+
+          const wIx = r00 * ix1 + r01 * iy1 + r02 * iz2;
+          const wIy = r10 * ix1 + r11 * iy1 + r12 * iz2;
+          const wIz = r20 * ix1 + r21 * iy1 + r22 * iz2;
+          innerPts.push(project3DToCanvas(wIx, wIy, wIz));
+        }
+
+        // 1. Draw the 8 diagonal 4D Schlegel struts connecting outer corners to the rotating inner hypercube
+        // with traveling dimensional energy beads along each strut
+        const pulseProg = (tSec * (isRolling ? 3.8 : 1.35)) % 1.0;
+        for (let i = 0; i < 8; i++) {
+          const oPt = outerPts[i];
+          const iPt = innerPts[i];
+
+          ctx.strokeStyle =
+            i % 2 === 0
+              ? 'rgba(103, 232, 249, 0.42)'
+              : 'rgba(232, 121, 249, 0.42)';
+          ctx.lineWidth = Math.max(0.7, res * 0.011);
+          ctx.beginPath();
+          ctx.moveTo(oPt.px, oPt.py);
+          ctx.lineTo(iPt.px, iPt.py);
+          ctx.stroke();
+
+          // Traveling 4D energy packet moving along the strut between outer and inner cubes
+          const tBead = (pulseProg + i * 0.125) % 1.0;
+          const bx = oPt.px + (iPt.px - oPt.px) * tBead;
+          const by = oPt.py + (iPt.py - oPt.py) * tBead;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.beginPath();
+          ctx.arc(bx, by, Math.max(0.8, res * 0.012), 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 2. Draw the 12 edges of the suspended rotating inner 4D hypercube chamber
+        ctx.strokeStyle = isRolling
+          ? 'rgba(232, 121, 249, 0.78)'
+          : 'rgba(103, 232, 249, 0.72)';
+        ctx.lineWidth = Math.max(0.95, res * 0.015);
+        ctx.beginPath();
+        for (const [e0, e1] of cubeEdges) {
+          ctx.moveTo(innerPts[e0].px, innerPts[e0].py);
+          ctx.lineTo(innerPts[e1].px, innerPts[e1].py);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+        ctx.lineWidth = Math.max(0.45, res * 0.007);
+        ctx.stroke();
+
+        // 3. Glowing vertex nodes on the inner 4D hypercube + breathing central singularity core
+        for (let i = 0; i < 8; i++) {
+          ctx.fillStyle = i % 2 === 0 ? '#67E8F9' : '#F0ABFC';
+          ctx.beginPath();
+          ctx.arc(
+            innerPts[i].px,
+            innerPts[i].py,
+            Math.max(1.0, res * 0.015),
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+
+        const coreR = res * (0.055 + 0.018 * Math.sin(tSec * (isRolling ? 12.0 : 3.4)));
+        const coreGrad = ctx.createRadialGradient(
+          cMid,
+          cMid,
+          0,
+          cMid,
+          cMid,
+          coreR * 2.2
+        );
+        coreGrad.addColorStop(0, 'rgba(255, 255, 255, 0.78)');
+        coreGrad.addColorStop(0.38, 'rgba(103, 232, 249, 0.45)');
+        coreGrad.addColorStop(0.75, 'rgba(232, 121, 249, 0.22)');
+        coreGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+        ctx.fillStyle = coreGrad;
+        ctx.beginPath();
+        ctx.arc(cMid, cMid, coreR * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // ======================================================================
+      // 9. COSMO CUBE REAL-TIME CELESTIAL GALAXY IDLE & SUPERNOVA VORTEX ROLL
+      // ======================================================================
+      if (diceStyle === 'cosmo_cube' && !reducedMotion) {
+        const cMid = res * 0.5;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        const drawDiamondStarGlint = (
+          sx: number,
+          sy: number,
+          radius: number,
+          alpha: number,
+          colorHex: string,
+          rotRad: number
+        ) => {
+          if (alpha <= 0.03) return;
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.rotate(rotRad);
+          const inner = radius * 0.28;
+          ctx.beginPath();
+          ctx.moveTo(0, -radius);
+          ctx.lineTo(inner, -inner);
+          ctx.lineTo(radius, 0);
+          ctx.lineTo(inner, inner);
+          ctx.lineTo(0, radius);
+          ctx.lineTo(-inner, inner);
+          ctx.lineTo(-radius, 0);
+          ctx.lineTo(-inner, -inner);
+          ctx.closePath();
+          ctx.fillStyle = colorHex;
+          ctx.globalAlpha = clamp(alpha, 0, 1);
+          ctx.fill();
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.26, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        };
+
+        if (!isRolling && !isLanding) {
+          // IDLE STATE:
+          // 1. Subtle swirling 4-arm spiral galaxy filaments rotating inside the cosmic cube
+          const armColors: ReadonlyArray<readonly [string, string]> = [
+            ['rgba(244, 114, 182, 0.24)', 'rgba(245, 208, 254, 0.42)'],
+            ['rgba(192, 132, 252, 0.26)', 'rgba(233, 213, 255, 0.42)'],
+            ['rgba(56, 189, 248, 0.24)', 'rgba(186, 230, 253, 0.42)'],
+            ['rgba(251, 191, 36, 0.22)', 'rgba(254, 240, 138, 0.42)'],
+          ];
+          const baseSpin = -tSec * 1.15;
+          for (let a = 0; a < 4; a++) {
+            const [glowCol, coreCol] = armColors[a];
+            const armStart = baseSpin + (a * Math.PI) / 2;
+            ctx.beginPath();
+            const steps = 18;
+            for (let s = 0; s <= steps; s++) {
+              const prog = s / steps;
+              const theta = armStart + prog * Math.PI * 1.35;
+              const rad = res * (0.06 + prog * 0.20);
+              const gx = cMid + Math.cos(theta) * rad;
+              const gy = cMid + Math.sin(theta) * rad * 0.86;
+              if (s === 0) ctx.moveTo(gx, gy);
+              else ctx.lineTo(gx, gy);
+            }
+            ctx.strokeStyle = glowCol;
+            ctx.lineWidth = Math.max(1.1, res * 0.018);
+            ctx.stroke();
+
+            ctx.strokeStyle = coreCol;
+            ctx.lineWidth = Math.max(0.5, res * 0.007);
+            ctx.stroke();
+          }
+
+          // 2. Two tilted elliptical planetary orbital rings with smoothly revolving celestial planets & moons
+          const orbitDefs: ReadonlyArray<{
+            rxFrac: number;
+            ryFrac: number;
+            tiltRad: number;
+            ringCol: string;
+            planetCol: string;
+            moonCol: string;
+            speed: number;
+          }> = [
+            {
+              rxFrac: 0.41,
+              ryFrac: 0.145,
+              tiltRad: (-30 * Math.PI) / 180,
+              ringCol: 'rgba(251, 191, 36, 0.58)',
+              planetCol: '#FDE68A',
+              moonCol: '#38BDF8',
+              speed: 1.45,
+            },
+            {
+              rxFrac: 0.38,
+              ryFrac: 0.17,
+              tiltRad: (26 * Math.PI) / 180,
+              ringCol: 'rgba(244, 114, 182, 0.54)',
+              planetCol: '#F5D0FE',
+              moonCol: '#C084FC',
+              speed: -1.18,
+            },
+          ];
+
+          for (let o = 0; o < orbitDefs.length; o++) {
+            const od = orbitDefs[o];
+            const rxO = res * od.rxFrac;
+            const ryO = res * od.ryFrac;
+            const cTilt = Math.cos(od.tiltRad);
+            const sTilt = Math.sin(od.tiltRad);
+
+            ctx.save();
+            ctx.translate(cMid, cMid);
+            ctx.rotate(od.tiltRad);
+            ctx.strokeStyle = od.ringCol;
+            ctx.lineWidth = Math.max(0.75, res * 0.011);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, rxO, ryO, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            // Revolving primary planet + luminous orbital wake
+            const pAngle = tSec * od.speed + o * 1.8;
+            const lx = Math.cos(pAngle) * rxO;
+            const ly = Math.sin(pAngle) * ryO;
+            const px = cMid + lx * cTilt - ly * sTilt;
+            const py = cMid + lx * sTilt + ly * cTilt;
+
+            const pRadius = Math.max(1.4, res * 0.024);
+            const pGlow = ctx.createRadialGradient(px, py, 0, px, py, pRadius * 2.6);
+            pGlow.addColorStop(0, '#FFFFFF');
+            pGlow.addColorStop(0.45, od.planetCol);
+            pGlow.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = pGlow;
+            ctx.beginPath();
+            ctx.arc(px, py, pRadius * 2.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Counter-side companion moon
+            const mAngle = pAngle + Math.PI;
+            const mlx = Math.cos(mAngle) * rxO;
+            const mly = Math.sin(mAngle) * ryO;
+            const mx = cMid + mlx * cTilt - mly * sTilt;
+            const my = cMid + mlx * sTilt + mly * cTilt;
+            ctx.fillStyle = od.moonCol;
+            ctx.beginPath();
+            ctx.arc(mx, my, Math.max(1.0, res * 0.015), 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // 3. Twinkling 4-point cosmic starlight glints around the nebula perimeter
+          const starOffsets: ReadonlyArray<
+            readonly [number, number, string, number]
+          > = [
+            [-0.29, -0.28, '#FDE68A', 0.0],
+            [0.30, -0.27, '#BAE6FD', 1.1],
+            [-0.30, 0.28, '#F5D0FE', 2.2],
+            [0.29, 0.29, '#FDE68A', 3.3],
+            [0.0, -0.35, '#FFFFFF', 4.4],
+            [0.0, 0.35, '#38BDF8', 5.5],
+          ];
+          for (let s = 0; s < starOffsets.length; s++) {
+            const [ox, oy, sCol, phase] = starOffsets[s];
+            const twinkle = 0.5 + 0.5 * Math.sin(tSec * 3.4 + phase);
+            if (twinkle > 0.25) {
+              drawDiamondStarGlint(
+                cMid + ox * res,
+                cMid + oy * res,
+                res * (0.024 + twinkle * 0.018),
+                twinkle * 0.88,
+                sCol,
+                tSec * 0.6 + phase
+              );
+            }
+          }
+        } else {
+          // ROLLING / LANDING STATE:
+          // Outer Perimeter Supernova Spiral Galaxy Arms & Starburst Glints
+          // (Starts at r >= 0.34 * res so the tumbling 3D Cosmo Cube face in the center remains 100% crisp)
+          const rollArmPalette: ReadonlyArray<readonly [string, string]> = [
+            ['rgba(244, 114, 182, 0.68)', '#FFFFFF'],
+            ['rgba(251, 191, 36, 0.68)', '#FEF08A'],
+            ['rgba(56, 189, 248, 0.68)', '#FFFFFF'],
+            ['rgba(192, 132, 252, 0.68)', '#F5D0FE'],
+          ];
+          const vortexSpin = -tSec * 7.8;
+
+          for (let a = 0; a < 4; a++) {
+            const [nebCol, coreCol] = rollArmPalette[a];
+            const armBase = vortexSpin + (a * Math.PI) / 2;
+            const armSteps = 16;
+
+            ctx.beginPath();
+            let tipX = cMid;
+            let tipY = cMid;
+            for (let s = 0; s <= armSteps; s++) {
+              const p = s / armSteps;
+              const theta = armBase + p * Math.PI * 0.85;
+              const rad = res * (0.34 + p * 0.14);
+              const gx = cMid + Math.cos(theta) * rad;
+              const gy = cMid + Math.sin(theta) * rad;
+              if (s === 0) ctx.moveTo(gx, gy);
+              else ctx.lineTo(gx, gy);
+              if (s === armSteps) {
+                tipX = gx;
+                tipY = gy;
+              }
+            }
+            ctx.strokeStyle = nebCol;
+            ctx.lineWidth = Math.max(1.2, res * 0.018);
+            ctx.stroke();
+
+            ctx.strokeStyle = coreCol;
+            ctx.lineWidth = Math.max(0.55, res * 0.008);
+            ctx.stroke();
+
+            // Starburst glint at the outer tip of each spiral galaxy arm
+            drawDiamondStarGlint(
+              tipX,
+              tipY,
+              res * 0.034,
+              0.92,
+              coreCol,
+              tSec * 4.5 + a
+            );
+          }
+        }
+
+        ctx.restore();
+      }
 
       if (!reducedMotion) {
         animFrameId = window.requestAnimationFrame(renderFrame);

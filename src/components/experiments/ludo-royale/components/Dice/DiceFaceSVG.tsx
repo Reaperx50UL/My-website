@@ -1030,7 +1030,7 @@ export const DiceFaceSVG: React.FC<DiceFaceSVGProps> = ({
               <polygon points="100,100 100,70 92,76 90,92 70,100" />
             </g>
 
-            {/* Pulsating 4-Stage Molten Magma Fissures Embedded Deep Between Rock Boulders */}
+            {/* Pulsating & Flowing 5-Stage Molten Magma Fissures Embedded Deep Between Rock Boulders */}
             <g
               className="animate-lava-crack"
               fill="none"
@@ -1039,18 +1039,65 @@ export const DiceFaceSVG: React.FC<DiceFaceSVGProps> = ({
             >
               <path
                 d="M 32 0 L 39 20 L 27 32 L 0 32 M 68 0 L 63 20 L 50 25 L 39 20 M 100 32 L 75 32 L 63 20 M 27 32 L 33 51 L 18 55 L 0 68 M 75 32 L 70 51 L 80 56 L 100 68 M 33 51 L 54 63 L 70 51 M 33 51 L 32 72 L 32 100 M 54 63 L 67 72 L 68 100 M 67 72 L 80 56"
-                stroke="rgba(220, 38, 38, 0.78)"
-                strokeWidth="4.4"
+                stroke="rgba(220, 38, 38, 0.85)"
+                strokeWidth="4.8"
               />
               <path
                 d="M 32 0 L 39 20 L 27 32 L 0 32 M 68 0 L 63 20 L 50 25 L 39 20 M 100 32 L 75 32 L 63 20 M 27 32 L 33 51 L 18 55 L 0 68 M 75 32 L 70 51 L 80 56 L 100 68 M 33 51 L 54 63 L 70 51 M 33 51 L 32 72 L 32 100 M 54 63 L 67 72 L 68 100 M 67 72 L 80 56"
                 stroke="#FF6D00"
-                strokeWidth="2.3"
+                strokeWidth="2.6"
               />
+              {/* Animated directional flowing molten orange-gold stream */}
+              <path
+                d="M 32 0 L 39 20 L 27 32 L 0 32 M 68 0 L 63 20 L 50 25 L 39 20 M 100 32 L 75 32 L 63 20 M 27 32 L 33 51 L 18 55 L 0 68 M 75 32 L 70 51 L 80 56 L 100 68 M 33 51 L 54 63 L 70 51 M 33 51 L 32 72 L 32 100 M 54 63 L 67 72 L 68 100 M 67 72 L 80 56"
+                stroke="#FFAB00"
+                strokeWidth="2.1"
+                strokeDasharray="10 8"
+                className="animate-lava-flow-stream"
+              />
+              {/* Animated counter-flowing white-hot incandescent core */}
               <path
                 d="M 32 0 L 39 20 L 27 32 L 0 32 M 68 0 L 63 20 L 50 25 L 39 20 M 100 32 L 75 32 L 63 20 M 27 32 L 33 51 L 18 55 L 0 68 M 75 32 L 70 51 L 80 56 L 100 68 M 33 51 L 54 63 L 70 51 M 33 51 L 32 72 L 32 100 M 54 63 L 67 72 L 68 100"
-                stroke="#FFF59D"
-                strokeWidth="1.0"
+                stroke="#FFF9C4"
+                strokeWidth="1.15"
+                strokeDasharray="6 12"
+                className="animate-lava-flow-reverse"
+              />
+              {/* Bubbling magma confluence pockets */}
+              <circle
+                cx="39"
+                cy="20"
+                r="2.2"
+                fill="#FFF59D"
+                className="animate-lava-bubble"
+              />
+              <circle
+                cx="63"
+                cy="20"
+                r="2.1"
+                fill="#FF9100"
+                className="animate-lava-bubble"
+              />
+              <circle
+                cx="33"
+                cy="51"
+                r="2.4"
+                fill="#FFF59D"
+                className="animate-lava-bubble"
+              />
+              <circle
+                cx="54"
+                cy="63"
+                r="2.3"
+                fill="#FFAB00"
+                className="animate-lava-bubble"
+              />
+              <circle
+                cx="70"
+                cy="51"
+                r="2.2"
+                fill="#FFF59D"
+                className="animate-lava-bubble"
               />
             </g>
           </g>

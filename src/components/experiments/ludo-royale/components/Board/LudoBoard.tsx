@@ -26,9 +26,12 @@ import {
 import {
   ALL_PLAYER_COLORS,
   COLOR_META,
+  LAVA_DROP_SPLASH_DURATION_MS,
+  LavaBoardSplashEffect,
   PLAYER_COLORS,
   STAR_SAFE_INDICES,
   START_TRACK_INDEX,
+  buildLavaDropSplashSpec,
   getBoardThemeOption,
   getFinishStep,
 } from '../../game/constants';
@@ -248,6 +251,9 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   reducedMotion,
   showMoveHints,
   animatingMove,
+  isRolling = false,
+  diceValue = null,
+  diceStyle = 'classic_ivory',
   onSelectToken,
   onBreakPair,
 }) => {
@@ -258,9 +264,32 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
   >(null);
   const [captureBursts, setCaptureBursts] = useState<BurstEffect[]>([]);
   const [homeBursts, setHomeBursts] = useState<BurstEffect[]>([]);
+  const [lavaSplashes, setLavaSplashes] = useState<
+    Array<{ id: string; spec: LavaBoardSplashEffect }>
+  >([]);
 
   const prevTokensRef = useRef<Record<string, Token>>({});
+  const prevRollingRef = useRef<boolean>(Boolean(isRolling));
   const inspectTimerRef = useRef<number | null>(null);
+
+  // Trigger a molten 'lava drop' splash on the board surface whenever the Lava Cube lands after a roll
+  useEffect(() => {
+    if (prevRollingRef.current && !isRolling) {
+      if (diceStyle === 'lava_cube' && !reducedMotion) {
+        const splashId = `lava-splash-${Date.now()}`;
+        const spec = buildLavaDropSplashSpec(750, 750, diceValue);
+        setLavaSplashes((prev) => [...prev, { id: splashId, spec }]);
+        const timer = window.setTimeout(() => {
+          setLavaSplashes((prev) =>
+            prev.filter((item) => item.id !== splashId)
+          );
+        }, LAVA_DROP_SPLASH_DURATION_MS);
+        prevRollingRef.current = Boolean(isRolling);
+        return () => window.clearTimeout(timer);
+      }
+    }
+    prevRollingRef.current = Boolean(isRolling);
+  }, [isRolling, diceStyle, diceValue, reducedMotion]);
 
   useEffect(() => {
     setActivePairMenuTokenId(null);
@@ -6874,6 +6903,98 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
                 fill={COLOR_META[burst.color].lightHex}
                 opacity={0.65}
               />
+            </g>
+          ))}
+
+          {/* 8B. Molten 'Lava Drop' Splash on the Board Surface When Lava Cube Lands After a Roll */}
+          {lavaSplashes.map(({ id, spec }) => (
+            <g
+              key={id}
+              data-testid="board-lava-drop-splash"
+              className="pointer-events-none"
+              style={{
+                filter: 'drop-shadow(0 0 18px rgba(255, 87, 34, 0.88))',
+              }}
+            >
+              {/* Central Multi-Lobed Molten Lava Drop Puddle on Board Surface */}
+              <g
+                transform={`translate(${spec.centerX}, ${spec.centerY})`}
+                className="animate-lava-board-puddle"
+              >
+                {/* Expanding thermal shockwave ring on the board surface */}
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={spec.puddleRadius * 1.65}
+                  fill="none"
+                  stroke="#FF6D00"
+                  strokeWidth={4.5}
+                  strokeDasharray="16 10"
+                  opacity={0.85}
+                />
+                {/* Outer cooling volcanic crust */}
+                <path
+                  d="M 0 -64 C 24 -68, 52 -52, 64 -28 C 76 -4, 70 26, 56 48 C 42 70, 14 74, -12 68 C -38 62, -62 48, -68 20 C -74 -8, -58 -40, -34 -56 C -18 -66, -8 -62, 0 -64 Z"
+                  fill="rgba(127, 29, 29, 0.72)"
+                  stroke="#DC2626"
+                  strokeWidth={3.5}
+                />
+                {/* Molten orange magma body */}
+                <path
+                  d="M 0 -48 C 19 -51, 40 -39, 49 -20 C 58 -1, 52 21, 41 37 C 30 53, 9 56, -10 51 C -29 46, -47 35, -51 14 C -55 -7, -43 -31, -25 -42 C -13 -50, -6 -47, 0 -48 Z"
+                  fill="rgba(255, 109, 0, 0.78)"
+                  stroke="#FFAB00"
+                  strokeWidth={2.2}
+                />
+                {/* Incandescent yellow-white impact core */}
+                <path
+                  d="M 0 -26 C 11 -28, 22 -20, 27 -10 C 32 0, 28 13, 21 21 C 14 29, 4 31, -6 28 C -16 25, -26 18, -28 7 C -30 -4, -22 -17, -12 -23 Z"
+                  fill="rgba(255, 245, 157, 0.9)"
+                />
+              </g>
+
+              {/* Radial Splashing Molten Lava Drops & Teardrop Puddles Across the Board Surface */}
+              {spec.drops.map((drop) => (
+                <g
+                  key={drop.id}
+                  transform={`translate(${drop.x}, ${drop.y}) rotate(${drop.angleDeg})`}
+                  className="animate-lava-drop-splatter"
+                  style={{ animationDelay: `${drop.delayMs}ms` }}
+                >
+                  {/* Scorched obsidian rim around each splashed lava drop */}
+                  <ellipse
+                    cx={0}
+                    cy={0}
+                    rx={drop.rx * 1.28}
+                    ry={drop.ry * 1.28}
+                    fill={drop.crustHex}
+                    opacity={0.75}
+                  />
+                  {/* Molten orange-red teardrop body */}
+                  <ellipse
+                    cx={2}
+                    cy={0}
+                    rx={drop.rx}
+                    ry={drop.ry}
+                    fill={drop.midHex}
+                  />
+                  {/* White-hot yellow lava droplet head */}
+                  <ellipse
+                    cx={4}
+                    cy={0}
+                    rx={drop.rx * 0.54}
+                    ry={drop.ry * 0.54}
+                    fill={drop.coreHex}
+                  />
+                  {/* Secondary micro-droplet satellite */}
+                  <circle
+                    cx={drop.rx + 8}
+                    cy={0}
+                    r={Math.max(3.2, drop.ry * 0.36)}
+                    fill={drop.coreHex}
+                  />
+                </g>
+              ))}
             </g>
           ))}
 

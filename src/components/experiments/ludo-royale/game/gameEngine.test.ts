@@ -17,7 +17,19 @@ import {
 import {
   AVATAR_OPTIONS,
   BOARD_THEME_OPTIONS,
+  buildCosmoIdleCelestialSpecs,
+  buildCosmoRollingSupernovaSpecs,
+  buildElectroBodyPulseSpecs,
+  buildElectroCircularWaveRings,
+  buildElectroIdleSparkSpecs,
+  buildElectroRollingPulseSpecs,
+  buildLavaDropSplashSpec,
+  buildLavaSteamVentSpecs,
+  buildTesseractIdleEnergyPulses,
+  buildTesseractWarpFaceSpecs,
   computeDiceRollTransform,
+  computeLavaThermalState,
+  computeTesseractWarpPhase,
   DEFAULT_HOUSE_RULES,
   DEFAULT_STATS,
   DICE_STYLE_OPTIONS,
@@ -25,6 +37,8 @@ import {
   getBoardThemeOption,
   getDiceStyleOption,
   HOME_PATH_START_STEP,
+  LAVA_COOLING_TIMEOUT_MS,
+  LAVA_DROP_SPLASH_DURATION_MS,
   MAX_TRACK_STEPS,
   PLAYER_COLORS,
   START_TRACK_INDEX,
@@ -67,6 +81,7 @@ import {
 import {
   computeHapticDuration,
   getDiceAudioIdentity,
+  getDiceIdleAudioSpec,
   soundManager,
 } from '../services/sound';
 
@@ -2069,4 +2084,346 @@ test('41. 5-Player and 6-Player Online Matchmaking & Private Lobby Bot Replaceme
   assert.equal(dep.room.gameState?.players[5].replacedByBot, true);
 });
 
+test('42. Lava Cube secondary cooling idle state (>10s without roll) and instant reactivation upon interaction', () => {
+  assert.equal(LAVA_COOLING_TIMEOUT_MS, 10000);
 
+  // 1. Freshly idle Lava Cube (0ms .. 10000ms) is in bright 'active_flow' state
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: false,
+      elapsedIdleMs: 0,
+    }),
+    'active_flow'
+  );
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: false,
+      elapsedIdleMs: 9999,
+    }),
+    'active_flow'
+  );
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: false,
+      elapsedIdleMs: 10000,
+    }),
+    'active_flow'
+  );
+
+  // 2. When not rolled or interacted with for more than 10 seconds (>10000ms), enters 'cooling_ember' state
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: false,
+      elapsedIdleMs: 10001,
+    }),
+    'cooling_ember'
+  );
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: false,
+      elapsedIdleMs: 25000,
+    }),
+    'cooling_ember'
+  );
+
+  // 3. Immediately upon user interaction (elapsedIdleMs resets to 0) or rolling, reactivates out of cooling state
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: false,
+      elapsedIdleMs: 0,
+    }),
+    'active_flow'
+  );
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'lava_cube',
+      isRolling: true,
+      elapsedIdleMs: 15000,
+    }),
+    'erupting_roll'
+  );
+
+  // 4. Non-lava dice styles always return 'inactive'
+  assert.equal(
+    computeLavaThermalState({
+      diceStyle: 'electro_cube',
+      isRolling: false,
+      elapsedIdleMs: 20000,
+    }),
+    'inactive'
+  );
+
+  // 5. Board surface 'lava drop' splash spec on landing after a roll
+  const splash = buildLavaDropSplashSpec(750, 750, 6);
+  assert.equal(splash.centerX, 750);
+  assert.equal(splash.centerY, 750);
+  assert.equal(splash.durationMs, LAVA_DROP_SPLASH_DURATION_MS);
+  assert.equal(splash.drops.length, 8);
+  for (const drop of splash.drops) {
+    assert.ok(drop.distance >= 68 && drop.distance <= 160);
+    assert.ok(drop.rx > drop.ry);
+  }
+
+  // 6. Periodic volcanic 'steam vent' particle specs when Lava Cube enters its spitting state
+  const steamVents = buildLavaSteamVentSpecs(6);
+  assert.equal(steamVents.length, 6);
+  for (let i = 0; i < steamVents.length; i++) {
+    const vent = steamVents[i];
+    assert.ok(vent.originX >= 25 && vent.originX <= 95);
+    assert.ok(vent.originY >= 20 && vent.originY <= 80);
+    // Steam vents always rise upward (negative riseY) and expand from crack fissures
+    assert.ok(vent.riseY < -15);
+    assert.ok(vent.radiusX > 0 && vent.radiusY > 0);
+    assert.ok(vent.durationMs >= 700 && vent.durationMs <= 1050);
+    assert.equal(vent.delayMs, i * 115);
+  }
+});
+
+test('43. Electro Cube idle body sparks, full-body electric pulse conduits, and rolling high-voltage pulse discharges', () => {
+  // 1. Full-body electric pulse conduits running through the entire cube body
+  const bodyPulses = buildElectroBodyPulseSpecs();
+  assert.equal(bodyPulses.length, 6);
+  for (const bp of bodyPulses) {
+    assert.ok(bp.conduitPath.startsWith('M '));
+    assert.ok(bp.nodeX >= 25 && bp.nodeX <= 95);
+    assert.ok(bp.nodeY >= 25 && bp.nodeY <= 95);
+    assert.equal(bp.coreHex, '#FFFFFF');
+    assert.ok(bp.durationMs >= 750 && bp.durationMs <= 1200);
+  }
+
+  // 2. Idle state electric sparks coming out of the body of the cube
+  const idleSparks = buildElectroIdleSparkSpecs(8);
+  assert.equal(idleSparks.length, 8);
+  for (let i = 0; i < idleSparks.length; i++) {
+    const sp = idleSparks[i];
+    assert.ok(sp.mainBoltPath.startsWith('M '));
+    assert.ok(sp.branchBoltPath.startsWith('M '));
+    // Spark tips extend outward beyond the root electrode on the cube body, with compact reach (<= 13 units)
+    const distFromCenterRoot = Math.hypot(sp.rootX - 60, sp.rootY - 60);
+    const distFromCenterTip = Math.hypot(sp.sparkTipX - 60, sp.sparkTipY - 60);
+    const sparkReach = Math.hypot(sp.sparkTipX - sp.rootX, sp.sparkTipY - sp.rootY);
+    assert.ok(distFromCenterTip > distFromCenterRoot);
+    assert.ok(sparkReach <= 13);
+    assert.equal(sp.coreHex, '#FFFFFF');
+    assert.equal(sp.delayMs, i * 85);
+  }
+
+  // 3. Rolling state electric pulses and forked lightning discharges coming out of the cube
+  const rollingPulses = buildElectroRollingPulseSpecs(8);
+  assert.equal(rollingPulses.length, 8);
+  for (let i = 0; i < rollingPulses.length; i++) {
+    const rp = rollingPulses[i];
+    assert.ok(rp.pulseWavePath.startsWith('M '));
+    assert.ok(rp.innerWavePath.startsWith('M '));
+    assert.ok(rp.lightningBoltPath.startsWith('M '));
+    assert.ok(rp.forkBranchPath.startsWith('M '));
+    assert.equal(rp.coreHex, '#FFFFFF');
+    assert.equal(rp.delayMs, i * 58);
+  }
+
+  // 4. Rolling state concentric 360-degree circular electric wave rings expanding in a wave-like pattern
+  const waveRings = buildElectroCircularWaveRings(3);
+  assert.equal(waveRings.length, 3);
+  for (let i = 0; i < waveRings.length; i++) {
+    const wr = waveRings[i];
+    assert.equal(wr.centerX, 70);
+    assert.equal(wr.centerY, 70);
+    assert.ok(wr.baseRadius >= 42, 'Circular electric pulse wave baseRadius should be enlarged');
+    assert.ok(wr.waveRingPath.startsWith('M '));
+    assert.ok(wr.waveRingPath.endsWith('Z'));
+    assert.ok(wr.harmonicRingPath.startsWith('M '));
+    assert.ok(wr.radialSparksPath.startsWith('M '));
+    assert.equal(wr.delayMs, i * 195);
+  }
+});
+
+test('44. Tesseract Cube transparent design, idle 4D hypercube animation, and 4D-warp rolling state', () => {
+  // 1. Phase state machine transitions
+  assert.equal(
+    computeTesseractWarpPhase({
+      diceStyle: 'tesseract_cube',
+      isRolling: false,
+      isLanding: false,
+    }),
+    'idle_3d'
+  );
+  assert.equal(
+    computeTesseractWarpPhase({
+      diceStyle: 'tesseract_cube',
+      isRolling: true,
+      isLanding: false,
+    }),
+    'warping_4d'
+  );
+  assert.equal(
+    computeTesseractWarpPhase({
+      diceStyle: 'tesseract_cube',
+      isRolling: false,
+      isLanding: true,
+    }),
+    'realigning_4d'
+  );
+  assert.equal(
+    computeTesseractWarpPhase({
+      diceStyle: 'lava_cube',
+      isRolling: true,
+      isLanding: false,
+    }),
+    'inactive'
+  );
+
+  // 2. Idle 4D hypercube conduit energy pulses
+  const idlePulses = buildTesseractIdleEnergyPulses();
+  assert.equal(idlePulses.length, 4);
+  for (const ip of idlePulses) {
+    assert.ok(ip.path.startsWith('M '));
+    assert.ok(ip.durationMs >= 1500);
+  }
+
+  // 3. All 6 faces are generated with distinct 3D rest, idle precession, inside-out inversion, and dimensional-shift transforms
+  for (let activeVal = 1; activeVal <= 6; activeVal++) {
+    const faces = buildTesseractWarpFaceSpecs(activeVal, 24);
+    assert.equal(faces.length, 6);
+    const ids = faces.map((f) => f.faceId);
+    assert.deepEqual(ids, ['front', 'back', 'right', 'left', 'top', 'bottom']);
+
+    // Verify all 6 die values 1..6 are represented and opposite pairs sum to 7
+    const valSet = new Set(faces.map((f) => f.faceValue));
+    assert.equal(valSet.size, 6);
+    assert.equal(faces[0].faceValue, activeVal);
+    assert.equal(faces[0].faceValue + faces[1].faceValue, 7);
+    assert.equal(faces[2].faceValue + faces[3].faceValue, 7);
+    assert.equal(faces[4].faceValue + faces[5].faceValue, 7);
+
+    for (const face of faces) {
+      assert.ok(face.restTransform.includes('translateZ(24px)'));
+      assert.ok(face.idlePrecessTransform.includes('translateZ(19px)'));
+      assert.ok(face.insideOutTransform.includes('translateZ(-12px)'));
+      assert.ok(face.insideOutTransform.includes('scale3d(-0.56, 0.56, 0.56)'));
+      assert.ok(face.dimensionalShiftTransform.includes('translateZ(31px)'));
+      assert.equal(face.pipCoords.length, face.faceValue);
+    }
+  }
+});
+
+test('45. Cosmo Cube idle celestial galaxy/orbits and rolling supernova vortex specifications', () => {
+  // 1. Idle celestial specification
+  const idleSpec = buildCosmoIdleCelestialSpecs();
+  assert.equal(idleSpec.galaxySpiralArms.length, 4);
+  for (const arm of idleSpec.galaxySpiralArms) {
+    assert.ok(arm.armPath.startsWith('M '));
+    assert.ok(arm.armPath.includes(' L '));
+  }
+
+  assert.equal(idleSpec.orbits.length, 2);
+  assert.ok(idleSpec.orbits[0].tiltDeg < 0);
+  assert.ok(idleSpec.orbits[1].tiltDeg > 0);
+  for (const orbit of idleSpec.orbits) {
+    assert.ok(orbit.rx > 35);
+    assert.ok(orbit.ry > 10);
+    assert.ok(orbit.planetRadius >= 2.0);
+    assert.ok(orbit.durationMs >= 4500);
+  }
+
+  assert.equal(idleSpec.starGlints.length, 6);
+  for (const glint of idleSpec.starGlints) {
+    assert.ok(glint.diamondPath.startsWith('M '));
+    assert.ok(glint.diamondPath.endsWith('Z'));
+    assert.ok(glint.durationMs >= 1400);
+  }
+
+  // 2. Rolling supernova vortex specification
+  const rollSpec = buildCosmoRollingSupernovaSpecs();
+  assert.equal(rollSpec.spiralArms.length, 4);
+  for (let i = 0; i < rollSpec.spiralArms.length; i++) {
+    const arm = rollSpec.spiralArms[i];
+    assert.ok(arm.spiralArmPath.startsWith('M '));
+    assert.ok(arm.starlightTrailPath.startsWith('M '));
+    assert.equal(arm.delayMs, i * 95);
+  }
+
+  assert.equal(rollSpec.comets.length, 3);
+  for (let i = 0; i < rollSpec.comets.length; i++) {
+    const comet = rollSpec.comets[i];
+    assert.ok(comet.cometTailPath.startsWith('M '));
+    assert.equal(comet.delayMs, i * 140);
+  }
+
+  assert.ok(rollSpec.accretionRingRadius >= 42);
+});
+
+test('46. Lava, Electro, Tesseract, and Cosmo Cube expose distinct design-matched idle animation sound effect profiles and loop controls', () => {
+  const lavaActive = getDiceIdleAudioSpec('lava_cube', { isCooling: false });
+  const lavaCooling = getDiceIdleAudioSpec('lava_cube', { isCooling: true });
+  const electroIdle = getDiceIdleAudioSpec('electro_cube');
+  const tesseractIdle = getDiceIdleAudioSpec('tesseract_cube');
+  const cosmoIdle = getDiceIdleAudioSpec('cosmo_cube');
+  const classicIdle = getDiceIdleAudioSpec('classic_ivory');
+
+  // 1. All 4 special cubes enable idle audio with distinct profiles; classic dice remain silent at rest
+  assert.equal(lavaActive.enabled, true);
+  assert.equal(electroIdle.enabled, true);
+  assert.equal(tesseractIdle.enabled, true);
+  assert.equal(cosmoIdle.enabled, true);
+  assert.equal(classicIdle.enabled, false);
+  assert.equal(classicIdle.idleProfile, 'silent_tabletop');
+
+  const uniqueIdleProfiles = new Set([
+    lavaActive.idleProfile,
+    electroIdle.idleProfile,
+    tesseractIdle.idleProfile,
+    cosmoIdle.idleProfile,
+  ]);
+  assert.equal(uniqueIdleProfiles.size, 4);
+  assert.equal(lavaActive.idleProfile, 'lava_magma_simmer');
+  assert.equal(electroIdle.idleProfile, 'electro_tesla_hum');
+  assert.equal(tesseractIdle.idleProfile, 'tesseract_hyper_drone');
+  assert.equal(cosmoIdle.idleProfile, 'cosmo_nebula_choir');
+
+  // 2. Lava Cube cooling state slows down interval, lowers drone pitch, and reduces peak gain
+  assert.ok(lavaCooling.intervalMs > lavaActive.intervalMs);
+  assert.ok(lavaCooling.baseDroneFreqHz < lavaActive.baseDroneFreqHz);
+  assert.ok(lavaCooling.peakGain < lavaActive.peakGain);
+
+  // 3. Frequency spectra match each cube's physical design
+  // Lava: deep sub-bass volcanic rumble (<70Hz)
+  assert.ok(lavaActive.baseDroneFreqHz >= 40 && lavaActive.baseDroneFreqHz <= 65);
+  // Electro: 120Hz Tesla transformer hum + high-voltage kHz spark snaps
+  assert.equal(electroIdle.baseDroneFreqHz, 120);
+  assert.ok(electroIdle.accentBurstFreqsHz.some((f) => f >= 1600));
+  // Tesseract: 528Hz crystal-glass resonance + 530.5Hz binaural beat + 792Hz fifth
+  assert.equal(tesseractIdle.baseDroneFreqHz, 528);
+  assert.ok(tesseractIdle.harmonicFreqsHz.includes(792));
+  // Cosmo: 130.81Hz (C3) + 196Hz (G3) celestial fifth pad + Lydian stardust chimes
+  assert.equal(cosmoIdle.baseDroneFreqHz, 130.81);
+  assert.ok(cosmoIdle.accentBurstFreqsHz.includes(1479.98));
+
+  // 4. SoundManager loop lifecycle & mute behavior
+  soundManager.configure(true, false, 'medium');
+  assert.equal(soundManager.startDiceIdleLoop('lava_cube'), true);
+  assert.equal(soundManager.getActiveIdleDiceStyle(), 'lava_cube');
+
+  assert.equal(soundManager.startDiceIdleLoop('electro_cube'), true);
+  assert.equal(soundManager.getActiveIdleDiceStyle(), 'electro_cube');
+
+  assert.equal(soundManager.startDiceIdleLoop('tesseract_cube'), true);
+  assert.equal(soundManager.getActiveIdleDiceStyle(), 'tesseract_cube');
+
+  assert.equal(soundManager.startDiceIdleLoop('cosmo_cube'), true);
+  assert.equal(soundManager.getActiveIdleDiceStyle(), 'cosmo_cube');
+
+  // Switching to a classic die stops the idle loop
+  assert.equal(soundManager.startDiceIdleLoop('classic_ivory'), false);
+  assert.equal(soundManager.getActiveIdleDiceStyle(), null);
+
+  // Muting audio immediately stops any active idle loop
+  soundManager.startDiceIdleLoop('cosmo_cube');
+  soundManager.configure(false, false, 'medium');
+  assert.equal(soundManager.getActiveIdleDiceStyle(), null);
+});
