@@ -95,10 +95,13 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
     loadSavedGame()
   );
 
-  // Determine initial shell state (?autostart=1 boots directly into 'playing')
+  // Determine initial shell state (?autostart=1 boots directly into 'playing', ?victory=1 boots into 'gameover')
   const [shellState, setShellState] = useState<ShellState>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+      if (params.get('victory') === '1') {
+        return 'gameover';
+      }
       if (params.get('autostart') === '1') {
         return 'playing';
       }
@@ -145,11 +148,30 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
         aiDifficulty: 'hard',
       },
     ];
-    return createInitialGameState({
+    const initial = createInitialGameState({
       mode: 'ai',
       players: defaultPlayers,
       rules: loadHouseRules(),
     });
+    if (
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('victory') === '1'
+    ) {
+      return {
+        ...initial,
+        turnPhase: 'GAME_OVER',
+        winner: 'red',
+        rankings: ['red', 'green', 'yellow', 'blue'],
+        turnNumber: 42,
+        players: initial.players.map((p, idx) => ({
+          ...p,
+          finishRank: idx + 1,
+          capturesMade: idx === 0 ? 5 : Math.max(0, 3 - idx),
+          sixesRolled: idx === 0 ? 9 : Math.max(1, 5 - idx),
+        })),
+      };
+    }
+    return initial;
   });
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
@@ -1455,6 +1477,7 @@ export function LudoRoyaleGame({ className, onExit }: LudoRoyaleGameProps) {
       {shellState === 'gameover' && (
         <VictoryModal
           gameState={gameState}
+          reducedMotion={settings.reducedMotion}
           onPlayAgain={() => {
             if (
               gameState.mode === 'friends' ||

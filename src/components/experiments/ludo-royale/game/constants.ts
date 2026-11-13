@@ -2342,5 +2342,190 @@ export function buildCosmoRollingSupernovaSpecs(): CosmoRollingSupernovaSpec {
   };
 }
 
+// ============================================================================
+// VICTORY MODAL: CONFETTI EXPLOSION CANVAS ENGINE
+// ============================================================================
 
+export type VictoryConfettiShape = 'ribbon' | 'diamond' | 'star' | 'circle';
 
+export interface VictoryConfettiParticle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  width: number;
+  height: number;
+  color: string;
+  shape: VictoryConfettiShape;
+  rotation: number;
+  rotationSpeed: number;
+  tiltAngle: number;
+  tiltSpeed: number;
+  gravity: number;
+  drag: number;
+  opacity: number;
+  burstWave: number;
+}
+
+/**
+ * Returns a celebratory confetti color palette anchored by the winning player's
+ * signature royal color, accented with Grandmaster Gold, Champagne Ivory, and festive jewel tones.
+ */
+export function getVictoryConfettiPalette(
+  winnerColor: PlayerColor = 'red'
+): string[] {
+  const meta = COLOR_META[winnerColor] || COLOR_META.red;
+  return [
+    meta.primaryHex,
+    meta.secondaryHex,
+    meta.lightHex,
+    '#F59E0B', // Royal Gold
+    '#FDE047', // Sunburst Yellow
+    '#F8FAFC', // Platinum Ivory
+    '#38BDF8', // Celestial Cyan
+    '#10B981', // Emerald Spark
+    '#F472B6', // Rose Starlight
+  ];
+}
+
+/**
+ * Deterministically generates a multi-origin celebratory confetti explosion burst
+ * across the canvas viewport (central trophy crest explosion + left/right podium cannons).
+ */
+export function createVictoryConfettiBurst(
+  winnerColor: PlayerColor = 'red',
+  viewportWidth: number = 1280,
+  viewportHeight: number = 800,
+  burstWave: number = 0
+): VictoryConfettiParticle[] {
+  const safeW = Math.max(320, viewportWidth);
+  const safeH = Math.max(320, viewportHeight);
+  const palette = getVictoryConfettiPalette(winnerColor);
+  const shapes: ReadonlyArray<VictoryConfettiShape> = [
+    'ribbon',
+    'diamond',
+    'star',
+    'circle',
+  ];
+
+  const count = burstWave === 0 ? 96 : 54;
+  const particles: VictoryConfettiParticle[] = [];
+
+  for (let i = 0; i < count; i++) {
+    // 3 emitter origins: 0 = center trophy burst, 1 = left podium cannon, 2 = right podium cannon
+    const emitter = i % 3;
+    const goldenAngle = i * 2.399963229728653; // Golden angle in radians for uniform radial distribution
+    const norm = (i + 1) / count;
+
+    let originX = safeW * 0.5;
+    let originY = safeH * 0.36;
+    let launchAngle = -Math.PI / 2 + Math.sin(goldenAngle) * 1.35;
+    let speed = 280 + ((i * 67) % 420);
+
+    if (emitter === 1) {
+      // Left podium cannon firing up-right toward center
+      originX = safeW * 0.16;
+      originY = safeH * 0.68;
+      launchAngle = -Math.PI * 0.34 + Math.sin(goldenAngle) * 0.38;
+      speed = 420 + ((i * 83) % 380);
+    } else if (emitter === 2) {
+      // Right podium cannon firing up-left toward center
+      originX = safeW * 0.84;
+      originY = safeH * 0.68;
+      launchAngle = -Math.PI * 0.66 + Math.cos(goldenAngle) * 0.38;
+      speed = 420 + ((i * 79) % 380);
+    } else {
+      // Central radial trophy explosion around the Victory crest
+      launchAngle = (i / (count / 3)) * Math.PI * 2 - Math.PI / 2;
+      speed = 210 + ((i * 97) % 430);
+    }
+
+    const shape = shapes[i % shapes.length];
+    const width =
+      shape === 'ribbon'
+        ? 11 + (i % 6)
+        : shape === 'star'
+        ? 10 + (i % 5)
+        : 8 + (i % 5);
+    const height =
+      shape === 'ribbon'
+        ? 5 + (i % 4)
+        : width;
+
+    particles.push({
+      id: burstWave * 1000 + i,
+      x: Number((originX + Math.cos(goldenAngle) * 14).toFixed(2)),
+      y: Number((originY + Math.sin(goldenAngle) * 14).toFixed(2)),
+      vx: Number((Math.cos(launchAngle) * speed).toFixed(2)),
+      vy: Number((Math.sin(launchAngle) * speed - 95 * (1 - norm * 0.4)).toFixed(2)),
+      width,
+      height,
+      color: palette[i % palette.length],
+      shape,
+      rotation: Number(((i * 47) % 360) * (Math.PI / 180)),
+      rotationSpeed: Number(((i % 2 === 0 ? 1 : -1) * (2.4 + (i % 7) * 0.55)).toFixed(2)),
+      tiltAngle: Number(((i * 0.65) % (Math.PI * 2)).toFixed(2)),
+      tiltSpeed: Number((3.2 + (i % 5) * 0.75).toFixed(2)),
+      gravity: 340 + (i % 5) * 28,
+      drag: 0.986,
+      opacity: 1,
+      burstWave,
+    });
+  }
+
+  return particles;
+}
+
+/**
+ * Pure physics stepper for the Victory Modal confetti explosion particles.
+ * Applies velocity, aerodynamic drag, gravity, lateral flutter sway, 3D tilt, and floor fade-out.
+ */
+export function stepVictoryConfettiParticles(
+  particles: ReadonlyArray<VictoryConfettiParticle>,
+  dtSeconds: number,
+  viewportWidth: number = 1280,
+  viewportHeight: number = 800
+): VictoryConfettiParticle[] {
+  const clampedDt = Math.max(0.001, Math.min(0.05, dtSeconds));
+  const dragFactor = Math.pow(0.985, clampedDt * 60);
+  const next: VictoryConfettiParticle[] = [];
+
+  for (const p of particles) {
+    const nextTilt = p.tiltAngle + p.tiltSpeed * clampedDt;
+    const flutterSway = Math.sin(nextTilt) * 24 * clampedDt;
+    const vx = p.vx * dragFactor;
+    const vy = p.vy * dragFactor + p.gravity * clampedDt;
+    const x = p.x + vx * clampedDt + flutterSway;
+    const y = p.y + vy * clampedDt;
+    const rotation = p.rotation + p.rotationSpeed * clampedDt;
+
+    // Fade out gently as confetti nears the bottom of the viewport
+    const fadeStartY = viewportHeight * 0.78;
+    const fadeZone = Math.max(80, viewportHeight * 0.28);
+    let opacity = p.opacity;
+    if (y > fadeStartY) {
+      opacity = Math.max(0, p.opacity - clampedDt * 0.85 - (y - fadeStartY) / (fadeZone * 18));
+    }
+
+    if (
+      opacity > 0.02 &&
+      y < viewportHeight + 60 &&
+      x > -120 &&
+      x < viewportWidth + 120
+    ) {
+      next.push({
+        ...p,
+        x,
+        y,
+        vx,
+        vy,
+        rotation,
+        tiltAngle: nextTilt,
+        opacity,
+      });
+    }
+  }
+
+  return next;
+}

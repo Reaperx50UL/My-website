@@ -17,7 +17,11 @@ import {
   LAVA_COOLING_TIMEOUT_MS,
 } from '../../game/constants';
 import { DiceStyle, PlayerColor } from '../../game/gameTypes';
-import { getDiceIdleAudioSpec, soundManager } from '../../services/sound';
+import {
+  getDiceAudioIdentity,
+  getDiceIdleAudioSpec,
+  soundManager,
+} from '../../services/sound';
 import { RoundedCube3DCanvas } from './RoundedCube3DCanvas';
 
 export interface ThreeDimensionalDieProps {
@@ -144,6 +148,7 @@ export const ThreeDimensionalDie: React.FC<ThreeDimensionalDieProps> = ({
     };
   }, [interactive, diceStyle, isRolling, isLanding, isCooling, reducedMotion]);
 
+  const audioIdentity = getDiceAudioIdentity(diceStyle);
   const idleAudioSpec = getDiceIdleAudioSpec(diceStyle, { isCooling });
 
   const safeFace = displayFace >= 1 && displayFace <= 6 ? displayFace : 6;
@@ -202,6 +207,8 @@ export const ThreeDimensionalDie: React.FC<ThreeDimensionalDieProps> = ({
       data-dice-animation={styleOpt.animationProfile}
       data-dice-roll-class={styleOpt.rollPhysics.rollingEffectClass}
       data-dice-idle-audio={idleAudioSpec.idleProfile}
+      data-dice-idle-audio-src={idleAudioSpec.audioAssetUrl}
+      data-dice-roll-audio-src={audioIdentity.rollAudioAsset}
       data-dice-model={isPremium2D ? styleOpt.modelGeometry : 'cube_3d'}
       data-dice-landing={isLanding ? 'true' : 'false'}
       data-lava-state={

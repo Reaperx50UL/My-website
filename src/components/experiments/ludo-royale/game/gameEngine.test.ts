@@ -30,18 +30,21 @@ import {
   computeDiceRollTransform,
   computeLavaThermalState,
   computeTesseractWarpPhase,
+  createVictoryConfettiBurst,
   DEFAULT_HOUSE_RULES,
   DEFAULT_STATS,
   DICE_STYLE_OPTIONS,
   FINISH_STEP,
   getBoardThemeOption,
   getDiceStyleOption,
+  getVictoryConfettiPalette,
   HOME_PATH_START_STEP,
   LAVA_COOLING_TIMEOUT_MS,
   LAVA_DROP_SPLASH_DURATION_MS,
   MAX_TRACK_STEPS,
   PLAYER_COLORS,
   START_TRACK_INDEX,
+  stepVictoryConfettiParticles,
 } from './constants';
 import {
   breakTokenPair,
@@ -80,9 +83,17 @@ import {
 } from './rules';
 import {
   computeHapticDuration,
+  COSMO_CUBE_IDLE_AUDIO_ASSET,
+  COSMO_CUBE_ROLL_AUDIO_ASSET,
+  ELECTRO_CUBE_IDLE_AUDIO_ASSET,
+  ELECTRO_CUBE_ROLL_AUDIO_ASSET,
   getDiceAudioIdentity,
   getDiceIdleAudioSpec,
+  LAVA_CUBE_IDLE_AUDIO_ASSET,
+  LAVA_CUBE_ROLL_AUDIO_ASSET,
   soundManager,
+  TESSERACT_CUBE_IDLE_AUDIO_ASSET,
+  TESSERACT_CUBE_ROLL_AUDIO_ASSET,
 } from '../services/sound';
 
 const twoPlayers: PlayerConfig[] = [
@@ -2386,7 +2397,61 @@ test('46. Lava, Electro, Tesseract, and Cosmo Cube expose distinct design-matche
   assert.equal(tesseractIdle.idleProfile, 'tesseract_hyper_drone');
   assert.equal(cosmoIdle.idleProfile, 'cosmo_nebula_choir');
 
-  // 2. Lava Cube cooling state slows down interval, lowers drone pitch, and reduces peak gain
+  // 2. Lava, Electro, and Tesseract Cubes use the uploaded WAV audio assets for idle and rolling animations
+  const lavaIdentity = getDiceAudioIdentity('lava_cube');
+  assert.equal(
+    lavaIdentity.idleAudioAsset,
+    '/assets/aistudio/Create_a_subtle_volc__4-1794493498531_1b63f895.wav'
+  );
+  assert.equal(lavaIdentity.idleAudioAsset, LAVA_CUBE_IDLE_AUDIO_ASSET);
+  assert.equal(
+    lavaIdentity.rollAudioAsset,
+    '/assets/aistudio/lava_cube_rolling.wav'
+  );
+  assert.equal(lavaIdentity.rollAudioAsset, LAVA_CUBE_ROLL_AUDIO_ASSET);
+  assert.equal(lavaActive.audioAssetUrl, LAVA_CUBE_IDLE_AUDIO_ASSET);
+  assert.equal(lavaCooling.audioAssetUrl, LAVA_CUBE_IDLE_AUDIO_ASSET);
+
+  const electroIdentity = getDiceAudioIdentity('electro_cube');
+  assert.equal(
+    electroIdentity.idleAudioAsset,
+    '/assets/aistudio/A_futuristic_electri__4-1794495895509_a7071723.wav'
+  );
+  assert.equal(electroIdentity.idleAudioAsset, ELECTRO_CUBE_IDLE_AUDIO_ASSET);
+  assert.equal(
+    electroIdentity.rollAudioAsset,
+    '/assets/aistudio/electro_cube_rolling.wav'
+  );
+  assert.equal(electroIdentity.rollAudioAsset, ELECTRO_CUBE_ROLL_AUDIO_ASSET);
+  assert.equal(electroIdle.audioAssetUrl, ELECTRO_CUBE_IDLE_AUDIO_ASSET);
+
+  const tesseractIdentity = getDiceAudioIdentity('tesseract_cube');
+  assert.equal(
+    tesseractIdentity.idleAudioAsset,
+    '/assets/aistudio/tesseract_cube_idle.wav'
+  );
+  assert.equal(tesseractIdentity.idleAudioAsset, TESSERACT_CUBE_IDLE_AUDIO_ASSET);
+  assert.equal(
+    tesseractIdentity.rollAudioAsset,
+    '/assets/aistudio/tesseract_cube_rolling.wav'
+  );
+  assert.equal(tesseractIdentity.rollAudioAsset, TESSERACT_CUBE_ROLL_AUDIO_ASSET);
+  assert.equal(tesseractIdle.audioAssetUrl, TESSERACT_CUBE_IDLE_AUDIO_ASSET);
+
+  const cosmoIdentity = getDiceAudioIdentity('cosmo_cube');
+  assert.equal(
+    cosmoIdentity.idleAudioAsset,
+    '/assets/aistudio/cosmo_cube_idle.wav'
+  );
+  assert.equal(cosmoIdentity.idleAudioAsset, COSMO_CUBE_IDLE_AUDIO_ASSET);
+  assert.equal(
+    cosmoIdentity.rollAudioAsset,
+    '/assets/aistudio/A_magical_cosmic_cub__3-1794498753087_98bbee8a.wav'
+  );
+  assert.equal(cosmoIdentity.rollAudioAsset, COSMO_CUBE_ROLL_AUDIO_ASSET);
+  assert.equal(cosmoIdle.audioAssetUrl, COSMO_CUBE_IDLE_AUDIO_ASSET);
+
+  // Lava Cube cooling state slows down interval, lowers drone pitch, and reduces peak gain
   assert.ok(lavaCooling.intervalMs > lavaActive.intervalMs);
   assert.ok(lavaCooling.baseDroneFreqHz < lavaActive.baseDroneFreqHz);
   assert.ok(lavaCooling.peakGain < lavaActive.peakGain);
@@ -2426,4 +2491,32 @@ test('46. Lava, Electro, Tesseract, and Cosmo Cube expose distinct design-matche
   soundManager.startDiceIdleLoop('cosmo_cube');
   soundManager.configure(false, false, 'medium');
   assert.equal(soundManager.getActiveIdleDiceStyle(), null);
+});
+
+test('47. VictoryModal confetti explosion engine generates winner-themed multi-cannon bursts and steps aerodynamic physics cleanly', () => {
+  const redPalette = getVictoryConfettiPalette('red');
+  const bluePalette = getVictoryConfettiPalette('blue');
+  assert.ok(redPalette.includes('#EF4444'));
+  assert.ok(bluePalette.includes('#3B82F6'));
+  assert.ok(redPalette.includes('#F59E0B')); // Royal Gold accent
+
+  const wave0 = createVictoryConfettiBurst('red', 1280, 800, 0);
+  const wave1 = createVictoryConfettiBurst('red', 1280, 800, 1);
+  assert.equal(wave0.length, 96);
+  assert.equal(wave1.length, 54);
+
+  // Confetti includes all 4 distinct celebratory particle shapes
+  const shapes = new Set(wave0.map((p) => p.shape));
+  assert.deepEqual(
+    shapes,
+    new Set(['ribbon', 'diamond', 'star', 'circle'])
+  );
+
+  // Step physics forward 16ms and verify position, rotation, tilt, and gravity progression
+  const stepped = stepVictoryConfettiParticles(wave0, 0.016, 1280, 800);
+  assert.equal(stepped.length, 96);
+  assert.notEqual(stepped[0].x, wave0[0].x);
+  assert.notEqual(stepped[0].y, wave0[0].y);
+  assert.notEqual(stepped[0].rotation, wave0[0].rotation);
+  assert.notEqual(stepped[0].tiltAngle, wave0[0].tiltAngle);
 });

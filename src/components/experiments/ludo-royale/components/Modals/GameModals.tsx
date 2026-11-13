@@ -17,15 +17,18 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ACHIEVEMENTS_LIST,
   AVATAR_OPTIONS,
   BOARD_THEME_OPTIONS,
   COLOR_META,
+  createVictoryConfettiBurst,
   DICE_STYLE_OPTIONS,
   getBoardThemeOption,
   getDiceStyleOption,
+  stepVictoryConfettiParticles,
+  VictoryConfettiParticle,
 } from '../../game/constants';
 import { BoardThemePreviewSVG } from '../Board/LudoBoard';
 import { DiceFaceSVG, ThreeDimensionalDie } from '../Dice/DiceRoller';
@@ -1708,13 +1711,65 @@ export const LeaveMatchConfirmModal: React.FC<LeaveMatchConfirmModalProps> = ({
    ============================================================================ */
 interface VictoryModalProps {
   gameState: GameState;
+  reducedMotion?: boolean;
   onPlayAgain: () => void;
   onMainMenu: () => void;
   onExitWebLab?: () => void;
 }
 
+function drawConfettiParticle(
+  ctx: CanvasRenderingContext2D,
+  p: VictoryConfettiParticle
+): void {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.rotation);
+  const tiltScaleY = Math.max(0.22, Math.abs(Math.cos(p.tiltAngle)));
+  ctx.scale(1, tiltScaleY);
+  ctx.globalAlpha = Math.max(0, Math.min(1, p.opacity));
+  ctx.fillStyle = p.color;
+
+  const hw = p.width / 2;
+  const hh = p.height / 2;
+
+  if (p.shape === 'ribbon') {
+    ctx.beginPath();
+    ctx.roundRect(-hw, -hh, p.width, p.height, 1.5);
+    ctx.fill();
+  } else if (p.shape === 'diamond') {
+    ctx.beginPath();
+    ctx.moveTo(0, -hw);
+    ctx.lineTo(hw * 0.78, 0);
+    ctx.lineTo(0, hw);
+    ctx.lineTo(-hw * 0.78, 0);
+    ctx.closePath();
+    ctx.fill();
+  } else if (p.shape === 'star') {
+    const outerR = hw;
+    const innerR = hw * 0.42;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const r = i % 2 === 0 ? outerR : innerR;
+      const angle = (i * Math.PI) / 4;
+      const sx = Math.cos(angle) * r;
+      const sy = Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.arc(0, 0, hw * 0.75, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 export const VictoryModal: React.FC<VictoryModalProps> = ({
   gameState,
+  reducedMotion = false,
   onPlayAgain,
   onMainMenu,
   onExitWebLab,
@@ -1724,6 +1779,133 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
     gameState.players.find((p) => p.color === winnerColor) ||
     gameState.players[0];
   const meta = COLOR_META[winnerColor];
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const particlesRef = useRef<VictoryConfettiParticle[]>([]);
+  const waveCounterRef = useRef<number>(0);
+  const rafRef = useRef<number | null>(null);
+  const secondaryWaveTimerRef = useRef<number | null>(null);
+  const [burstCount, setBurstCount] = useState<number>(1);
+
+  const renderCanvasFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = canvas.width / dpr;
+    const height = canvas.height / dpr;
+
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    for (const p of particlesRef.current) {
+      drawConfettiParticle(ctx, p);
+    }
+    ctx.restore();
+
+    canvas.dataset.particleCount = String(particlesRef.current.length);
+  }, []);
+
+  const triggerConfettiExplosion = useCallback(
+    (waveIndex: number, append: boolean = false) => {
+      if (typeof window === 'undefined') return;
+      const vw = window.innerWidth || 1280;
+      const vh = window.innerHeight || 800;
+      const newBurst = createVictoryConfettiBurst(
+        winnerColor,
+        vw,
+        vh,
+        waveIndex
+      );
+      particlesRef.current = append
+        ? [...particlesRef.current, ...newBurst].slice(-220)
+        : newBurst;
+      renderCanvasFrame();
+    },
+    [winnerColor, renderCanvasFrame]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const syncCanvasSize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const vw = window.innerWidth || 1280;
+      const vh = window.innerHeight || 800;
+      canvas.width = Math.round(vw * dpr);
+      canvas.height = Math.round(vh * dpr);
+    };
+
+    syncCanvasSize();
+    window.addEventListener('resize', syncCanvasSize);
+
+    // Launch initial celebratory confetti explosion (Wave 0)
+    waveCounterRef.current = 0;
+    triggerConfettiExplosion(0, false);
+
+    const prefersReduced =
+      reducedMotion ||
+      (typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    if (prefersReduced) {
+      renderCanvasFrame();
+      return () => {
+        window.removeEventListener('resize', syncCanvasSize);
+      };
+    }
+
+    // Schedule secondary celebratory podium salute wave at 420ms
+    secondaryWaveTimerRef.current = window.setTimeout(() => {
+      waveCounterRef.current += 1;
+      triggerConfettiExplosion(waveCounterRef.current, true);
+      setBurstCount((c) => c + 1);
+    }, 420);
+
+    let lastTime = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.04, Math.max(0.004, (now - lastTime) / 1000));
+      lastTime = now;
+
+      if (particlesRef.current.length > 0) {
+        particlesRef.current = stepVictoryConfettiParticles(
+          particlesRef.current,
+          dt,
+          window.innerWidth || 1280,
+          window.innerHeight || 800
+        );
+        renderCanvasFrame();
+      }
+
+      rafRef.current = window.requestAnimationFrame(tick);
+    };
+
+    rafRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener('resize', syncCanvasSize);
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (secondaryWaveTimerRef.current !== null) {
+        window.clearTimeout(secondaryWaveTimerRef.current);
+        secondaryWaveTimerRef.current = null;
+      }
+    };
+  }, [winnerColor, reducedMotion, triggerConfettiExplosion, renderCanvasFrame]);
+
+  const handleReplayConfettiSalute = () => {
+    soundManager.playClick();
+    waveCounterRef.current += 1;
+    triggerConfettiExplosion(waveCounterRef.current, true);
+    setBurstCount((c) => c + 1);
+  };
 
   const totalCaptures = gameState.players.reduce(
     (acc, p) => acc + p.capturesMade,
@@ -1746,13 +1928,28 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
       aria-modal="true"
       aria-labelledby="victory-modal-title"
     >
-      <div className="w-full max-w-md bg-[#111827] border border-slate-800 rounded-3xl p-6 text-center shadow-2xl space-y-4 my-auto">
-        <div
-          className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-slate-950 shadow-lg"
+      {/* Celebratory Confetti Explosion Canvas Overlay */}
+      <canvas
+        ref={canvasRef}
+        data-testid="victory-confetti-canvas"
+        data-winner-color={winnerColor}
+        data-burst-waves={burstCount}
+        aria-hidden="true"
+        className="fixed inset-0 w-full h-full pointer-events-none z-30"
+      />
+
+      <div className="relative z-20 w-full max-w-md bg-[#111827] border border-slate-800 rounded-3xl p-6 text-center shadow-2xl space-y-4 my-auto">
+        <button
+          type="button"
+          data-testid="victory-trophy-confetti-btn"
+          onClick={handleReplayConfettiSalute}
+          title="Click to launch celebratory confetti salute"
+          aria-label="Launch Celebratory Confetti Salute"
+          className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-slate-950 shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer"
           style={{ backgroundColor: meta.primaryHex }}
         >
           <Trophy className="w-7 h-7" />
-        </div>
+        </button>
 
         <div>
           <h2
